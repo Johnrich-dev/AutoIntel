@@ -1,0 +1,193 @@
+import { useEffect, useState } from 'react';
+import { Video, ClipboardList, CheckCircle, Clock, LogOut } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase, VideoAssessment, PersonalityTest } from '../lib/supabase';
+
+interface AssessmentDashboardProps {
+  onStartVideo: () => void;
+  onStartPersonalityTest: () => void;
+}
+
+export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: AssessmentDashboardProps) {
+  const { applicant, logout } = useAuth();
+  const [videoStatus, setVideoStatus] = useState<VideoAssessment | null>(null);
+  const [testStatus, setTestStatus] = useState<PersonalityTest | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadAssessmentStatus();
+  }, [applicant]);
+
+  const loadAssessmentStatus = async () => {
+    if (!applicant) return;
+
+    try {
+      const [videoResult, testResult] = await Promise.all([
+        supabase
+          .from('video_assessments')
+          .select('*')
+          .eq('applicant_id', applicant.id)
+          .maybeSingle(),
+        supabase
+          .from('personality_tests')
+          .select('*')
+          .eq('applicant_id', applicant.id)
+          .maybeSingle(),
+      ]);
+
+      if (videoResult.data) setVideoStatus(videoResult.data);
+      if (testResult.data) setTestStatus(testResult.data);
+    } catch (error) {
+      console.error('Error loading assessment status:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getExpiryText = () => {
+    if (!applicant) return '';
+    const expiresAt = new Date(applicant.access_expires_at);
+    const now = new Date();
+    const hoursLeft = Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60));
+
+    if (hoursLeft < 24) {
+      return `${hoursLeft} hours remaining`;
+    }
+    return `${Math.floor(hoursLeft / 24)} days remaining`;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-white text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  const videoCompleted = videoStatus?.status === 'submitted';
+  const testCompleted = testStatus?.status === 'submitted';
+  const allCompleted = videoCompleted && testCompleted;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 py-8">
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold mb-1">Welcome, {applicant?.name}</h1>
+                <p className="text-blue-100">Position: {applicant?.position}</p>
+              </div>
+              <button
+                onClick={logout}
+                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </button>
+            </div>
+            <div className="mt-4 flex items-center gap-2 text-sm">
+              <Clock className="w-4 h-4" />
+              <span>Access expires: {getExpiryText()}</span>
+            </div>
+          </div>
+
+          <div className="p-8">
+            {allCompleted ? (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <CheckCircle className="w-6 h-6 text-green-600" />
+                  <h2 className="text-lg font-semibold text-green-900">All Assessments Complete!</h2>
+                </div>
+                <p className="text-green-700">
+                  Thank you for completing all assessments. Our team will review your submission and
+                  contact you within 5-7 business days.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <p className="text-blue-900 font-medium">
+                  Please complete all required assessments before the access token expires.
+                </p>
+              </div>
+            )}
+
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Assessment Progress</h2>
+
+            <div className="space-y-4">
+              <div className="border border-gray-200 rounded-lg p-6 hover:border-blue-300 transition-colors">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-4 flex-1">
+                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                      videoCompleted ? 'bg-green-100' : 'bg-blue-100'
+                    }`}>
+                      <Video className={`w-6 h-6 ${
+                        videoCompleted ? 'text-green-600' : 'text-blue-600'
+                      }`} />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                        Video Assessment
+                      </h3>
+                      <p className="text-gray-600 text-sm mb-3">
+                        Record a brief video introducing yourself and answering assessment questions.
+                      </p>
+                      {videoCompleted ? (
+                        <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Completed on {new Date(videoStatus?.submitted_at!).toLocaleDateString()}</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={onStartVideo}
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+                        >
+                          Start Video Assessment
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-6 hover:border-blue-300 transition-colors">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-4 flex-1">
+                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                      testCompleted ? 'bg-green-100' : 'bg-blue-100'
+                    }`}>
+                      <ClipboardList className={`w-6 h-6 ${
+                        testCompleted ? 'text-green-600' : 'text-blue-600'
+                      }`} />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                        Personality Assessment
+                      </h3>
+                      <p className="text-gray-600 text-sm mb-3">
+                        Complete a 15-question personality assessment to help us understand your work style.
+                      </p>
+                      {testCompleted ? (
+                        <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Completed on {new Date(testStatus?.submitted_at!).toLocaleDateString()}</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={onStartPersonalityTest}
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+                        >
+                          Start Personality Test
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
