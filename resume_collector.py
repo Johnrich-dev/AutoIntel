@@ -6,6 +6,7 @@ Automatically collects job application resumes from Gmail inbox and uploads to d
 
 import email
 import imaplib
+import io
 import os
 import re
 import uuid
@@ -13,6 +14,7 @@ from datetime import datetime, timedelta
 from email.header import decode_header
 
 from supabase import Client, create_client
+from PyPDF2 import PdfReader
 
 # Configuration
 IMAP_SERVER = 'imap.gmail.com'
@@ -104,6 +106,19 @@ def extract_sender_info(msg):
 
     return name, email_addr, position
 
+def extract_text_from_pdf(file_content):
+    """Extract text content from PDF file."""
+    try:
+        pdf_file = io.BytesIO(file_content)
+        reader = PdfReader(pdf_file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+        return text.strip() if text else None
+    except Exception as e:
+        print(f"PDF extraction failed: {e}")
+        return None
+
 def process_attachments(msg, applicant_id, sender_name, sender_email):
     """Upload resume attachments to Supabase storage."""
     uploaded_files = []
@@ -145,9 +160,19 @@ def process_attachments(msg, applicant_id, sender_name, sender_email):
                     resume_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
                     print(f"Resume URL: {resume_url}")
 
+                    # Extract text from PDF
+                    extracted_text = None
+                    if filename.lower().endswith('.pdf'):
+                        extracted_text = extract_text_from_pdf(file_content)
+                        if extracted_text:
+                            print(f"Extracted {len(extracted_text)} characters from PDF")
+                        else:
+                            print("Warning: Could not extract text from PDF")
+
                     insert_result = supabase.table('resumes').insert({
                         'applicant_id': applicant_id,
                         'resume_url': resume_url,
+                        'raw_extracted_content': extracted_text,
                         'status': 'pending',
                         'uploaded_at': datetime.now().isoformat()
                     }).execute()
