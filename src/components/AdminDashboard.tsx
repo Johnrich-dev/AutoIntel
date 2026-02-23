@@ -1,12 +1,23 @@
 import { Calendar, CheckCircle, ClipboardList, FileText, LogOut, Send, Users, Video, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Applicant, PersonalityTest, Resume, supabase, VideoAssessment } from '../lib/supabase';
+import { Applicant, PersonalityTest, Resume, ResumeParsedData, supabase, VideoAssessment } from '../lib/supabase';
 
 interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
   video?: VideoAssessment;
   test?: PersonalityTest;
+}
+
+// Helper function to parse resume data from string or object
+function getParsedResumeData(resume: Resume | undefined): ResumeParsedData | null {
+  if (!resume?.parsed_data) return null;
+  if (typeof resume.parsed_data === 'object') return resume.parsed_data;
+  try {
+    return JSON.parse(resume.parsed_data);
+  } catch {
+    return null;
+  }
 }
 
 export function AdminDashboard() {
@@ -259,12 +270,141 @@ export function AdminDashboard() {
                     <FileText className="w-5 h-5 text-gray-600" />
                     <h3 className="text-lg font-semibold text-gray-900">Resume</h3>
                     {getStatusBadge(selectedApplicant.resume?.status)}
+                    {selectedApplicant.resume?.ner_status && (
+                      <span className={`px-2 py-1 text-xs font-medium rounded ${
+                        selectedApplicant.resume.ner_status === 'completed' 
+                          ? 'bg-green-100 text-green-700' 
+                          : selectedApplicant.resume.ner_status === 'pending'
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}>
+                        {selectedApplicant.resume.ner_status === 'completed' ? 'Parsed' : selectedApplicant.resume.ner_status}
+                      </span>
+                    )}
                   </div>
-                  <div className="bg-gray-50 rounded p-4 mb-3">
-                    <p className="text-sm text-gray-600">
-                      {selectedApplicant.resume?.resume_url || 'No resume uploaded'}
-                    </p>
-                  </div>
+
+                  {/* Parsed Resume Data */}
+                  {(() => {
+                    const parsedData = getParsedResumeData(selectedApplicant.resume);
+                    return parsedData ? (
+                      <div className="bg-gray-50 rounded-lg p-4 mb-4 space-y-4">
+                        {/* Contact Info */}
+                        {(parsedData.email || parsedData.phone) && (
+                          <div className="grid grid-cols-2 gap-4">
+                            {parsedData.email && (
+                              <div>
+                                <h4 className="text-xs font-medium text-gray-500 uppercase">Email</h4>
+                                <p className="text-sm text-gray-900">{parsedData.email}</p>
+                              </div>
+                            )}
+                            {parsedData.phone && (
+                              <div>
+                                <h4 className="text-xs font-medium text-gray-500 uppercase">Phone</h4>
+                                <p className="text-sm text-gray-900">{parsedData.phone}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Skills - Separated into Hard and Soft */}
+                        {parsedData.skills && (parsedData.skills.hard_skills?.length > 0 || parsedData.skills.soft_skills?.length > 0) && (
+                          <div>
+                            <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Skills</h4>
+                            
+                            {/* Hard Skills */}
+                            {parsedData.skills.hard_skills && parsedData.skills.hard_skills.length > 0 && (
+                              <div className="mb-2">
+                                <h5 className="text-xs font-medium text-gray-400 uppercase mb-1">Technical</h5>
+                                <div className="flex flex-wrap gap-1">
+                                  {parsedData.skills.hard_skills.map((skill: string, idx: number) => (
+                                    <span key={`hard-${idx}`} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                                      {skill}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Soft Skills */}
+                            {parsedData.skills.soft_skills && parsedData.skills.soft_skills.length > 0 && (
+                              <div>
+                                <h5 className="text-xs font-medium text-gray-400 uppercase mb-1">Soft Skills</h5>
+                                <div className="flex flex-wrap gap-1">
+                                  {parsedData.skills.soft_skills.map((skill: string, idx: number) => (
+                                    <span key={`soft-${idx}`} className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                                      {skill}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Education - College and Senior High only */}
+                        {parsedData.education && parsedData.education.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Education</h4>
+                            <div className="space-y-2">
+                              {parsedData.education.filter((edu: any) => edu.education_type === 'College' || edu.education_type === 'Senior High School').map((edu: any, idx: number) => (
+                                <div key={idx} className="text-sm bg-white p-2 rounded border border-gray-200">
+                                  <p className="font-medium text-gray-900">
+                                    {edu.education_type === 'College' ? 'College' : 'Senior High School'}
+                                  </p>
+                                  {edu.school && (
+                                    <p className="text-gray-700">{edu.school}</p>
+                                  )}
+                                  {edu.course_or_strand && (
+                                    <p className="text-blue-600 text-xs">{edu.course_or_strand}</p>
+                                  )}
+                                  {edu.year_range && (
+                                    <p className="text-gray-500 text-xs">{edu.year_range}</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Work Experience - Only if section exists */}
+                        {parsedData.experience && parsedData.experience.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Work Experience</h4>
+                            <div className="space-y-2">
+                              {parsedData.experience.slice(0, 3).map((exp: any, idx: number) => (
+                                <div key={idx} className="text-sm bg-white p-2 rounded border border-gray-200">
+                                  <p className="font-medium text-gray-900">
+                                    {exp.role || 'Professional Experience'}
+                                    {exp.company && <span className="text-gray-600"> at {exp.company}</span>}
+                                  </p>
+                                  {exp.years && (
+                                    <p className="text-gray-500 text-xs">{exp.years}</p>
+                                  )}
+                                  {exp.summary && (
+                                    <p className="text-gray-600 text-xs mt-1">{exp.summary}</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : null;
+                  })()}
+
+                  {/* Raw Resume Link */}
+                  {selectedApplicant.resume?.resume_url && (
+                    <div className="mb-3">
+                      <a
+                        href={selectedApplicant.resume.resume_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        View Original Resume →
+                      </a>
+                    </div>
+                  )}
                   {selectedApplicant.resume?.status !== 'suitable' && (
                     <button
                       onClick={() =>

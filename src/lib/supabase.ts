@@ -32,6 +32,24 @@ export interface Resume {
   resume_url: string | null;
   status: string;
   uploaded_at: string;
+  raw_extracted_content: string | null;
+  parsed_data: ResumeParsedData | string | null;
+  ner_status: string | null;
+}
+
+export interface ResumeParsedData {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  education: Array<{ year_range: string | null; school: string | null; course_or_strand: string | null; education_type: string | null; raw_text: string }>;
+  experience: Array<{ company: string | null; role: string | null; years: string | null; summary: string | null; raw_text: string }>;
+  skills: {
+    hard_skills: string[];
+    soft_skills: string[];
+    all: string[];
+  };
+  parsed_at: string;
+  error?: string;
 }
 
 export interface VideoAssessment {

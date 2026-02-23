@@ -90,8 +90,20 @@ def extract_sender_info(msg):
     # Extract position from subject
     position = "Unknown Position"
     
-    # Try "Application - Position"
+    # Try "Application - Position" (Application with 'cation')
     position_match = re.search(r"Application\s*[-–—]\s*(.+)", subject)
+    
+    # Try "Applicant - Position" (Applicant with 'cant')
+    if not position_match:
+        position_match = re.search(r"Applicant\s*[-–—]\s*(.+)", subject)
+    
+    # Try "Position - Application"
+    if not position_match:
+        position_match = re.search(r"^(.+?)\s*[-–—]\s*Application$", subject)
+    
+    # Try "Position - Applicant"
+    if not position_match:
+        position_match = re.search(r"^(.+?)\s*[-–—]\s*Applicant$", subject)
     
     # Try "Position Applicant"
     if not position_match:
@@ -136,14 +148,21 @@ def process_attachments(msg, applicant_id, sender_name, sender_email):
                 filename = filename.decode('utf-8')
 
             if filename.lower().endswith(('.pdf', '.doc', '.docx')):
-                clean_name = re.sub(r'[^\w\-_\.]', '_', sender_name)
-                clean_email = re.sub(r'[^\w\-_\.]', '_', sender_email.split('@')[0])
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                new_filename = f"{clean_name}_{clean_email}_{timestamp}_{filename}"
+                # Keep original filename extension
+                original_ext = '.pdf'
+                if filename.lower().endswith('.doc'):
+                    original_ext = '.doc'
+                elif filename.lower().endswith('.docx'):
+                    original_ext = '.docx'
+                
+                # Create unique filename using UUID to prevent reuse/overwrite
+                unique_id = uuid.uuid4().hex[:12]
+                new_filename = f"{sender_name.replace(' ', '_')}_{sender_email.split('@')[0]}_{unique_id}{original_ext}"
                 file_content = part.get_payload(decode=True)
 
                 try:
                     bucket_name = 'resumes'
+                    # Use unique path in storage
                     file_path = f"resumes/{new_filename}"
 
                     content_type = "application/pdf"
