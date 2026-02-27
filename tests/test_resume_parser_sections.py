@@ -99,3 +99,62 @@ Multimedia Manager (2023–2024)
     # Experience should come from EXPERIENCE section, not PROFILE/SKILLS
     assert any((e.get("company") or "") == "CONCEPCION BUSINESS SERVICES, INC." for e in result["experience"])
     assert not any("hands-on experience" in (e.get("raw_text") or "").lower() for e in result["experience"])
+
+
+def test_john_alayaay_interleaved_columns():
+    raw = """
+JOHN RICH A.
+ALAYA-AY
+C O M P U T E R  S C I E N C E  I N T E R N
+A self-motivated undergraduate college student seeking a internship position
+where i can utilize my skills and improve my knowledge in programming, Web
+development and UI design.
+Education
+Contact
+2022 - Present
++63 967 281 1064
+Cavite State University -Imus Campus
+alayaayjohnrich@gmail.com
+Bachelor of Science in Computer Science
+2020 - 2022
+Emilio Aguinaldo College - Cavite
+Soft Skills
+Science, Technology, Engineering and Mathematics
+Communication
+Teamwork
+Seminar Attended
+Problem-solving
+Interpersonal skills
+Time management
+Collaboration
+Hard Skills
+HTML/CSS/PHP/ SQL
+Basic JavaScript
+Basic C++ Programming
+Figma
+Visual Studio Code
+Xampp/MySQL/Firebase
+Projects
+Payroll Management System
+UI/UX, Front-end and Back-end Developer
+"""
+
+    result = parse_resume(raw)
+    assert result["name"] == "JOHN RICH A. ALAYA-AY"
+    assert result["email"] == "alayaayjohnrich@gmail.com"
+    assert result["phone"] is not None and "967" in result["phone"]
+
+    # Skills split by slashes
+    assert "HTML" in result["skills"]["hard_skills"]
+    assert "CSS" in result["skills"]["hard_skills"]
+    assert "PHP" in result["skills"]["hard_skills"]
+    assert "SQL" in result["skills"]["hard_skills"]
+    assert "MySQL" in result["skills"]["hard_skills"]
+    assert "Firebase" in result["skills"]["hard_skills"]
+
+    # Senior HS classification for STEM strand
+    assert any(e.get("education_type") == "Senior High School" for e in result["education"])
+
+    # Projects and trainings added
+    assert "projects" in result
+    assert "trainings" in result

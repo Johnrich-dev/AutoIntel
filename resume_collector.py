@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Resume Collector for SentinelAI
+Resume Collector for AutoIntel
 Automatically collects job application resumes from Gmail inbox and uploads to database.
 """
 
@@ -35,6 +35,8 @@ SEARCH_SUBJECTS = [
 DOWNLOAD_FOLDER = 'resumes'
 PROCESSED_FOLDER = 'processed'
 GMAIL_PRIMARY_MAILBOX = os.getenv('GMAIL_PRIMARY_MAILBOX', 'INBOX')
+MAX_EMAILS_PER_RUN = max(1, min(200, int(os.getenv('MAX_EMAILS_PER_RUN', '20'))))
+ALLOWED_ATTACHMENT_EXTS = ('.pdf', '.doc', '.docx')
 
 # Supabase configuration
 SUPABASE_URL = os.getenv('SUPABASE_URL')
@@ -103,7 +105,15 @@ def _build_gmail_raw_query():
 
     # Keep query simple to avoid IMAP parsing edge-cases; we IMAP-quote the whole query later.
     # Using subject:<term> (no embedded quotes) is generally more robust than subject:"...".
-    subject_terms = ' OR '.join([f"subject:{s}" for s in SEARCH_SUBJECTS])
+    terms = []
+    for s in SEARCH_SUBJECTS:
+        sl = s.lower()
+        # Treat common variations like Applicant/Application/Applicate as one root
+        if sl.startswith('applic'):
+            terms.append("subject:applic")
+        else:
+            terms.append(f"subject:{s}")
+    subject_terms = ' OR '.join(sorted(set(terms)))
     return f'is:unread ({subject_terms})'
 
 def _imap_quote(s: str) -> str:
@@ -111,13 +121,46 @@ def _imap_quote(s: str) -> str:
     s2 = (s or "").replace("\\", "\\\\").replace('"', '\\"')
     return f'"{s2}"'
 
+def _subject_matches(subject: str) -> bool:
+    s = (subject or '').lower()
+    for kw in SEARCH_SUBJECTS:
+        kl = kw.lower().strip()
+        if not kl:
+            continue
+        if kl in s:
+            return True
+        # Root match to handle typos/variants like "Applicate"
+        if kl.startswith('applic') and 'applic' in s:
+            return True
+    return False
+
+def _message_has_resume_attachment(msg) -> bool:
+    try:
+        for part in msg.walk():
+            if part.get_content_maintype() == 'multipart':
+                continue
+            if part.get('Content-Disposition') is None:
+                continue
+            filename = part.get_filename()
+            if not filename:
+                continue
+            name = decode_header(filename)[0][0]
+            if isinstance(name, bytes):
+                name = name.decode('utf-8', errors='ignore')
+            if str(name).lower().endswith(ALLOWED_ATTACHMENT_EXTS):
+                return True
+        return False
+    except Exception:
+        return False
+
 def search_application_emails(mail):
     """Search for unread emails with application subjects."""
     try:
         # Prefer Gmail server-side search so we don't miss unread emails that aren't in INBOX.
         gmail_query = _build_gmail_raw_query()
 
-        mailboxes_to_try = [GMAIL_PRIMARY_MAILBOX, '[Gmail]/All Mail', '[Google Mail]/All Mail', 'All Mail']
+        # Prefer All Mail so we don't miss unread-but-archived messages.
+        mailboxes_to_try = ['[Gmail]/All Mail', '[Google Mail]/All Mail', 'All Mail', GMAIL_PRIMARY_MAILBOX]
         for mailbox in mailboxes_to_try:
             if not _imap_select(mail, mailbox):
                 continue
@@ -155,6 +198,32 @@ def search_application_emails(mail):
                             print(f"Found {len(filtered)} unread application emails in {mailbox} (filtered)")
                             return filtered
 
+            # Extra fallback: unread emails with attachments (subject OR attachment-based match)
+            status3, messages3 = mail.search(None, 'X-GM-RAW', _imap_quote('is:unread has:attachment'))
+            if status3 == 'OK':
+                ids3 = messages3[0].split() if messages3 and messages3[0] else []
+                if ids3:
+                    print(f"Found {len(ids3)} unread emails with attachments in {mailbox}. Filtering...")
+                    filtered3 = []
+                    for email_id in ids3[:200]:
+                        st, md = mail.fetch(email_id, '(RFC822)')
+                        if st != 'OK' or not md or not md[0]:
+                            continue
+                        try:
+                            msg = email.message_from_bytes(md[0][1])
+                            subject = _decode_mime_header(msg.get('Subject', ''))
+                        except Exception:
+                            subject = ''
+                            msg = None
+                        if _subject_matches(subject):
+                            filtered3.append(email_id)
+                            continue
+                        if msg is not None and _message_has_resume_attachment(msg):
+                            filtered3.append(email_id)
+                    if filtered3:
+                        print(f"Found {len(filtered3)} unread application-like emails in {mailbox} (attachments/subject)")
+                        return filtered3
+
         # Fallback: UNSEEN in primary mailbox + client-side subject match.
         if not _imap_select(mail, GMAIL_PRIMARY_MAILBOX):
             print(f"Failed to select mailbox {GMAIL_PRIMARY_MAILBOX}")
@@ -182,7 +251,7 @@ def search_application_emails(mail):
             if subject:
                 print(f"Email {email_id}: {subject}")
 
-            if any(s.lower() in subject.lower() for s in SEARCH_SUBJECTS):
+            if _subject_matches(subject):
                 email_ids.append(email_id)
 
         print(f"Found {len(email_ids)} application emails")
@@ -360,17 +429,16 @@ def mark_as_read(mail, email_id):
         print(f"Failed to mark as read: {e}")
 
 def move_to_processed(mail, email_id):
-    """Move email to processed folder."""
+    """Label email as processed (Gmail)."""
     try:
         mail.create(PROCESSED_FOLDER)
     except:
         pass
 
     try:
-        mail.copy(email_id, PROCESSED_FOLDER)
-        mail.store(email_id, '+FLAGS', '\\Deleted')
-        mail.expunge()
-        print(f"Moved email {email_id} to {PROCESSED_FOLDER}")
+        # Safer for Gmail: apply a label instead of copy+delete (avoids accidental deletion).
+        mail.store(email_id, '+X-GM-LABELS', PROCESSED_FOLDER)
+        print(f"Labeled email {email_id} as {PROCESSED_FOLDER}")
     except Exception as e:
         print(f"Failed to move email: {e}")
 
@@ -392,6 +460,9 @@ def process_emails():
 
     try:
         email_ids = search_application_emails(mail)
+        if len(email_ids) > MAX_EMAILS_PER_RUN:
+            print(f"Found {len(email_ids)} unread application emails; processing first {MAX_EMAILS_PER_RUN} this run.")
+            email_ids = email_ids[:MAX_EMAILS_PER_RUN]
         summary = []
         print(f"Processing {len(email_ids)} emails")
     
@@ -464,6 +535,6 @@ def process_emails():
             pass
 
 if __name__ == "__main__":
-    print("Starting Resume Collector for SentinelAI...")
+    print("Starting Resume Collector for AutoIntel...")
     process_emails()
     print("Resume collection completed.")
