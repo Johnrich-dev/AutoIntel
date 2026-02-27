@@ -1,4 +1,7 @@
 supabase==2.3.0
 PyPDF2>=3.0.0
+pymupdf>=1.23.0
+python-dotenv>=1.0.0
 transformers>=4.30.0
 torch>=2.0.0
+pytest>=8.0.0

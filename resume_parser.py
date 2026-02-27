@@ -7,13 +7,38 @@ Extracts: name, email, phone, education, work experience, skills.
 
 import re
 import json
+import os
 from datetime import datetime
 from supabase import Client, create_client
 
+# Load environment variables from .env if present
+try:
+    from dotenv import load_dotenv  # type: ignore
+
+    load_dotenv()
+except Exception:
+    pass
+
 # Supabase configuration
-SUPABASE_URL = 'https://vjlgbhcfgbtxcisazpwr.supabase.co'
-SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZqbGdiaGNmZ2J0eGNpc2F6cHdyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzM5NDM1OSwiZXhwIjoyMDc4OTcwMzU5fQ.g4OGxXWBGcHiwijYl1rypPpLjBo_VFxigujzwQ-uxgQ'
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
+supabase = None  # type: Client | None
+
+def _require_env():
+    missing = []
+    if not SUPABASE_URL:
+        missing.append('SUPABASE_URL')
+    if not SUPABASE_SERVICE_KEY:
+        missing.append('SUPABASE_SERVICE_KEY')
+    if missing:
+        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+
+def get_supabase() -> Client:
+    global supabase
+    if supabase is None:
+        _require_env()
+        supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    return supabase
 
 # Lazy load BERT model
 bert_model = None
@@ -53,20 +78,23 @@ def extract_entities_bert(text):
     # Use model's config for label mapping
     label_map = model.config.id2label
     
-    # Define entity categories
-    entity_types = {
-        'Name': [],
-        'Email Address': [],
-        'Phone': [],
-        'College Name': [],
-        'Degree': [],
-        'Companies worked at': [],
-        'Designation': [],  # Job title
-        'Skills': [],
-        'Location': [],
-        'Graduation Year': [],
-        'Years of Experience': []
-    }
+    def canon(s: str) -> str:
+        return re.sub(r'\s+', ' ', s.replace('_', ' ').replace('-', ' ')).strip().lower()
+
+    def dedupe_preserve(items):
+        seen = set()
+        out = []
+        for it in items:
+            k = it.strip()
+            if not k:
+                continue
+            if k.lower() in seen:
+                continue
+            seen.add(k.lower())
+            out.append(k)
+        return out
+
+    entities_by_type = {}  # canonical_type -> list[str]
     
     # Extract entities using BIO tagging
     current_entity = None
@@ -82,8 +110,8 @@ def extract_entities_bert(text):
             # Save previous entity
             if current_entity and current_tokens:
                 entity_text = tokenizer.convert_tokens_to_string(current_tokens).strip()
-                if entity_text and current_entity in entity_types:
-                    entity_types[current_entity].append(entity_text)
+                if entity_text:
+                    entities_by_type.setdefault(canon(current_entity), []).append(entity_text)
             current_entity = label_name[2:]
             current_tokens = [token]
         elif label_name.startswith('I-') and current_entity == label_name[2:]:
@@ -92,44 +120,41 @@ def extract_entities_bert(text):
             # Save current entity
             if current_entity and current_tokens:
                 entity_text = tokenizer.convert_tokens_to_string(current_tokens).strip()
-                if entity_text and current_entity in entity_types:
-                    entity_types[current_entity].append(entity_text)
+                if entity_text:
+                    entities_by_type.setdefault(canon(current_entity), []).append(entity_text)
             current_entity = None
             current_tokens = []
     
     # Handle last entity
     if current_entity and current_tokens:
         entity_text = tokenizer.convert_tokens_to_string(current_tokens).strip()
-        if entity_text and current_entity in entity_types:
-            entity_types[current_entity].append(entity_text)
-    
-    # Deduplicate and clean
-    result = {}
-    for key, values in entity_types.items():
-        unique = list(set(values))
-        # Clean up
-        cleaned = [v for v in unique if len(v) > 1]
-        result[key.lower().replace(' ', '_')] = cleaned
-    
-    # Map to expected field names
-    return {
-        'names': result.get('name', []),
-        'emails': result.get('email_address', []),
-        'phones': result.get('phone', []),
-        'colleges': result.get('college_name', []),
-        'degrees': result.get('degree', []),
-        'companies': result.get('companies_worked_at', []),
-        'job_titles': result.get('designation', []),
-        'skills': result.get('skills', []),
-        'locations': result.get('location', []),
-        'graduation_years': result.get('graduation_year', []),
-        'years_of_experience': result.get('years_of_experience', [])
-    }
+        if entity_text:
+            entities_by_type.setdefault(canon(current_entity), []).append(entity_text)
 
-# Supabase configuration
-SUPABASE_URL = 'https://vjlgbhcfgbtxcisazpwr.supabase.co'
-SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZqbGdiaGNmZ2J0eGNpc2F6cHdyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzM5NDM1OSwiZXhwIjoyMDc4OTcwMzU5fQ.g4OGxXWBGcHiwijYl1rypPpLjBo_VFxigujzwQ-uxgQ'
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    # Deduplicate and clean
+    cleaned_by_type = {k: [v for v in dedupe_preserve(vals) if len(v) > 1] for k, vals in entities_by_type.items()}
+
+    def pick(matchers):
+        out = []
+        for t, vals in cleaned_by_type.items():
+            if any(m in t for m in matchers):
+                out.extend(vals)
+        return dedupe_preserve(out)
+
+    # Map to expected field names (robust to model label naming)
+    return {
+        'names': pick(['name']),
+        'emails': pick(['email', 'mail']),
+        'phones': pick(['phone', 'mobile']),
+        'colleges': pick(['college', 'university', 'school', 'institute', 'institution']),
+        'degrees': pick(['degree']),
+        'companies': pick(['company', 'employer', 'organization']),
+        'job_titles': pick(['designation', 'job title', 'title', 'position', 'role']),
+        'skills': pick(['skill']),
+        'locations': pick(['location', 'address', 'city', 'state', 'country']),
+        'graduation_years': pick(['graduation', 'grad']),
+        'years_of_experience': pick(['years of experience', 'experience'])
+    }
 
 # Hard skills keywords
 HARD_SKILLS = [
@@ -170,9 +195,34 @@ SOFT_SKILLS = [
 
 def extract_email(text):
     """Extract email address from text."""
+    # Fix common PDF spacing artifacts: "name @ gmail. com" -> "name@gmail.com"
+    compact = re.sub(r'\s+', ' ', (text or ''))
+    compact = re.sub(r'\s*@\s*', '@', compact)
+    compact = re.sub(r'\s*\.\s*', '.', compact)
+
     email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-    match = re.search(email_pattern, text)
+    match = re.search(email_pattern, compact)
     return match.group(0).lower() if match else None
+
+
+def _normalize_email_value(value: str | None) -> str | None:
+    if not value:
+        return None
+    s = str(value)
+    s = re.sub(r'\s+', ' ', s).strip()
+    s = re.sub(r'\s*@\s*', '@', s)
+    s = re.sub(r'\s*\.\s*', '.', s)
+    m = re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', s)
+    return m.group(0).lower() if m else s.lower()
+
+
+def _first_nonempty_str(values):
+    if not values:
+        return None
+    for v in values:
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
 
 
 def extract_phone(text):
@@ -268,7 +318,11 @@ def extract_education(text):
         # Check for year and (school or degree)
         has_year = re.search(r'(20\d{2}|19\d{2})', line)
         has_school = any(kw in line_lower for kw in ['university', 'college', 'school', 'institute'])
-        has_degree = any(kw in line_lower for kw in ['bs', 'ba', 'ma', 'ms', 'stem', 'abm', 'humss', 'tvl', 'bachelor', 'master', 'degree', 'stem'])
+        # IMPORTANT: match short degree abbreviations as whole words (avoid "ma" matching "manager")
+        has_degree = (
+            re.search(r'\b(bs|ba|ma|ms|bsc|msc|mba|mpa|phd)\b', line_lower) is not None
+            or any(kw in line_lower for kw in ['stem', 'abm', 'humss', 'tvl', 'bachelor', 'master', 'degree'])
+        )
         
         if has_year and (has_school or has_degree):
             candidate_lines.append({'line': line.strip(), 'line_lower': line_lower, 'index': i})
@@ -425,12 +479,27 @@ def extract_work_experience(text):
                        'solutions', 'services', 'consulting', 'enterprise', 'systems', 'labs',
                        'international', 'global', 'worldwide', 'ph', 'usa', 'uk', 'corp.']
     
-    # Experience date patterns
-    experience_patterns = [
-        r'(19|20)\d{2}\s*[-–—]+\s*(present|current|now|(?:19|20)\d{2})',
-        r'(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*(-|\s)\s*(19|20)\d{2}',
-        r'((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(?:19|20)\d{2})',
-    ]
+    def has_date_marker(s: str) -> bool:
+        if re.search(r'(?:19|20)\d{2}', s):
+            return True
+        if re.search(r'\bpresent\b|\bcurrent\b|\bnow\b', s):
+            return True
+        if re.search(r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b', s):
+            return True
+        return False
+
+    def extract_years(s: str):
+        years = re.findall(r'(?:19|20)\d{2}', s)
+        is_present = re.search(r'\bpresent\b|\bcurrent\b|\bnow\b', s) is not None
+        if not years and not is_present:
+            return None
+        if years and is_present:
+            return f"{years[0]} - Present"
+        if len(years) >= 2:
+            return f"{years[0]} - {years[1]}"
+        if years:
+            return years[0]
+        return "Present"
     
     # End of work section markers
     end_markers = ['skills', 'references', 'certifications', 'awards', 'education', 
@@ -460,7 +529,7 @@ def extract_work_experience(text):
         
         # Check for job-related content
         has_job_title = any(title in line_lower for title in job_titles)
-        has_date = any(re.search(p, line_lower) for p in experience_patterns)
+        has_date = has_date_marker(line_lower)
         has_company = any(kw in line_lower for kw in company_keywords)
         
         # Must have job title OR (date AND company/length indicator)
@@ -474,11 +543,7 @@ def extract_work_experience(text):
             }
             
             # Extract dates
-            for pattern in experience_patterns:
-                dates = re.findall(pattern, line, re.IGNORECASE)
-                if dates:
-                    entry['years'] = f"{dates[0][0]} - {dates[0][1]}" if len(dates[0]) > 1 else dates[0][0]
-                    break
+            entry['years'] = extract_years(line_lower)
             
             # Extract role/title
             for title in job_titles:
@@ -543,8 +608,395 @@ def extract_skills(text):
     }
 
 
+SECTION_ORDER = [
+    'PROFILE',
+    'EDUCATION',
+    'SKILLS',
+    'EXPERIENCE',
+    'PROJECTS',
+    'ACHIEVEMENTS',
+    'SEMINARS/TRAINING',
+]
+
+SECTION_ALIASES = {
+    'PROFILE': ['profile', 'summary', 'objective', 'about me'],
+    'EDUCATION': ['education', 'educational background', 'academic background'],
+    'SKILLS': ['skills', 'technical skills', 'core skills', 'competencies'],
+    'EXPERIENCE': ['experience', 'work experience', 'employment history', 'professional experience', 'career history'],
+    'PROJECTS': ['projects', 'personal projects', 'academic projects'],
+    'ACHIEVEMENTS': ['achievements', 'awards', 'honors', 'recognitions'],
+    'SEMINARS/TRAINING': ['seminars', 'trainings', 'training', 'seminars and trainings', 'workshops'],
+}
+
+
+def _normalize_lines(raw_text: str) -> list[str]:
+    """Basic reconstruction: trim, drop obvious noise, merge simple wraps."""
+    lines = [ln.rstrip() for ln in raw_text.splitlines()]
+    # Drop empty blocks at top/bottom
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+
+    cleaned: list[str] = []
+    for ln in lines:
+        s = ln.strip()
+        if not s:
+            cleaned.append('')
+            continue
+        # Remove obvious page headers/footers
+        lower = s.lower()
+        if re.search(r'\bpage\s+\d+\b', lower):
+            continue
+        cleaned.append(s)
+
+    # Merge simple line wraps
+    merged: list[str] = []
+    for ln in cleaned:
+        if not merged:
+            merged.append(ln)
+            continue
+        prev = merged[-1]
+        if not prev.strip():
+            merged.append(ln)
+            continue
+
+        prev_end = prev.strip()[-1]
+
+        def looks_like_email(s: str) -> bool:
+            return bool(re.search(r'\b[A-Za-z0-9._%+-]+\s*@\s*[A-Za-z0-9.-]+\s*\.\s*[A-Za-z]{2,}\b', s))
+
+        def looks_like_phone(s: str) -> bool:
+            return bool(re.search(r'\+?\d[\d\s().-]{8,}', s))
+
+        def looks_like_url(s: str) -> bool:
+            return 'http://' in s.lower() or 'https://' in s.lower() or 'www.' in s.lower()
+
+        def looks_like_name_line(s: str) -> bool:
+            ss = s.strip()
+            if not ss or len(ss) > 40:
+                return False
+            if any(ch.isdigit() for ch in ss) or '@' in ss:
+                return False
+            words = ss.split()
+            if not (2 <= len(words) <= 5):
+                return False
+            # Often all-caps
+            alpha = sum(1 for c in ss if c.isalpha() or c.isspace())
+            return alpha / max(1, len(ss)) > 0.8
+
+        # Hyphenated break: "Lambda-" + "school"
+        if prev_end == '-' and ln and ln[0].islower():
+            merged[-1] = prev.rstrip('-') + ln.lstrip()
+            continue
+
+        # Single-word continuation line: "AWS" + "\nLambda" -> "AWS Lambda"
+        if (
+            ln
+            and re.fullmatch(r'[A-Za-z][A-Za-z0-9/+.-]*', ln.strip())
+            and prev_end not in '.?!:'
+            and not looks_like_name_line(prev)
+            and not looks_like_email(prev)
+            and not looks_like_phone(prev)
+            and not looks_like_url(prev)
+        ):
+            merged[-1] = prev + ' ' + ln.strip()
+            continue
+
+        # Soft wrap: previous line without sentence-ending punctuation, next starts lowercase
+        if (
+            prev_end not in '.?!:'
+            and ln
+            and ln[0].islower()
+            and not looks_like_name_line(prev)
+            and not looks_like_email(ln)
+            and not looks_like_phone(ln)
+            and not looks_like_url(ln)
+        ):
+            merged[-1] = prev + ' ' + ln.lstrip()
+            continue
+
+        merged.append(ln)
+
+    return merged
+
+
+def parse_education_section(text: str) -> list[dict]:
+    """Parse EDUCATION section with multi-line grouping."""
+    if not text or len(text.strip()) < 10:
+        return []
+
+    lines = [ln.strip() for ln in _normalize_lines(text) if ln.strip()]
+    entries: list[dict] = []
+    i = 0
+    while i < len(lines):
+        ln = lines[i]
+        lower = ln.lower()
+
+        # Skip repeated heading words inside section
+        if lower in ('education',):
+            i += 1
+            continue
+
+        # Detect degree/strand line
+        is_degree = (
+            'bachelor' in lower
+            or 'master' in lower
+            or re.search(r'\b(bs|ba|ma|ms|bsc|msc|mba|phd)\b', lower) is not None
+            or 'computer science' in lower
+            or 'stem' in lower
+        )
+        if not is_degree:
+            i += 1
+            continue
+
+        degree_line = ln
+        year_line = None
+        school_line = None
+
+        # Single-line education entries: year + school + degree all together
+        if re.search(r'(19|20)\d{2}', degree_line) and any(k in lower for k in ['university', 'college', 'school', 'institute']):
+            year_range = None
+            m = re.search(r'((?:19|20)\d{2})\s*[-–—to]+\s*((?:19|20)\d{2}|present|current)?', degree_line, re.IGNORECASE)
+            if m:
+                y1 = m.group(1)
+                y2 = m.group(2)
+                year_range = f"{y1} - {y2.title()}" if y2 else y1
+
+            sm = re.search(r'([\w\s.-]+(?:University|College|Institute|School)[\w\s.-]*)', degree_line, re.IGNORECASE)
+            if sm:
+                school_line = sm.group(1).strip()
+
+            course = None
+            cm = re.search(r'(Bachelor of\s+[\w\s]+)', degree_line, re.IGNORECASE)
+            if not cm:
+                cm = re.search(r'(B\.?S\.?\s+in\s+[\w\s]+)', degree_line, re.IGNORECASE)
+            if cm:
+                course = cm.group(1).strip()
+
+            entries.append(
+                {
+                    'school': school_line,
+                    'raw_text': degree_line,
+                    'year_range': year_range,
+                    'education_type': 'College',
+                    'course_or_strand': course or degree_line,
+                }
+            )
+            i += 1
+            continue
+
+        # Sometimes the school is the line immediately above the degree line
+        if i > 0:
+            prev = lines[i - 1].strip()
+            prev_lower = prev.lower()
+            if any(k in prev_lower for k in ['university', 'college', 'school', 'institute', 'campus']) and not re.search(r'(19|20)\d{2}', prev):
+                school_line = prev
+
+        # Look ahead a few lines for year + school
+        look = lines[i + 1 : i + 6]
+        for cand in look:
+            if year_line is None and re.search(r'(19|20)\d{2}', cand) and ('present' in cand.lower() or re.search(r'(19|20)\d{2}\s*[-–—]', cand)):
+                year_line = cand
+                continue
+            if school_line is None and (
+                any(k in cand.lower() for k in ['university', 'college', 'school', 'institute', 'campus'])
+                or 'state university' in cand.lower()
+                or re.search(r'\b(cvsu|cavite state)\b', cand.lower())
+            ):
+                # If it's clearly a school name line, take it.
+                if len(cand) >= 6 and not re.search(r'(19|20)\d{2}', cand):
+                    school_line = cand
+
+        # Normalize course name
+        course = degree_line
+        course = re.sub(r'\s+', ' ', course).strip()
+        course = course.replace('BACHELOR OF SCIENCE IN', 'BS').replace('Bachelor of Science in', 'BS')
+        course = course.replace('COMPUTER SCIENCE', 'Computer Science')
+
+        # Extract year range
+        year_range = None
+        if year_line:
+            m = re.search(r'((?:19|20)\d{2})\s*[-–—to]+\s*((?:19|20)\d{2}|present|current)?', year_line, re.IGNORECASE)
+            if m:
+                y1 = m.group(1)
+                y2 = m.group(2)
+                year_range = f"{y1} - {y2.title()}" if y2 else y1
+
+        # Education type
+        education_type = 'Senior High School' if 'stem' in lower else 'College'
+
+        entry = {
+            'school': school_line,
+            'raw_text': f"{degree_line} | {year_line or ''} | {school_line or ''}".strip(),
+            'year_range': year_range,
+            'education_type': education_type,
+            'course_or_strand': course,
+        }
+        entries.append(entry)
+        i += 1
+
+    return entries[:5]
+
+
+def parse_experience_section(text: str) -> list[dict]:
+    """Parse EXPERIENCE section into structured roles without leaking other sections."""
+    if not text or len(text.strip()) < 10:
+        return []
+
+    lines = [ln.strip() for ln in _normalize_lines(text)]
+    lines = [ln for ln in lines if ln]
+
+    entries: list[dict] = []
+    i = 0
+    while i < len(lines):
+        ln = lines[i]
+
+        # Single-line entry: "Role  Company  2020 - Present"
+        if re.search(r'(19|20)\d{2}', ln):
+            parts = [p.strip() for p in re.split(r'\s{2,}', ln) if p.strip()]
+            if len(parts) >= 3:
+                role = parts[0].title()
+                company = parts[1]
+                years = parts[2]
+                entries.append(
+                    {
+                        'role': role,
+                        'years': years,
+                        'company': company,
+                        'summary': None,
+                        'raw_text': ln,
+                    }
+                )
+                i += 1
+                continue
+
+        # Company lines are often uppercase and have INC./CORP/etc
+        if ln.isupper() and any(k in ln for k in ['INC', 'CORP', 'LLC', 'CO.', 'COMPANY', 'SERVICES']):
+            company = ln
+            years = None
+            role = None
+            bullets: list[str] = []
+
+            # Next lines: dates then role then bullets
+            j = i + 1
+            if j < len(lines) and re.search(r'(19|20)\d{2}', lines[j]):
+                years = lines[j]
+                j += 1
+            if j < len(lines) and len(lines[j]) <= 80:
+                # Role/title may be uppercase in resumes
+                if not (lines[j].isupper() and any(k in lines[j] for k in ['INC', 'CORP', 'LLC', 'CO.', 'COMPANY', 'SERVICES'])):
+                    role = lines[j].title()
+                    j += 1
+
+            while j < len(lines):
+                nxt = lines[j]
+                if _detect_section_heading(nxt):
+                    break
+                # Next company starts
+                if nxt.isupper() and any(k in nxt for k in ['INC', 'CORP', 'LLC', 'CO.', 'COMPANY', 'SERVICES']):
+                    break
+                bullets.append(nxt)
+                j += 1
+
+            summary = ' '.join(bullets).strip() if bullets else None
+            entries.append(
+                {
+                    'role': role,
+                    'years': years,
+                    'company': company,
+                    'summary': summary,
+                    'raw_text': summary or company,
+                }
+            )
+            i = j
+            continue
+
+        # Pattern: Role line -> Company line -> Date line
+        if i + 2 < len(lines):
+            role_cand = lines[i]
+            company_cand = lines[i + 1]
+            date_cand = lines[i + 2]
+
+            role_lower = role_cand.lower()
+            company_lower = company_cand.lower()
+            looks_like_role = any(w in role_lower for w in ['engineer', 'developer', 'intern', 'analyst', 'manager', 'designer'])
+            looks_like_company = any(w in company_lower for w in ['inc', 'corp', 'llc', 'company', 'co.', 'services'])
+            looks_like_date = re.search(r'(19|20)\d{2}', date_cand) is not None
+
+            if looks_like_role and looks_like_company and looks_like_date:
+                role = role_cand.title()
+                company = company_cand
+                years = date_cand
+                bullets: list[str] = []
+                j = i + 3
+                while j < len(lines):
+                    nxt = lines[j]
+                    if _detect_section_heading(nxt):
+                        break
+                    bullets.append(nxt)
+                    j += 1
+                summary = ' '.join(bullets).strip() if bullets else None
+                entries.append(
+                    {
+                        'role': role,
+                        'years': years,
+                        'company': company,
+                        'summary': summary,
+                        'raw_text': summary or f"{role} @ {company}",
+                    }
+                )
+                i = j
+                continue
+
+        i += 1
+
+    return entries[:8]
+
+
+def _detect_section_heading(line: str) -> str | None:
+    """Return canonical section name if line looks like a heading."""
+    stripped = line.strip()
+    if not stripped:
+        return None
+
+    # Short, mostly non-numeric, often all-caps or Title Case
+    if len(stripped) > 60:
+        return None
+    if any(ch.isdigit() for ch in stripped):
+        return None
+    candidate = stripped.rstrip(':').lower()
+
+    for canonical, aliases in SECTION_ALIASES.items():
+        for alias in aliases:
+            if candidate == alias or alias in candidate:
+                return canonical
+    return None
+
+
+def segment_sections(raw_text: str) -> dict[str, str]:
+    """Split resume into high-level sections (HEADER, PROFILE, EDUCATION, etc)."""
+    lines = _normalize_lines(raw_text)
+    sections: dict[str, list[str]] = {}
+
+    current = 'HEADER'
+    sections[current] = []
+
+    for ln in lines:
+        sec = _detect_section_heading(ln)
+        if sec:
+            current = sec
+            if current not in sections:
+                sections[current] = []
+            continue
+        sections.setdefault(current, []).append(ln)
+
+    # Join lines back into text blocks
+    return {name: '\n'.join(block).strip() for name, block in sections.items() if block and ''.join(block).strip()}
+
+
 def parse_resume(raw_text):
-    """Parse raw resume text into structured JSON data using BERT NER."""
+    """Parse raw resume text into structured JSON data with section-aware logic."""
     if not raw_text or len(raw_text.strip()) < 50:
         return {
             'error': 'Insufficient content to parse',
@@ -554,62 +1006,88 @@ def parse_resume(raw_text):
             'education': [],
             'experience': [],
             'skills': {'hard_skills': [], 'soft_skills': [], 'all': []},
-            'ner_entities': {}
+            'sections': {},
+            'ner_method': None,
         }
-    
-    # Extract entities using BERT NER
-    print("Extracting entities using BERT NER...")
-    bert_entities = extract_entities_bert(raw_text)
-    print(f"  BERT found: {len(bert_entities.get('names', []))} names, {len(bert_entities.get('skills', []))} skills, {len(bert_entities.get('colleges', []))} colleges")
-    
-    # Extract skills using regex (for comparison)
-    skills_data = extract_skills(raw_text)
-    
-    # Combine BERT skills with regex skills (union)
-    all_skills = list(set(skills_data['all'] + bert_entities.get('skills', [])))
-    
-    # Use BERT results where available, fallback to regex
-    name = bert_entities.get('names', [None])[0] if bert_entities.get('names') else extract_name(raw_text)
-    email = bert_entities.get('emails', [None])[0] if bert_entities.get('emails') else extract_email(raw_text)
-    phone = bert_entities.get('phones', [None])[0] if bert_entities.get('phones') else extract_phone(raw_text)
-    
-    # For education, combine BERT with regex
-    education = extract_education(raw_text)
-    # Add colleges from BERT if not already captured
-    for college in bert_entities.get('colleges', []):
-        if college and not any(e.get('school') == college for e in education):
-            education.append({
-                'year_range': None,
-                'school': college,
-                'course_or_strand': None,
-                'education_type': 'College',
-                'raw_text': college
-            })
-    
-    # For experience, combine BERT with regex
-    experience = extract_work_experience(raw_text)
-    # Add companies from BERT if not already captured
-    for company in bert_entities.get('companies', []):
+
+    # 1) Reconstruct & segment into sections
+    sections = segment_sections(raw_text)
+
+    header_block = sections.get('HEADER', '')
+    profile_block = sections.get('PROFILE', '')
+    education_block = sections.get('EDUCATION', '')
+    experience_block = sections.get('EXPERIENCE', '')
+    skills_block = sections.get('SKILLS', '')
+
+    # 2) Run BERT NER only where needed
+    print("Extracting entities using BERT NER (section-aware)...")
+    header_text_for_ner = (header_block + "\n\n" + profile_block).strip() or raw_text
+    bert_header = extract_entities_bert(header_text_for_ner)
+
+    bert_education = extract_entities_bert(education_block) if education_block else {
+        'colleges': [],
+        'degrees': [],
+    }
+    bert_experience = extract_entities_bert(experience_block) if experience_block else {
+        'companies': [],
+        'job_titles': [],
+    }
+    bert_skills = extract_entities_bert(skills_block) if skills_block else {
+        'skills': [],
+    }
+
+    # 3) Contact info only from header/profile
+    contact_source = header_block + "\n\n" + profile_block
+    name = _first_nonempty_str(bert_header.get('names')) or extract_name(contact_source)
+    email = _normalize_email_value(_first_nonempty_str(bert_header.get('emails')) or extract_email(contact_source))
+    phone = _first_nonempty_str(bert_header.get('phones')) or extract_phone(contact_source)
+
+    # 4) Education: use only EDUCATION section (multi-line parser first)
+    education = parse_education_section(education_block) if education_block else []
+    if not education:
+        edu_source = education_block or raw_text
+        education = extract_education(edu_source)
+        for college in bert_education.get('colleges', []):
+            if college and not any(e.get('school') == college for e in education):
+                education.append({
+                    'year_range': None,
+                    'school': college,
+                    'course_or_strand': None,
+                    'education_type': 'College',
+                    'raw_text': college,
+                })
+
+    # 5) Experience: use only EXPERIENCE section (multi-line parser first)
+    experience = parse_experience_section(experience_block) if experience_block else []
+    exp_source = experience_block or raw_text
+    if not experience:
+        experience = extract_work_experience(exp_source)
+    for company in bert_experience.get('companies', []):
         if company and not any(e.get('company') == company for e in experience):
-            experience.append({
-                'company': company,
-                'role': None,
-                'years': None,
-                'summary': None,
-                'raw_text': company
-            })
-    
-    # Add job titles from BERT
-    for title in bert_entities.get('job_titles', []):
+            if company.lower() in exp_source.lower():
+                experience.append({
+                    'company': company,
+                    'role': None,
+                    'years': None,
+                    'summary': None,
+                    'raw_text': company,
+                })
+    for title in bert_experience.get('job_titles', []):
         if title and not any(e.get('role') == title for e in experience):
-            experience.append({
-                'company': None,
-                'role': title,
-                'years': None,
-                'summary': None,
-                'raw_text': title
-            })
-    
+            if title.lower() in exp_source.lower():
+                experience.append({
+                    'company': None,
+                    'role': title,
+                    'years': None,
+                    'summary': None,
+                    'raw_text': title,
+                })
+
+    # 6) Skills: use SKILLS section when present
+    skills_source = skills_block or raw_text
+    skills_data = extract_skills(skills_source)
+    all_skills = list(set(skills_data['all'] + bert_skills.get('skills', [])))
+
     parsed = {
         'name': name,
         'email': email,
@@ -619,12 +1097,13 @@ def parse_resume(raw_text):
         'skills': {
             'hard_skills': skills_data['hard_skills'],
             'soft_skills': skills_data['soft_skills'],
-            'all': all_skills
+            'all': all_skills,
         },
+        'sections': sections,
         'parsed_at': datetime.now().isoformat(),
-        'ner_method': 'BERT'
+        'ner_method': 'BERT',
     }
-    
+
     return parsed
 
 
@@ -633,7 +1112,8 @@ def process_pending_resumes():
     print("Fetching resumes with pending ner_status...")
     
     # Get resumes that need processing
-    response = supabase.table('resumes').select(
+    sb = get_supabase()
+    response = sb.table('resumes').select(
         'id, applicant_id, raw_extracted_content, ner_status'
     ).eq('ner_status', 'pending').execute()
     
@@ -657,7 +1137,7 @@ def process_pending_resumes():
             parsed_data = parse_resume(raw_content)
             
             # Update the resume with parsed data
-            update_result = supabase.table('resumes').update({
+            update_result = sb.table('resumes').update({
                 'parsed_data': json.dumps(parsed_data),
                 'ner_status': 'completed'
             }).eq('id', resume_id).execute()
@@ -677,7 +1157,7 @@ def process_pending_resumes():
             
             # Mark as failed
             try:
-                supabase.table('resumes').update({
+                sb.table('resumes').update({
                     'ner_status': 'failed',
                     'parsed_data': json.dumps({'error': str(e)})
                 }).eq('id', resume_id).execute()
