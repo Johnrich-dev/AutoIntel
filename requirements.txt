@@ -1,4 +1,6 @@
 supabase==2.3.0
+gotrue==2.8.1
+httpx>=0.24,<0.25
 PyPDF2>=3.0.0
 pymupdf>=1.23.0
 python-dotenv>=1.0.0

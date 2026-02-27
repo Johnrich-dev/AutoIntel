@@ -9,11 +9,29 @@ import imaplib
 import io
 import os
 import re
+import sys
 import uuid
 from datetime import datetime, timedelta
 from email.header import decode_header
+from pathlib import Path
+from typing import Any, Optional
 
-from supabase import Client, create_client
+def _prefer_site_packages():
+    repo_root = Path(__file__).resolve().parent
+    if (repo_root / 'supabase').is_dir() and str(repo_root) in sys.path:
+        # Avoid shadowing the supabase-py package with local /supabase folder
+        sys.path.remove(str(repo_root))
+        sys.path.append(str(repo_root))
+
+_prefer_site_packages()
+
+try:
+    from supabase import create_client
+except ImportError as exc:
+    raise ImportError(
+        "Failed to import supabase-py. Ensure the 'supabase' package is installed "
+        "and a local /supabase folder isn't shadowing it."
+    ) from exc
 from PyPDF2 import PdfReader
 
 # Load environment variables from .env if present
@@ -41,7 +59,7 @@ ALLOWED_ATTACHMENT_EXTS = ('.pdf', '.doc', '.docx')
 # Supabase configuration
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
-supabase = None  # type: Client | None
+supabase: Optional[Any] = None
 
 def _require_env():
     missing = []
