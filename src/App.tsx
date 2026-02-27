@@ -7,6 +7,7 @@ import { VideoAssessment } from './components/VideoAssessment';
 import { PersonalityTest } from './components/PersonalityTest';
 import { AdminDashboard } from './components/AdminDashboard';
 import { RoleSelection } from './components/RoleSelection';
+import { getSupabaseConfigError } from './lib/supabase';
 
 type View =
   | 'choice'
@@ -97,6 +98,27 @@ function AppContent() {
 }
 
 function App() {
+  const configError = getSupabaseConfigError();
+  if (configError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-6">
+        <div className="max-w-xl w-full bg-white rounded-2xl shadow-2xl p-8">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Frontend configuration required</h1>
+          <p className="text-gray-700 mb-4">
+            The app can’t connect to Supabase yet, so nothing loads.
+          </p>
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm mb-4">
+            {configError}
+          </div>
+          <p className="text-sm text-gray-700 mb-2">Add these to your project `.env` then restart `npm run dev`:</p>
+          <pre className="text-xs bg-gray-100 rounded-lg p-3 overflow-auto">
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+          </pre>
+        </div>
+      </div>
+    );
+  }
   return (
     <AuthProvider>
       <AppContent />

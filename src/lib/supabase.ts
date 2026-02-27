@@ -1,17 +1,65 @@
 import { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export function getSupabaseConfigError(): string | null {
+  const missing: string[] = [];
+  if (!supabaseUrl) missing.push('VITE_SUPABASE_URL');
+  if (!supabaseAnonKey) missing.push('VITE_SUPABASE_ANON_KEY');
+  return missing.length ? `Missing required frontend env vars: ${missing.join(', ')}` : null;
+}
 
-export const getSupabaseClient = (accessToken?: string) => {
+export function isSupabaseConfigured(): boolean {
+  return getSupabaseConfigError() === null;
+}
+
+let cachedDefaultClient: SupabaseClient | null = null;
+const cachedTokenClients = new Map<string, SupabaseClient>();
+
+function createConfiguredClient(accessToken?: string): SupabaseClient {
+  // At this point we know they exist, but TS doesn't.
+  const url = supabaseUrl as string;
+  const key = supabaseAnonKey as string;
   if (accessToken) {
-    return createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { 'x-access-token': accessToken } }
+    return createClient(url, key, {
+      global: { headers: { 'x-access-token': accessToken } },
     });
   }
-  return supabase;
+  return createClient(url, key);
+}
+
+export const supabase: SupabaseClient = (() => {
+  const err = getSupabaseConfigError();
+  if (err) {
+    // Avoid a hard crash (white page). App.tsx will render a config screen.
+    // Any accidental usage will throw a clear error.
+    return new Proxy(
+      {},
+      {
+        get() {
+          throw new Error(err);
+        },
+      }
+    ) as unknown as SupabaseClient;
+  }
+  cachedDefaultClient = createConfiguredClient();
+  return cachedDefaultClient;
+})();
+
+export const getSupabaseClient = (accessToken?: string) => {
+  const err = getSupabaseConfigError();
+  if (err) throw new Error(err);
+  if (accessToken) {
+    const cached = cachedTokenClients.get(accessToken);
+    if (cached) return cached;
+    const client = createConfiguredClient(accessToken);
+    cachedTokenClients.set(accessToken, client);
+    return client;
+  }
+  if (!cachedDefaultClient) cachedDefaultClient = createConfiguredClient();
+  return cachedDefaultClient;
 };
 
 export interface Applicant {
