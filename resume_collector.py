@@ -19,7 +19,7 @@ from PyPDF2 import PdfReader
 # Configuration
 IMAP_SERVER = 'imap.gmail.com'
 IMAP_PORT = 993
-EMAIL_USER = 'sentinelaiph@gmail.com'
+EMAIL_USER = 'autointel.ta@gmail.com'
 EMAIL_PASSWORD = 'vydgycxlruttfbib'
 SEARCH_SUBJECT = 'Applicant'
 DOWNLOAD_FOLDER = 'resumes'
