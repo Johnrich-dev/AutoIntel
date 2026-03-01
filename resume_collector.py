@@ -45,17 +45,11 @@ except Exception:
 # Configuration
 IMAP_SERVER = 'imap.gmail.com'
 IMAP_PORT = 993
-<<<<<<< HEAD
-EMAIL_USER = 'autointel.ta@gmail.com'
-EMAIL_PASSWORD = 'vydgycxlruttfbib'
-SEARCH_SUBJECT = 'Applicant'
-=======
 EMAIL_USER = os.getenv('GMAIL_EMAIL', 'autointel.ta@gmail.com')
 EMAIL_PASSWORD = os.getenv('GMAIL_APP_PASSWORD')
 SEARCH_SUBJECTS = [
     s.strip() for s in os.getenv('GMAIL_SEARCH_SUBJECTS', 'Applicant,Application').split(',') if s.strip()
 ]
->>>>>>> b813c7d9ae953dca39c72e064725aa67748dd5f2
 DOWNLOAD_FOLDER = 'resumes'
 PROCESSED_FOLDER = 'processed'
 GMAIL_PRIMARY_MAILBOX = os.getenv('GMAIL_PRIMARY_MAILBOX', 'INBOX')
