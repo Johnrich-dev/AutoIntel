@@ -1,7 +1,7 @@
 import { CheckCircle2, FileText } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { getSupabaseClient } from '../lib/supabase';
 
 interface RulesAndTermsProps {
   onAccept: () => void;
@@ -10,7 +10,7 @@ interface RulesAndTermsProps {
 export function RulesAndTerms({ onAccept }: RulesAndTermsProps) {
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { applicant, updateApplicant } = useAuth();
+  const { applicant, updateApplicant, accessToken } = useAuth();
 
   const handleAccept = async () => {
     if (!agreed || !applicant) return;
@@ -18,7 +18,8 @@ export function RulesAndTerms({ onAccept }: RulesAndTermsProps) {
     setLoading(true);
 
     try {
-      const { error } = await supabase
+      const client = getSupabaseClient(accessToken ?? undefined);
+      const { error } = await client
         .from('applicants')
         .update({
           rules_accepted: true,

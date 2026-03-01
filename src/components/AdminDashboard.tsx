@@ -1,7 +1,7 @@
 import { Calendar, CheckCircle, ClipboardList, FileText, LogOut, Send, Users, Video, X } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Applicant, PersonalityTest, Resume, ResumeParsedData, supabase, VideoAssessment } from '../lib/supabase';
+import { Applicant, PersonalityTest, Resume, ResumeParsedData, getSupabaseAdminClient, VideoAssessment } from '../lib/supabase';
 
 interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
@@ -27,6 +27,7 @@ export function AdminDashboard() {
   const [selectedApplicant, setSelectedApplicant] = useState<ApplicantWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'filtered' | 'unfiltered'>('all');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadApplicants();
@@ -45,7 +46,9 @@ export function AdminDashboard() {
 
   const loadApplicants = async () => {
     try {
-      const { data: applicantsData, error: applicantsError } = await supabase
+      setError(null);
+      const adminClient = getSupabaseAdminClient();
+      const { data: applicantsData, error: applicantsError } = await adminClient
         .from('applicants')
         .select('*')
         .order('created_at', { ascending: false });
@@ -56,9 +59,9 @@ export function AdminDashboard() {
         const applicantsWithDetails = await Promise.all(
           applicantsData.map(async (applicant) => {
             const [resumeResult, videoResult, testResult] = await Promise.all([
-              supabase.from('resumes').select('*').eq('applicant_id', applicant.id).maybeSingle(),
-              supabase.from('video_assessments').select('*').eq('applicant_id', applicant.id).maybeSingle(),
-              supabase.from('personality_tests').select('*').eq('applicant_id', applicant.id).maybeSingle(),
+              adminClient.from('resumes').select('*').eq('applicant_id', applicant.id).maybeSingle(),
+              adminClient.from('video_assessments').select('*').eq('applicant_id', applicant.id).maybeSingle(),
+              adminClient.from('personality_tests').select('*').eq('applicant_id', applicant.id).maybeSingle(),
             ]);
 
             return {
@@ -74,6 +77,7 @@ export function AdminDashboard() {
       }
     } catch (error) {
       console.error('Error loading applicants:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load applicants.');
     } finally {
       setLoading(false);
     }
@@ -81,7 +85,8 @@ export function AdminDashboard() {
 
   const handleAction = async (applicantId: string, action: string, actionDescription: string) => {
     try {
-      await supabase.from('admin_actions').insert({
+      const adminClient = getSupabaseAdminClient();
+      await adminClient.from('admin_actions').insert({
         applicant_id: applicantId,
         action_type: action,
         notes: actionDescription,
@@ -145,6 +150,11 @@ export function AdminDashboard() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {error && (
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {error}
+          </div>
+        )}
         <div className="mb-6 flex gap-4">
           <button
             onClick={() => setFilter('all')}

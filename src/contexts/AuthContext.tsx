@@ -1,5 +1,5 @@
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
-import { Applicant, supabase } from '../lib/supabase';
+import { Applicant, getSupabaseClient } from '../lib/supabase';
 
 interface AuthContextType {
   applicant: Applicant | null;
@@ -29,8 +29,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadApplicant = async (token: string) => {
     try {
-      // Use default Supabase client since access_token is a custom token, not a JWT
-      const { data, error } = await supabase
+      const client = getSupabaseClient(token);
+      const { data, error } = await client
         .from('applicants')
         .select('*')
         .eq('access_token', token)
@@ -61,8 +61,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     console.log('Attempting login with token:', token);
     try {
-      // Use default Supabase client since access_token is a custom token, not a JWT
-      const { data, error } = await supabase
+      const client = getSupabaseClient(token);
+      const { data, error } = await client
         .from('applicants')
         .select('*')
         .eq('access_token', token)
