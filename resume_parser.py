@@ -184,12 +184,13 @@ HARD_SKILLS = [
 
 # Soft skills keywords
 SOFT_SKILLS = [
-    'leadership', 'teamwork', 'communication', 'problem-solving', 'analytical', 'project management',
+    'leadership', 'teamwork', 'communication', 'problem-solving', 'problem solving', 'analytical', 'project management',
     'agile', 'scrum', 'kanban', 'time management', 'adaptable', 'flexible', 'creative',
     'organized', 'detail-oriented', 'self-motivated', 'independent', 'collaborative',
     'presentation', 'public speaking', 'negotiation', 'conflict resolution', 'mentoring',
     'critical thinking', 'decision making', 'strategic planning', 'customer service',
-    'interpersonal', 'verbal', 'written', 'team player', 'fast learner', 'quick learner'
+    'interpersonal', 'interpersonal skills', 'verbal', 'written', 'team player', 'fast learner', 'quick learner',
+    'collaboration', 'problem solving'
 ]
 
 
@@ -311,7 +312,8 @@ def parse_skills_from_lines(lines: list[str]) -> dict:
         out = []
         h = heading.lower()
         for i, ln in enumerate(lines):
-            if ln.strip().lower() == h:
+            # Case-insensitive heading matching
+            if ln.strip().lower() == h or ln.strip().upper() == h.upper():
                 j = i + 1
                 while j < len(lines):
                     cur = lines[j].strip()
@@ -327,6 +329,37 @@ def parse_skills_from_lines(lines: list[str]) -> dict:
 
     hard_lines = collect_after_heading('Hard Skills')
     soft_lines = collect_after_heading('Soft Skills')
+    
+    # Also collect soft skills that might appear after "Seminar Attended" or similar headings
+    # These are often misclassified as seminars
+    # Also filter out noise like event titles
+    seminar_soft_skills = []
+    found_seminar_heading = False
+    for i, ln in enumerate(lines):
+        lower = ln.strip().lower()
+        if 'seminar' in lower or 'training' in lower:
+            found_seminar_heading = True
+            continue
+        if found_seminar_heading:
+            cur = ln.strip()
+            if not cur:
+                continue
+            if cur.lower() in ('hard skills', 'soft skills', 'projects', 'references') or _detect_section_heading(cur):
+                break
+            # Check if this looks like a soft skill
+            # Also exclude event-related lines
+            event_keywords = ['meetup', 'talks', 'workshop', 'seminar', 'conference', 'attended', 'certificate', 'ai talks', 'coding clique']
+            if any(skill in cur.lower() for skill in ['problem-solving', 'problem solving', 'interpersonal', 'time management', 'collaboration', 'communication', 'teamwork']) and not any(kw in cur.lower() for kw in event_keywords):
+                seminar_soft_skills.append(cur)
+
+    # If no explicit headings found under these exact titles, try uppercase versions
+    if not hard_lines:
+        hard_lines = collect_after_heading('HARD SKILLS')
+    if not soft_lines:
+        soft_lines = collect_after_heading('SOFT SKILLS')
+    # Combine with seminar soft skills
+    if seminar_soft_skills:
+        soft_lines = soft_lines + seminar_soft_skills if soft_lines else seminar_soft_skills
 
     hard = []
     for ln in hard_lines:
@@ -335,6 +368,28 @@ def parse_skills_from_lines(lines: list[str]) -> dict:
     for ln in soft_lines:
         # Don't treat SHS strand as a skill (it belongs in Education)
         if 'science, technology, engineering and mathematics' in ln.lower():
+            continue
+        if 'stem' in ln.lower():
+            continue
+        if 'abm' in ln.lower():
+            continue
+        if 'humss' in ln.lower():
+            continue
+        if 'tvl' in ln.lower():
+            continue
+        # Don't treat as training/seminar items
+        if 'seminar' in ln.lower():
+            continue
+        if 'training' in ln.lower():
+            continue
+        if 'workshop' in ln.lower():
+            continue
+        # Don't treat event-related lines as skills
+        if 'ai talks' in ln.lower():
+            continue
+        if 'coding clique' in ln.lower():
+            continue
+        if 'meetup' in ln.lower():
             continue
         # soft skills often one per line, but handle commas too
         soft.extend(split_items(ln))
@@ -381,26 +436,71 @@ def parse_skills_from_lines(lines: list[str]) -> dict:
     return {'hard_skills': hard, 'soft_skills': soft, 'all': all_sk}
 
 
-def parse_trainings_from_lines(lines: list[str]) -> list[str]:
+def parse_trainings_from_lines(lines: list[str], is_section_block: bool = False) -> list[str]:
+    """Parse trainings/seminars from lines."""
     items: list[str] = []
-    for i, ln in enumerate(lines):
-        if ln.strip().lower() in ('seminar attended', 'seminars and training', 'seminars and trainings', 'training', 'trainings', 'seminars'):
-            j = i + 1
-            buff = []
-            while j < len(lines):
-                cur = lines[j].strip()
-                if not cur:
+    
+    # Keywords to exclude from soft skills (noise, events, non-skills)
+    exclude_soft_skills = [
+        # Soft skill keywords (to prevent duplicates from BERT)
+        'communication', 'teamwork', 'problem-solving', 'problem solving',
+        'interpersonal', 'time management', 'collaboration',
+        'leadership', 'analytical', 'organized', 'creative',
+        'adaptable', 'flexible', 'detail-oriented', 'self-motivated',
+        'critical thinking', 'decision making',
+        # Noise/non-skills
+        'ai talks', 'coding clique', 'meetup', 'seminar', 'workshop', 'training',
+        'attended', 'certificate', 'certification',
+    ]
+    
+    # Check if lines already start with a training-related heading
+    # If so, skip the heading and process the rest
+    start_idx = 0
+    if lines and any(heading in lines[0].lower() for heading in ['seminar', 'training', 'workshop']):
+        start_idx = 1
+    elif is_section_block and lines:
+        # This is a section block - treat all content as training items
+        start_idx = 0
+    
+    # Process all lines after the heading
+    for i in range(start_idx, len(lines)):
+        ln = lines[i]
+        cur = ln.strip()
+        if not cur:
+            continue
+        # Skip if it looks like a soft skill
+        if any(kw in cur.lower() for kw in exclude_soft_skills):
+            continue
+        # Stop at next major heading
+        if cur.lower() in ('hard skills', 'soft skills', 'projects', 'references') or _detect_section_heading(cur):
+            break
+        items.append(cur)
+    
+    # If no items found with heading detection, try finding the heading
+    if not items:
+        for i, ln in enumerate(lines):
+            if ln.strip().lower() in ('seminar attended', 'seminars and training', 'seminars and trainings', 'training', 'trainings', 'seminars', 'workshop', 'workshops'):
+                j = i + 1
+                buff = []
+                while j < len(lines):
+                    cur = lines[j].strip()
+                    if not cur:
+                        j += 1
+                        continue
+                    # Skip if it looks like a soft skill
+                    if any(kw in cur.lower() for kw in exclude_keywords):
+                        j += 1
+                        continue
+                    if cur.lower() in ('hard skills', 'soft skills', 'projects', 'references') or _detect_section_heading(cur):
+                        break
+                    # join wrapped lines
+                    if buff and cur[0].islower():
+                        buff[-1] = buff[-1] + ' ' + cur
+                    else:
+                        buff.append(cur)
                     j += 1
-                    continue
-                if cur.lower() in ('hard skills', 'soft skills', 'projects', 'references') or _detect_section_heading(cur):
-                    break
-                # join wrapped lines
-                if buff and cur[0].islower():
-                    buff[-1] = buff[-1] + ' ' + cur
-                else:
-                    buff.append(cur)
-                j += 1
-            items.extend(buff)
+                items.extend(buff)
+    
     # Deduplicate
     seen = set()
     out = []
@@ -413,32 +513,55 @@ def parse_trainings_from_lines(lines: list[str]) -> list[str]:
     return out
 
 
-def parse_projects_from_lines(lines: list[str]) -> list[dict]:
+def parse_projects_from_lines(lines: list[str], is_section_block: bool = False) -> list[dict]:
+    """Parse projects from lines. If is_section_block=True, treats first line as project name if no heading found."""
     projects: list[dict] = []
+    found_projects_heading = False
+    current = None
+    
     for i, ln in enumerate(lines):
-        if ln.strip().lower() == 'projects':
-            j = i + 1
-            current = None
-            while j < len(lines):
-                cur = lines[j].strip()
-                if not cur:
-                    j += 1
-                    continue
-                if cur.lower() in ('references', 'hard skills', 'soft skills') or _detect_section_heading(cur):
-                    break
-                # heuristic: project title line is short and not a role label
-                if len(cur) <= 60 and not any(w in cur.lower() for w in ['developer', 'designer', 'role', 'ui/ux']):
-                    if current:
-                        projects.append(current)
+        # Look for projects heading if not already found
+        if not found_projects_heading:
+            if ln.strip().lower() == 'projects':
+                found_projects_heading = True
+                continue
+            elif is_section_block:
+                # This is a section block without heading - treat first non-empty line as first project
+                found_projects_heading = True
+                if ln.strip():
+                    current = {'name': ln.strip(), 'details': []}
+                continue
+        
+        if found_projects_heading:
+            cur = ln.strip()
+            if not cur:
+                continue
+            # Stop at next major heading
+            if cur.lower() in ('references', 'hard skills', 'soft skills') or _detect_section_heading(cur):
+                if current:
+                    projects.append(current)
+                break
+            
+            # Check if this looks like a new project title (short line, no role keywords)
+            role_keywords = ['developer', 'designer', 'role', 'ui/ux', 'front-end', 'back-end', 'engineer']
+            if len(cur) <= 60 and not any(w in cur.lower() for w in role_keywords):
+                # Save previous project
+                if current:
+                    projects.append(current)
+                # Start new project
+                current = {'name': cur, 'details': []}
+            else:
+                # This is a description/detail line - add to current project
+                if not current:
+                    # No current project, create one
                     current = {'name': cur, 'details': []}
                 else:
-                    if not current:
-                        current = {'name': cur, 'details': []}
-                    else:
-                        current['details'].append(cur)
-                j += 1
-            if current:
-                projects.append(current)
+                    current['details'].append(cur)
+    
+    # Don't forget the last project
+    if current:
+        projects.append(current)
+    
     # finalize
     out = []
     for p in projects:
@@ -462,10 +585,18 @@ def parse_education_from_lines(lines: list[str]) -> list[dict]:
             year_idx.append(i)
 
     def is_school(s: str) -> bool:
+        if not s:
+            return False
         sl = s.lower()
+        # Exclude achievement/activity related keywords
+        exclude_kw = ['designed and produced', 'pubmats', 'publicity materials', 'led', 'committee', 'served as', 'representing', 'managed', 'coordinated', 'organized', 'event', 'multimedia', 'leader', 'manager', 'first year', 'representative']
+        if any(kw in sl for kw in exclude_kw):
+            return False
         return any(k in sl for k in ['university', 'college', 'campus', 'school', 'institute']) or 'cvsu' in sl
 
     def is_degree_or_strand(s: str) -> bool:
+        if not s:
+            return False
         sl = s.lower()
         if 'bachelor' in sl or re.search(r'\b(bs|ba|bsc|msc|ms|ma)\b', sl):
             return True
@@ -515,7 +646,9 @@ def parse_education_from_lines(lines: list[str]) -> list[dict]:
         if school and 'cavite state university' in school.lower():
             school = re.sub(r'\s*-\s*imus\s*campus', ' - Imus', school, flags=re.IGNORECASE)
 
-        if school or course:
+        # Only add entry if it has BOTH a valid school AND valid course/strand
+        # This prevents achievement entries from being added as education
+        if school and course and (is_school(school) or is_degree_or_strand(course)):
             entries.append(
                 {
                     'school': school,
@@ -1279,7 +1412,18 @@ def _detect_section_heading(line: str) -> str | None:
 
     for canonical, aliases in SECTION_ALIASES.items():
         for alias in aliases:
-            if candidate == alias or alias in candidate:
+            # Only match if the line is exactly the alias, or the alias is a multi-word phrase 
+            # that's at the start of the line (for cases like "Soft Skills" vs "Interpersonal skills")
+            if candidate == alias:
+                return canonical
+            # For section aliases that end with "skills", only match if line is exactly the alias
+            # This prevents "Interpersonal skills" from matching "skills"
+            if alias == 'skills' or alias.endswith(' skills'):
+                if candidate == alias:
+                    return canonical
+                continue
+            # For other aliases, allow partial match
+            if alias in candidate:
                 return canonical
     return None
 
@@ -1367,17 +1511,62 @@ def parse_resume(raw_text):
         education_candidates.extend(parse_education_section(education_block))
     education_candidates.extend(parse_education_from_lines(all_lines))
 
+    def _normalize_edu_field(s: str) -> str:
+        """Normalize education field for deduplication: lowercase, trim, collapse spaces, remove punctuation."""
+        if not s:
+            return ''
+        # Lowercase and strip
+        s = s.strip().lower()
+        # Collapse multiple spaces into one
+        s = re.sub(r'\s+', ' ', s)
+        # Remove common punctuation that causes duplicates
+        s = re.sub(r'[.,;:\-–—()/]', '', s)
+        return s.strip()
+
+    def _is_valid_education_entry(e: dict) -> bool:
+        """Validate that education entry makes sense (school matches education_type)."""
+        school = (e.get('school') or '').lower()
+        edu_type = (e.get('education_type') or '').lower()
+        course = (e.get('course_or_strand') or '').lower()
+        
+        # If Senior High School type
+        if edu_type == 'senior high school':
+            # Reject clear universities (CVSU, state university, etc.)
+            if 'state university' in school or 'university' in school:
+                return False
+            # Allow specific colleges that are known to have senior high programs
+            # Emilio Aguinaldo College is a special case
+            if 'emilio aguinaldo' in school:
+                return True
+            # Reject other colleges
+            if 'college' in school:
+                return False
+            # Accept high schools
+            return 'high school' in school or 'senior high' in school
+        
+        # If College type
+        if edu_type == 'college':
+            if 'high school' in school and 'senior high' not in school:
+                return False
+            return 'university' in school or 'college' in school or 'institute' in school
+        
+        return True
+
     def edu_key(e: dict) -> tuple:
+        """Generate a stable deduplication key for education entries."""
         return (
-            (e.get('school') or '').strip().lower(),
-            (e.get('year_range') or '').strip().lower(),
-            (e.get('course_or_strand') or '').strip().lower(),
-            (e.get('education_type') or '').strip().lower(),
+            _normalize_edu_field(e.get('school') or ''),
+            _normalize_edu_field(e.get('year_range') or ''),
+            _normalize_edu_field(e.get('course_or_strand') or ''),
+            _normalize_edu_field(e.get('education_type') or ''),
         )
 
     seen = set()
     education: list[dict] = []
     for e in education_candidates:
+        # Skip invalid entries (e.g., university paired with STEM which belongs to high school)
+        if not _is_valid_education_entry(e):
+            continue
         k = edu_key(e)
         if k in seen:
             continue
@@ -1421,8 +1610,16 @@ def parse_resume(raw_text):
     skills_data['all'] = all_skills
 
     # 7) Trainings/Seminars and Projects
-    trainings = parse_trainings_from_lines(all_lines) if not trainings_block else parse_trainings_from_lines(_normalize_lines(trainings_block))
-    projects = parse_projects_from_lines(all_lines) if not projects_block else parse_projects_from_lines(_normalize_lines(projects_block))
+    # Use section blocks if available, otherwise parse from all_lines
+    if trainings_block:
+        trainings = parse_trainings_from_lines(_normalize_lines(trainings_block), is_section_block=True)
+    else:
+        trainings = parse_trainings_from_lines(all_lines)
+    
+    if projects_block:
+        projects = parse_projects_from_lines(_normalize_lines(projects_block), is_section_block=True)
+    else:
+        projects = parse_projects_from_lines(all_lines)
 
     parsed = {
         'name': name,

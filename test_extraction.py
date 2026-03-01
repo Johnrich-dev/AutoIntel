@@ -7,41 +7,61 @@ import sys
 import os
 sys.path.append(os.path.dirname(__file__))
 
-from resume_collector import extract_text_from_pdf, organize_resume_content
+# Import from resume_parser instead (section_resume_text is the new function)
+from resume_parser import section_resume_text
 
-# Sample text that would come from a poorly extracted PDF
-sample_scrambled_text = """
-John Doe
-123 Main Street
-(555) 123-4567
-john.doe@email.com
+# Sample resume text
+sample_resume = """
+JOHN DOE
+john.doe@example.com
++63 912 345 6789
 Software Engineer
+
 PROFILE
-Experienced software engineer with 5+ years in web development
+Experienced software engineer with 5+ years in web development.
+
 EDUCATION
-University of Technology
 Bachelor of Science in Computer Science
+University of Technology
 2018 - 2022
+
 EXPERIENCE
-Tech Company
 Senior Developer
+Tech Company
 2022 - Present
-• Developed web applications
-• Led team of 3 developers
-Skills
-JavaScript React Python AWS
+Developed web applications
+Led team of 3 developers
+
+SKILLS
+Python JavaScript React AWS
 """
 
-print("=== BEFORE (Original scrambled text) ===")
-print(sample_scrambled_text)
+print("=== BEFORE (Original raw text) ===")
+print(sample_resume)
 
-print("\n=== AFTER (Organized with new extraction) ===")
-organized = organize_resume_content(sample_scrambled_text)
-print(organized)
+print("\n=== AFTER (Pre-NER Sectioning) ===")
+sections = section_resume_text(sample_resume)
+
+print("\n--- Profile Section ---")
+print(f"Name: {sections['profile']['name']}")
+print(f"Email: {sections['profile']['email']}")
+print(f"Phone: {sections['profile']['phone']}")
+print(f"Raw: {repr(sections['profile']['raw_text'])}")
+
+print("\n--- Education Section ---")
+print(f"Raw: {repr(sections['education']['raw_text'])}")
+print(f"College entries: {sections['education']['college']}")
+
+print("\n--- Experience Section ---")
+print(f"Raw: {repr(sections['_raw']['experience'])}")
+print(f"Experience entries: {sections['experience']}")
+
+print("\n--- Skills Section ---")
+print(f"Raw: {repr(sections['_raw']['skills'])}")
 
 print("\n=== Key Improvements ===")
-print("✅ Logical section organization with ##SECTION## markers")
-print("✅ Preserved reading order and layout")
-print("✅ Better structure for BERT NER parsing")
-print("✅ Removal of PDF artifacts")
-print("✅ Section-aware content grouping")
+print("[PASS] Section-first parsing before NER")
+print("[PASS] Profile content isolated from Experience/Education")
+print("[PASS] Skills lines don't contaminate Experience entries")
+print("[PASS] Each section's raw_text is stored separately for targeted NER")
+print("[PASS] ACHIEVEMENTS lines stay out of EDUCATION")

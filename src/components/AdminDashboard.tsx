@@ -351,27 +351,39 @@ export function AdminDashboard() {
                           </div>
                         )}
 
-                        {/* Education - College and Senior High only */}
+                        {/* Education - College and Senior High only (with deduplication safety net) */}
                         {parsedData.education && parsedData.education.length > 0 && (
                           <div>
                             <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Education</h4>
                             <div className="space-y-2">
-                              {parsedData.education.filter((edu: any) => edu.education_type === 'College' || edu.education_type === 'Senior High School').map((edu: any, idx: number) => (
-                                <div key={idx} className="text-sm bg-white p-2 rounded border border-gray-200">
-                                  <p className="font-medium text-gray-900">
-                                    {edu.education_type === 'College' ? 'College' : 'Senior High School'}
-                                  </p>
-                                  {edu.school && (
-                                    <p className="text-gray-700">{edu.school}</p>
-                                  )}
-                                  {edu.course_or_strand && (
-                                    <p className="text-blue-600 text-xs">{edu.course_or_strand}</p>
-                                  )}
-                                  {edu.year_range && (
-                                    <p className="text-gray-500 text-xs">{edu.year_range}</p>
-                                  )}
-                                </div>
-                              ))}
+                              {/* Deduplicate education entries in UI as safety net */}
+                              {(() => {
+                                const seen = new Set<string>();
+                                const uniqueEducation = parsedData.education
+                                  .filter((edu: any) => edu.education_type === 'College' || edu.education_type === 'Senior High School')
+                                  .filter((edu: any) => {
+                                    const key = `${(edu.school || '').toLowerCase().trim()}-${(edu.course_or_strand || '').toLowerCase().trim()}-${(edu.year_range || '').toLowerCase().trim()}`;
+                                    if (seen.has(key)) return false;
+                                    seen.add(key);
+                                    return true;
+                                  });
+                                return uniqueEducation.map((edu: any, idx: number) => (
+                                  <div key={idx} className="text-sm bg-white p-2 rounded border border-gray-200">
+                                    <p className="font-medium text-gray-900">
+                                      {edu.education_type === 'College' ? 'College' : 'Senior High School'}
+                                    </p>
+                                    {edu.school && (
+                                      <p className="text-gray-700">{edu.school}</p>
+                                    )}
+                                    {edu.course_or_strand && (
+                                      <p className="text-blue-600 text-xs">{edu.course_or_strand}</p>
+                                    )}
+                                    {edu.year_range && (
+                                      <p className="text-gray-500 text-xs">{edu.year_range}</p>
+                                    )}
+                                  </div>
+                                ));
+                              })()}
                             </div>
                           </div>
                         )}
@@ -393,6 +405,37 @@ export function AdminDashboard() {
                                   {exp.summary && (
                                     <p className="text-gray-600 text-xs mt-1">{exp.summary}</p>
                                   )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Projects - Only if section exists */}
+                        {parsedData.projects && parsedData.projects.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Projects</h4>
+                            <div className="space-y-2">
+                              {parsedData.projects.slice(0, 5).map((proj: any, idx: number) => (
+                                <div key={idx} className="text-sm bg-white p-2 rounded border border-gray-200">
+                                  <p className="font-medium text-gray-900">{proj.name}</p>
+                                  {proj.details && (
+                                    <p className="text-gray-600 text-xs mt-1">{proj.details}</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Certificates / Trainings / Seminars - Only if section exists */}
+                        {parsedData.trainings && parsedData.trainings.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Certificates / Trainings</h4>
+                            <div className="space-y-2">
+                              {parsedData.trainings.slice(0, 5).map((training: any, idx: number) => (
+                                <div key={idx} className="text-sm bg-white p-2 rounded border border-gray-200">
+                                  <p className="font-medium text-gray-900">{training}</p>
                                 </div>
                               ))}
                             </div>
