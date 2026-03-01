@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Video, ClipboardList, CheckCircle, Clock, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase, VideoAssessment, PersonalityTest } from '../lib/supabase';
+import { getSupabaseClient, VideoAssessment, PersonalityTest } from '../lib/supabase';
 
 interface AssessmentDashboardProps {
   onStartVideo: () => void;
@@ -9,26 +9,27 @@ interface AssessmentDashboardProps {
 }
 
 export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: AssessmentDashboardProps) {
-  const { applicant, logout } = useAuth();
+  const { applicant, logout, accessToken } = useAuth();
   const [videoStatus, setVideoStatus] = useState<VideoAssessment | null>(null);
   const [testStatus, setTestStatus] = useState<PersonalityTest | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadAssessmentStatus();
-  }, [applicant]);
+  }, [applicant, accessToken]);
 
   const loadAssessmentStatus = async () => {
     if (!applicant) return;
 
     try {
+      const client = getSupabaseClient(accessToken ?? undefined);
       const [videoResult, testResult] = await Promise.all([
-        supabase
+        client
           .from('video_assessments')
           .select('*')
           .eq('applicant_id', applicant.id)
           .maybeSingle(),
-        supabase
+        client
           .from('personality_tests')
           .select('*')
           .eq('applicant_id', applicant.id)

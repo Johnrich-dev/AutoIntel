@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { getSupabaseClient } from '../lib/supabase';
 
 interface PersonalityTestProps {
   onComplete: () => void;
@@ -35,7 +35,7 @@ const scaleLabels = [
 ];
 
 export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
-  const { applicant } = useAuth();
+  const { applicant, accessToken } = useAuth();
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -65,19 +65,20 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
     setSubmitting(true);
 
     try {
+      const client = getSupabaseClient(accessToken ?? undefined);
       const formattedAnswers = Object.entries(answers).map(([question, answer]) => ({
         question: parseInt(question) + 1,
         answer,
       }));
 
-      const { data: test } = await supabase
+      const { data: test } = await client
         .from('personality_tests')
         .select('*')
         .eq('applicant_id', applicant.id)
         .maybeSingle();
 
       if (test) {
-        await supabase
+        await client
           .from('personality_tests')
           .update({
             answers: formattedAnswers,
@@ -86,7 +87,7 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
           })
           .eq('id', test.id);
       } else {
-        await supabase.from('personality_tests').insert({
+        await client.from('personality_tests').insert({
           applicant_id: applicant.id,
           answers: formattedAnswers,
           status: 'submitted',

@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string | undefined;
 
 export function getSupabaseConfigError(): string | null {
   const missing: string[] = [];
@@ -16,6 +17,7 @@ export function isSupabaseConfigured(): boolean {
 }
 
 let cachedDefaultClient: SupabaseClient | null = null;
+let cachedAdminClient: SupabaseClient | null = null;
 const cachedTokenClients = new Map<string, SupabaseClient>();
 
 function createConfiguredClient(accessToken?: string): SupabaseClient {
@@ -60,6 +62,20 @@ export const getSupabaseClient = (accessToken?: string) => {
   }
   if (!cachedDefaultClient) cachedDefaultClient = createConfiguredClient();
   return cachedDefaultClient;
+};
+
+export const getSupabaseAdminClient = () => {
+  const err = getSupabaseConfigError();
+  if (err) throw new Error(err);
+  if (!supabaseServiceRoleKey) {
+    throw new Error('Missing required frontend env var: VITE_SUPABASE_SERVICE_ROLE_KEY');
+  }
+  if (!cachedAdminClient) {
+    cachedAdminClient = createClient(supabaseUrl as string, supabaseServiceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+  }
+  return cachedAdminClient;
 };
 
 export interface Applicant {

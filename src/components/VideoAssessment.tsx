@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Video, Upload, ArrowLeft, CheckCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { getSupabaseClient } from '../lib/supabase';
 
 interface VideoAssessmentProps {
   onComplete: () => void;
@@ -9,7 +9,7 @@ interface VideoAssessmentProps {
 }
 
 export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
-  const { applicant } = useAuth();
+  const { applicant, accessToken } = useAuth();
   const [isRecording, setIsRecording] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -27,14 +27,15 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
     setUploading(true);
 
     try {
-      const { data: assessment } = await supabase
+      const client = getSupabaseClient(accessToken ?? undefined);
+      const { data: assessment } = await client
         .from('video_assessments')
         .select('*')
         .eq('applicant_id', applicant.id)
         .maybeSingle();
 
       if (assessment) {
-        await supabase
+        await client
           .from('video_assessments')
           .update({
             video_url: `https://example.com/videos/${applicant.email}_${Date.now()}.mp4`,
@@ -43,7 +44,7 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
           })
           .eq('id', assessment.id);
       } else {
-        await supabase.from('video_assessments').insert({
+        await client.from('video_assessments').insert({
           applicant_id: applicant.id,
           video_url: `https://example.com/videos/${applicant.email}_${Date.now()}.mp4`,
           status: 'submitted',
