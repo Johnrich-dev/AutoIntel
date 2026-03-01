@@ -4,13 +4,25 @@ Renew access tokens for test users (John and Jane)
 """
 
 import uuid
+import os
 from datetime import datetime, timedelta
 
 from supabase import create_client
 
+# Load environment variables from .env if present
+try:
+    from dotenv import load_dotenv  # type: ignore
+
+    load_dotenv()
+except Exception:
+    pass
+
 # Supabase configuration
-SUPABASE_URL = 'https://vjlgbhcfgbtxcisazpwr.supabase.co'
-SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZqbGdiaGNmZ2J0eGNpc2F6cHdyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzM5NDM1OSwiZXhwIjoyMDc4OTcwMzU5fQ.g4OGxXWBGcHiwijYl1rypPpLjBo_VFxigujzwQ-uxgQ'
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
+
+if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+    raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY environment variables.")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 

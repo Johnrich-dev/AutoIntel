@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Resume Collector for SentinelAI
+Resume Collector for AutoIntel
 Automatically collects job application resumes from Gmail inbox and uploads to database.
 """
 
@@ -9,26 +9,89 @@ import imaplib
 import io
 import os
 import re
+import sys
 import uuid
 from datetime import datetime, timedelta
 from email.header import decode_header
+from pathlib import Path
+from typing import Any, Optional
 
-from supabase import Client, create_client
+def _prefer_site_packages():
+    repo_root = Path(__file__).resolve().parent
+    if (repo_root / 'supabase').is_dir() and str(repo_root) in sys.path:
+        # Avoid shadowing the supabase-py package with local /supabase folder
+        sys.path.remove(str(repo_root))
+        sys.path.append(str(repo_root))
+
+_prefer_site_packages()
+
+try:
+    from supabase import create_client
+except ImportError as exc:
+    raise ImportError(
+        "Failed to import supabase-py. Ensure the 'supabase' package is installed "
+        "and a local /supabase folder isn't shadowing it."
+    ) from exc
 from PyPDF2 import PdfReader
+
+# Load environment variables from .env if present
+try:
+    from dotenv import load_dotenv  # type: ignore
+
+    load_dotenv()
+except Exception:
+    pass
 
 # Configuration
 IMAP_SERVER = 'imap.gmail.com'
 IMAP_PORT = 993
+<<<<<<< HEAD
 EMAIL_USER = 'autointel.ta@gmail.com'
 EMAIL_PASSWORD = 'vydgycxlruttfbib'
 SEARCH_SUBJECT = 'Applicant'
+=======
+EMAIL_USER = os.getenv('GMAIL_EMAIL', 'autointel.ta@gmail.com')
+EMAIL_PASSWORD = os.getenv('GMAIL_APP_PASSWORD')
+SEARCH_SUBJECTS = [
+    s.strip() for s in os.getenv('GMAIL_SEARCH_SUBJECTS', 'Applicant,Application').split(',') if s.strip()
+]
+>>>>>>> b813c7d9ae953dca39c72e064725aa67748dd5f2
 DOWNLOAD_FOLDER = 'resumes'
 PROCESSED_FOLDER = 'processed'
+GMAIL_PRIMARY_MAILBOX = os.getenv('GMAIL_PRIMARY_MAILBOX', 'INBOX')
+MAX_EMAILS_PER_RUN = max(1, min(200, int(os.getenv('MAX_EMAILS_PER_RUN', '20'))))
+ALLOWED_ATTACHMENT_EXTS = ('.pdf', '.doc', '.docx')
 
 # Supabase configuration
-SUPABASE_URL = 'https://vjlgbhcfgbtxcisazpwr.supabase.co'
-SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZqbGdiaGNmZ2J0eGNpc2F6cHdyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzM5NDM1OSwiZXhwIjoyMDc4OTcwMzU5fQ.g4OGxXWBGcHiwijYl1rypPpLjBo_VFxigujzwQ-uxgQ'
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
+supabase: Optional[Any] = None
+
+def _require_env():
+    missing = []
+    if not EMAIL_PASSWORD:
+        missing.append('GMAIL_APP_PASSWORD')
+    if not SUPABASE_URL:
+        missing.append('SUPABASE_URL')
+    if not SUPABASE_SERVICE_KEY:
+        missing.append('SUPABASE_SERVICE_KEY')
+    if missing:
+        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+
+def _decode_mime_header(value: str) -> str:
+    if not value:
+        return ''
+    try:
+        parts = decode_header(value)
+        out = []
+        for p, enc in parts:
+            if isinstance(p, bytes):
+                out.append(p.decode(enc or 'utf-8', errors='replace'))
+            else:
+                out.append(p)
+        return ''.join(out).strip()
+    except Exception:
+        return str(value).strip()
 
 def connect_to_email():
     """Establish IMAP connection to Gmail."""
@@ -46,26 +109,174 @@ def create_folders():
     os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
     os.makedirs(PROCESSED_FOLDER, exist_ok=True)
 
+def _imap_select(mail, mailbox: str) -> bool:
+    try:
+        # Quote mailbox names that contain spaces/specials (e.g. [Gmail]/All Mail)
+        mb = mailbox.strip()
+        if (mb.startswith('"') and mb.endswith('"')) or (mb.startswith("'") and mb.endswith("'")):
+            mb = mb[1:-1]
+        if any(ch in mb for ch in [' ', '"', '\\']):
+            mb_esc = mb.replace('\\', '\\\\').replace('"', '\\"')
+            mb = f'"{mb_esc}"'
+        status, _ = mail.select(mb)
+        return status == 'OK'
+    except Exception:
+        return False
+
+def _build_gmail_raw_query():
+    if not SEARCH_SUBJECTS:
+        return 'is:unread'
+
+    # Keep query simple to avoid IMAP parsing edge-cases; we IMAP-quote the whole query later.
+    # Using subject:<term> (no embedded quotes) is generally more robust than subject:"...".
+    terms = []
+    for s in SEARCH_SUBJECTS:
+        sl = s.lower()
+        # Treat common variations like Applicant/Application/Applicate as one root
+        if sl.startswith('applic'):
+            terms.append("subject:applic")
+        else:
+            terms.append(f"subject:{s}")
+    subject_terms = ' OR '.join(sorted(set(terms)))
+    return f'is:unread ({subject_terms})'
+
+def _imap_quote(s: str) -> str:
+    # IMAP quoted-string: wrap in double quotes and escape \ and "
+    s2 = (s or "").replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{s2}"'
+
+def _subject_matches(subject: str) -> bool:
+    s = (subject or '').lower()
+    for kw in SEARCH_SUBJECTS:
+        kl = kw.lower().strip()
+        if not kl:
+            continue
+        if kl in s:
+            return True
+        # Root match to handle typos/variants like "Applicate"
+        if kl.startswith('applic') and 'applic' in s:
+            return True
+    return False
+
+def _message_has_resume_attachment(msg) -> bool:
+    try:
+        for part in msg.walk():
+            if part.get_content_maintype() == 'multipart':
+                continue
+            if part.get('Content-Disposition') is None:
+                continue
+            filename = part.get_filename()
+            if not filename:
+                continue
+            name = decode_header(filename)[0][0]
+            if isinstance(name, bytes):
+                name = name.decode('utf-8', errors='ignore')
+            if str(name).lower().endswith(ALLOWED_ATTACHMENT_EXTS):
+                return True
+        return False
+    except Exception:
+        return False
+
 def search_application_emails(mail):
     """Search for unread emails with application subjects."""
     try:
-        mail.select('inbox')
+        # Prefer Gmail server-side search so we don't miss unread emails that aren't in INBOX.
+        gmail_query = _build_gmail_raw_query()
+
+        # Prefer All Mail so we don't miss unread-but-archived messages.
+        mailboxes_to_try = ['[Gmail]/All Mail', '[Google Mail]/All Mail', 'All Mail', GMAIL_PRIMARY_MAILBOX]
+        for mailbox in mailboxes_to_try:
+            if not _imap_select(mail, mailbox):
+                continue
+            # X-GM-RAW argument must be a single IMAP string; quote it to survive spaces/parens.
+            status, messages = mail.search(None, 'X-GM-RAW', _imap_quote(gmail_query))
+            if status == 'OK':
+                ids = messages[0].split() if messages and messages[0] else []
+                if ids:
+                    print(f"Found {len(ids)} unread application emails in {mailbox}")
+                    return ids
+
+            # If Gmail rejects our complex query, fall back to a simpler server-side query,
+            # then apply the subject filter client-side below.
+            if status == 'BAD':
+                status2, messages2 = mail.search(None, 'X-GM-RAW', _imap_quote('is:unread'))
+                if status2 == 'OK':
+                    ids2 = messages2[0].split() if messages2 and messages2[0] else []
+                    if ids2:
+                        print(f"Found {len(ids2)} unread emails in {mailbox} (broad). Filtering by subject...")
+                        # Fetch headers and filter
+                        filtered = []
+                        for email_id in ids2[:200]:  # safety cap
+                            st, md = mail.fetch(email_id, '(BODY.PEEK[HEADER])')
+                            if st != 'OK' or not md or not md[0]:
+                                continue
+                            try:
+                                header_bytes = md[0][1]
+                                header_msg = email.message_from_bytes(header_bytes)
+                                subject = _decode_mime_header(header_msg.get('Subject', ''))
+                            except Exception:
+                                subject = ''
+                            if any(s.lower() in subject.lower() for s in SEARCH_SUBJECTS):
+                                filtered.append(email_id)
+                        if filtered:
+                            print(f"Found {len(filtered)} unread application emails in {mailbox} (filtered)")
+                            return filtered
+
+            # Extra fallback: unread emails with attachments (subject OR attachment-based match)
+            status3, messages3 = mail.search(None, 'X-GM-RAW', _imap_quote('is:unread has:attachment'))
+            if status3 == 'OK':
+                ids3 = messages3[0].split() if messages3 and messages3[0] else []
+                if ids3:
+                    print(f"Found {len(ids3)} unread emails with attachments in {mailbox}. Filtering...")
+                    filtered3 = []
+                    for email_id in ids3[:200]:
+                        st, md = mail.fetch(email_id, '(RFC822)')
+                        if st != 'OK' or not md or not md[0]:
+                            continue
+                        try:
+                            msg = email.message_from_bytes(md[0][1])
+                            subject = _decode_mime_header(msg.get('Subject', ''))
+                        except Exception:
+                            subject = ''
+                            msg = None
+                        if _subject_matches(subject):
+                            filtered3.append(email_id)
+                            continue
+                        if msg is not None and _message_has_resume_attachment(msg):
+                            filtered3.append(email_id)
+                    if filtered3:
+                        print(f"Found {len(filtered3)} unread application-like emails in {mailbox} (attachments/subject)")
+                        return filtered3
+
+        # Fallback: UNSEEN in primary mailbox + client-side subject match.
+        if not _imap_select(mail, GMAIL_PRIMARY_MAILBOX):
+            print(f"Failed to select mailbox {GMAIL_PRIMARY_MAILBOX}")
+            return []
+
         status, messages = mail.search(None, 'UNSEEN')
         if status != 'OK':
             return []
 
-        all_unread = messages[0].split()
-        print(f"Found {len(all_unread)} total unread emails")
+        all_unread = messages[0].split() if messages and messages[0] else []
+        print(f"Found {len(all_unread)} total unread emails in {GMAIL_PRIMARY_MAILBOX}")
 
         email_ids = []
         for email_id in all_unread:
-            status, msg_data = mail.fetch(email_id, '(BODY[HEADER.FIELDS (SUBJECT)])')
-            if status == 'OK':
-                header = msg_data[0][1].decode('utf-8', errors='ignore')
-                subject = header.split('Subject: ', 1)[1].strip() if 'Subject: ' in header else 'No subject'
+            status, msg_data = mail.fetch(email_id, '(BODY.PEEK[HEADER])')
+            if status != 'OK' or not msg_data or not msg_data[0]:
+                continue
+            try:
+                header_bytes = msg_data[0][1]
+                header_msg = email.message_from_bytes(header_bytes)
+                subject = _decode_mime_header(header_msg.get('Subject', ''))
+            except Exception:
+                subject = ''
+
+            if subject:
                 print(f"Email {email_id}: {subject}")
-                if SEARCH_SUBJECT.lower() in subject.lower():
-                    email_ids.append(email_id)
+
+            if _subject_matches(subject):
+                email_ids.append(email_id)
 
         print(f"Found {len(email_ids)} application emails")
         return email_ids
@@ -120,13 +331,38 @@ def extract_sender_info(msg):
 
 def extract_text_from_pdf(file_content):
     """Extract text content from PDF file."""
+    if not file_content:
+        return None
+
+    # Prefer PyMuPDF for better reading order when available.
+    try:
+        import fitz  # PyMuPDF
+
+        doc = fitz.open(stream=file_content, filetype="pdf")
+        lines = []
+        for page in doc:
+            blocks = page.get_text("blocks")
+            blocks_sorted = sorted(blocks, key=lambda b: (round(b[1], 1), round(b[0], 1)))
+            for b in blocks_sorted:
+                t = (b[4] or "").strip()
+                if t:
+                    lines.append(t)
+        text = "\n".join(lines).strip()
+        return text or None
+    except Exception:
+        pass
+
+    # Fallback to PyPDF2
     try:
         pdf_file = io.BytesIO(file_content)
         reader = PdfReader(pdf_file)
-        text = ""
+        chunks = []
         for page in reader.pages:
-            text += page.extract_text() + "\n"
-        return text.strip() if text else None
+            page_text = page.extract_text() or ""
+            if page_text.strip():
+                chunks.append(page_text.strip())
+        text = "\n\n".join(chunks).strip()
+        return text or None
     except Exception as e:
         print(f"PDF extraction failed: {e}")
         return None
@@ -193,6 +429,7 @@ def process_attachments(msg, applicant_id, sender_name, sender_email):
                         'resume_url': resume_url,
                         'raw_extracted_content': extracted_text,
                         'status': 'pending',
+                        'ner_status': 'pending',
                         'uploaded_at': datetime.now().isoformat()
                     }).execute()
                     print(f"Insert result: {insert_result}")
@@ -216,17 +453,16 @@ def mark_as_read(mail, email_id):
         print(f"Failed to mark as read: {e}")
 
 def move_to_processed(mail, email_id):
-    """Move email to processed folder."""
+    """Label email as processed (Gmail)."""
     try:
         mail.create(PROCESSED_FOLDER)
     except:
         pass
 
     try:
-        mail.copy(email_id, PROCESSED_FOLDER)
-        mail.store(email_id, '+FLAGS', '\\Deleted')
-        mail.expunge()
-        print(f"Moved email {email_id} to {PROCESSED_FOLDER}")
+        # Safer for Gmail: apply a label instead of copy+delete (avoids accidental deletion).
+        mail.store(email_id, '+X-GM-LABELS', PROCESSED_FOLDER)
+        print(f"Labeled email {email_id} as {PROCESSED_FOLDER}")
     except Exception as e:
         print(f"Failed to move email: {e}")
 
@@ -234,12 +470,23 @@ def process_emails():
     """Main function to process application emails."""
     create_folders()
 
+    global supabase
+    try:
+        _require_env()
+        supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    except Exception as e:
+        print(f"Configuration error: {e}")
+        return
+
     mail = connect_to_email()
     if not mail:
         return
 
     try:
         email_ids = search_application_emails(mail)
+        if len(email_ids) > MAX_EMAILS_PER_RUN:
+            print(f"Found {len(email_ids)} unread application emails; processing first {MAX_EMAILS_PER_RUN} this run.")
+            email_ids = email_ids[:MAX_EMAILS_PER_RUN]
         summary = []
         print(f"Processing {len(email_ids)} emails")
     
@@ -263,6 +510,8 @@ def process_emails():
                 existing = supabase.table('applicants').select('id').eq('email', sender_email).execute()
                 if existing.data:
                     print(f"Applicant {sender_email} already exists, skipping")
+                    mark_as_read(mail, email_id)
+                    move_to_processed(mail, email_id)
                     continue
 
                 applicant_result = supabase.table('applicants').insert({
@@ -310,6 +559,6 @@ def process_emails():
             pass
 
 if __name__ == "__main__":
-    print("Starting Resume Collector for SentinelAI...")
+    print("Starting Resume Collector for AutoIntel...")
     process_emails()
     print("Resume collection completed.")
