@@ -40,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data) {
         const expiresAt = new Date(data.access_expires_at);
+        console.log('Loaded applicant data:', data);
         if (expiresAt > new Date()) {
           setApplicant(data);
         } else {

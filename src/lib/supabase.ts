@@ -83,6 +83,7 @@ export interface Applicant {
   email: string;
   name: string;
   position: string;
+  photo_url: string | null;
   access_token: string;
   access_expires_at: string;
   rules_accepted: boolean;
