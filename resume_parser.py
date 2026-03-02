@@ -2,7 +2,7 @@
 """
 Resume Parser for SentinelAI
 Parses raw extracted resume content into structured JSON data using BERT NER.
-Extracts: name, email, phone, education, work experience, skills.
+GPT is used as a preprocessing layer to clean/reorganize messy PDF text extraction.
 """
 
 import re
@@ -10,6 +10,13 @@ import json
 import os
 from datetime import datetime
 from supabase import Client, create_client
+
+# Import GPT cleaner
+try:
+    from gpt_extractor import clean_with_gpt
+except ImportError:
+    # Fallback if gpt_extractor not available
+    clean_with_gpt = None
 
 # Load environment variables from .env if present
 try:
@@ -43,6 +50,10 @@ def get_supabase() -> Client:
 # Lazy load BERT model
 bert_model = None
 bert_tokenizer = None
+
+# GPT availability flag
+GPT_CLEANER_AVAILABLE = clean_with_gpt is not None
+
 
 def get_bert_ner():
     """Load BERT NER model lazily."""
@@ -488,7 +499,7 @@ def parse_trainings_from_lines(lines: list[str], is_section_block: bool = False)
                         j += 1
                         continue
                     # Skip if it looks like a soft skill
-                    if any(kw in cur.lower() for kw in exclude_keywords):
+                    if any(kw in cur.lower() for kw in exclude_soft_skills):
                         j += 1
                         continue
                     if cur.lower() in ('hard skills', 'soft skills', 'projects', 'references') or _detect_section_heading(cur):
@@ -1001,8 +1012,8 @@ def extract_work_experience(text):
             # Create summary (clean up the line)
             summary = line
             # Remove dates
-            for pattern in experience_patterns:
-                summary = re.sub(pattern, '', summary, flags=re.IGNORECASE)
+            year_pattern = r'(19|20)\d{2}\s*[-–—to]+\s*(19|20)\d{2}|present|current'
+            summary = re.sub(year_pattern, '', summary, flags=re.IGNORECASE)
             summary = summary.strip()
             if len(summary) > 15:
                 entry['summary'] = summary[:150]
@@ -1463,10 +1474,41 @@ def parse_resume(raw_text):
             'sections': {},
             'ner_method': None,
         }
-
+    
+    # MANDATORY: Use GPT to clean/reorganize messy text before NER
+    # This helps with multi-column PDF layouts that produce interleaved text
+    # NER should NEVER process raw PDF extracted text - it must go through GPT cleaning
+    cleaned_text = raw_text
+    gpt_cleaning_status = 'not_attempted'
+    
+    if GPT_CLEANER_AVAILABLE:
+        try:
+            cleaned_text, gpt_cleaning_status = clean_with_gpt(raw_text)
+            if gpt_cleaning_status == 'success':
+                print("GPT text cleaning successful!")
+            else:
+                # GPT cleaning failed/skipped - this should NOT happen in normal operation
+                # Log error but try to continue with raw_text (for backwards compatibility)
+                print(f"WARNING: GPT cleaning skipped/failed: {gpt_cleaning_status}")
+                print("WARNING: NER will process raw text (not ideal for multi-column layouts)")
+        except Exception as e:
+            print(f"GPT cleaning error: {e}")
+            gpt_cleaning_status = 'failed'
+            # Don't fall back to raw_text - raise error to force fixing the issue
+            raise RuntimeError(f"GPT cleaning is mandatory but failed: {e}")
+    else:
+        # GPT extractor not available - this is an error
+        raise RuntimeError(
+            "GPT cleaner (gpt_extractor.py) is not available. "
+            "NER cannot process raw PDF text - GPT cleaning is mandatory."
+        )
+    
+    # Use cleaned text for NER
+    text_for_parsing = cleaned_text
+    
     # 1) Reconstruct & segment into sections
-    sections = segment_sections(raw_text)
-    all_lines = _normalize_lines(raw_text)
+    sections = segment_sections(text_for_parsing)
+    all_lines = _normalize_lines(text_for_parsing)
 
     header_block = sections.get('HEADER', '')
     profile_block = sections.get('PROFILE', '')
@@ -1637,45 +1679,79 @@ def parse_resume(raw_text):
         'sections': sections,
         'parsed_at': datetime.now().isoformat(),
         'ner_method': 'BERT',
+        'gpt_cleaning_status': gpt_cleaning_status,
+        'cleaned_resume_text': cleaned_text if gpt_cleaning_status == 'success' else None,
     }
 
     return parsed
 
 
 def process_pending_resumes():
-    """Process all resumes with pending ner_status."""
-    print("Fetching resumes with pending ner_status...")
+    """Process all resumes with pending ner_status or gpt_status."""
+    print("Fetching resumes with pending status...")
     
     # Get resumes that need processing
     sb = get_supabase()
+    
+    # First, try to process resumes that have raw_extracted_content but no GPT extraction
+    # Check for resumes with raw_extracted_content that haven't been successfully processed
+    # Handle NULL gpt_status - treat NULL as "not success" so we process old resumes
     response = sb.table('resumes').select(
-        'id, applicant_id, raw_extracted_content, ner_status'
-    ).eq('ner_status', 'pending').execute()
+        'id, applicant_id, raw_extracted_content, ner_status, gpt_status'
+    ).neq('raw_extracted_content', None).execute()
     
     if not response.data:
-        print("No resumes pending parsing.")
+        print("No resumes with raw_extracted_content found.")
         return
     
-    print(f"Found {len(response.data)} resumes to parse")
+    # Filter to resumes that need GPT extraction:
+    # - Have raw content
+    # - gpt_status is NOT 'success' (includes NULL, 'pending', 'failed', etc.)
+    pending_gpt = [
+        r for r in response.data 
+        if r.get('raw_extracted_content') and r.get('gpt_status') != 'success'
+    ]
+    
+    print(f"Found {len(pending_gpt)} resumes needing GPT extraction")
     
     success_count = 0
     failed_count = 0
+    skipped_count = 0
     
-    for resume in response.data:
+    for resume in pending_gpt:
         resume_id = resume['id']
         raw_content = resume.get('raw_extracted_content')
         
         print(f"\nProcessing resume {resume_id}...")
         
         try:
-            # Parse the resume
+            # Parse resume (GPT cleaning happens inside parse_resume)
             parsed_data = parse_resume(raw_content)
             
+            gpt_status = parsed_data.get('gpt_cleaning_status', 'not_attempted')
+            ner_method = parsed_data.get('ner_method', 'unknown')
+            
             # Update the resume with parsed data
-            update_result = sb.table('resumes').update({
+            update_data = {
                 'parsed_data': json.dumps(parsed_data),
-                'ner_status': 'completed'
-            }).eq('id', resume_id).execute()
+                'gpt_cleaning_status': gpt_status,
+                'gpt_model': parsed_data.get('gpt_model'),
+            }
+            
+            # If GPT succeeded, also save cleaned text
+            if gpt_status == 'success' and parsed_data.get('cleaned_resume_text'):
+                update_data['cleaned_resume_text'] = parsed_data.get('cleaned_resume_text')
+            
+            # If GPT succeeded, mark NER as optional/skipped to save runtime
+            if gpt_status == 'success':
+                update_data['ner_status'] = 'optional'
+            elif ner_method == 'BERT':
+                # GPT failed, NER was used as fallback
+                update_data['ner_status'] = 'completed'
+            else:
+                update_data['ner_status'] = 'failed'
+            
+            update_result = sb.table('resumes').update(update_data).eq('id', resume_id).execute()
             
             print(f"  Name: {parsed_data.get('name')}")
             print(f"  Email: {parsed_data.get('email')}")
@@ -1683,6 +1759,8 @@ def process_pending_resumes():
             print(f"  Skills found: {len(parsed_data.get('skills', {}).get('hard_skills', []))}")
             print(f"  Education entries: {len(parsed_data.get('education', []))}")
             print(f"  Experience entries: {len(parsed_data.get('experience', []))}")
+            print(f"  Extraction method: {ner_method}")
+            print(f"  GPT status: {gpt_status}")
             print(f"  Status: COMPLETED")
             
             success_count += 1
@@ -1693,6 +1771,7 @@ def process_pending_resumes():
             # Mark as failed
             try:
                 sb.table('resumes').update({
+                    'gpt_status': 'failed',
                     'ner_status': 'failed',
                     'parsed_data': json.dumps({'error': str(e)})
                 }).eq('id', resume_id).execute()
@@ -1701,10 +1780,52 @@ def process_pending_resumes():
             
             failed_count += 1
     
+    # Also process any remaining resumes with pending ner_status but no raw content
+    # Skip resumes that already have successful GPT extraction
+    response_ner = sb.table('resumes').select(
+        'id, applicant_id, raw_extracted_content, ner_status, gpt_status'
+    ).eq('ner_status', 'pending').neq('gpt_status', 'success').execute()
+    
+    if response_ner.data:
+        print(f"\nFound {len(response_ner.data)} resumes with pending ner_status")
+        for resume in response_ner.data:
+            # Skip resumes that already have successful GPT extraction
+            if resume.get('gpt_status') == 'success':
+                print(f"Skipping resume {resume['id']} - already has successful GPT extraction")
+                skipped_count += 1
+                continue
+            
+            if not resume.get('raw_extracted_content'):
+                # Skip resumes without raw content
+                skipped_count += 1
+                continue
+            
+            resume_id = resume['id']
+            raw_content = resume.get('raw_extracted_content')
+            
+            print(f"\nProcessing resume {resume_id} (NER fallback)...")
+            
+            try:
+                # Use BERT NER for old pending resumes
+                parsed_data = parse_resume(raw_content)
+                
+                sb.table('resumes').update({
+                    'parsed_data': json.dumps(parsed_data),
+                    'ner_status': 'completed',
+                    'gpt_status': 'not_available'
+                }).eq('id', resume_id).execute()
+                
+                success_count += 1
+                
+            except Exception as e:
+                print(f"  Error: {e}")
+                failed_count += 1
+    
     print(f"\n=== Resume Parsing Summary ===")
-    print(f"Total processed: {len(response.data)}")
+    print(f"Total processed: {success_count + failed_count}")
     print(f"Successful: {success_count}")
     print(f"Failed: {failed_count}")
+    print(f"Skipped: {skipped_count}")
 
 
 if __name__ == "__main__":
