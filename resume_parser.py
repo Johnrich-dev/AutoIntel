@@ -264,6 +264,8 @@ def extract_full_name(raw_text: str) -> str | None:
     Supports two-line names like:
       JOHN RICH A.
       ALAYA-AY
+    
+    Also normalizes ALL CAPS names to Title Case.
     """
     lines = [ln.strip() for ln in (raw_text or "").splitlines() if ln.strip()]
     if not lines:
@@ -296,9 +298,70 @@ def extract_full_name(raw_text: str) -> str | None:
             and not any(ch.isdigit() for ch in second)
             and ('-' in second or second.isalpha())
         ):
-            return f"{first} {second}".strip()
+            name = f"{first} {second}".strip()
+        else:
+            name = first
+    else:
+        name = first
+    
+    # Normalize ALL CAPS names to Title Case
+    name = _normalize_name_case(name)
+    
+    return name
 
-    return first
+
+def _normalize_name_case(name: str) -> str:
+    """
+    Normalize name casing: convert ALL CAPS to Title Case while preserving:
+    - Initials (single letters followed by periods)
+    - Hyphenated names
+    - Common name particles (da, de, del, la, le, van, von, etc.)
+    
+    Examples:
+    - "JOHN RICH A. ALAYA-AY" -> "John Rich A. Alaya-ay"
+    - "MARIA C. SANTOS" -> "Maria C. Santos"
+    - "JUAN DELA CRUZ" -> "Juan dela Cruz"
+    """
+    if not name:
+        return name
+    
+    # Check if name is ALL CAPS (most letters uppercase, length > 1)
+    # Allow for names with spaces, hyphens, and single-letter initials
+    upper_count = sum(1 for c in name if c.isupper())
+    alpha_count = sum(1 for c in name if c.isalpha())
+    
+    # If not mostly uppercase, return as-is
+    if alpha_count == 0 or (upper_count / alpha_count) < 0.7:
+        return name
+    
+    # Common name particles that should remain lowercase in Title Case
+    particles = ['da', 'de', 'del', 'la', 'le', 'van', 'von', 'y', 'e', 'and', 'of', 'the']
+    
+    # Split by hyphen first to preserve hyphenation
+    parts = name.split('-')
+    result_parts = []
+    
+    for part in parts:
+        words = part.split()
+        processed_words = []
+        
+        for i, word in enumerate(words):
+            # Preserve single-letter initials (A., B., C., etc.)
+            if len(word) == 2 and word.endswith('.') and word[0].isalpha():
+                processed_words.append(word.upper())
+            # Preserve initials at start (like "A." in "JOHN A. SMITH")
+            elif len(word) == 1 and word.isalpha():
+                processed_words.append(word.upper())
+            # Check if it's a particle
+            elif word.lower() in particles:
+                processed_words.append(word.lower())
+            else:
+                # Convert to Title Case
+                processed_words.append(word.title())
+        
+        result_parts.append(' '.join(processed_words))
+    
+    return '-'.join(result_parts)
 
 
 def parse_skills_from_lines(lines: list[str]) -> dict:
@@ -331,8 +394,10 @@ def parse_skills_from_lines(lines: list[str]) -> dict:
                     if not cur:
                         j += 1
                         continue
-                    # stop at next major heading
-                    if _detect_section_heading(cur) or cur.lower() in ('hard skills', 'soft skills', 'projects', 'references'):
+                    # stop at next major heading (including Soft Skills, Hard Skills, Education, etc.)
+                    section_stop = ('soft skills', 'hard skills', 'projects', 'references', 'education', 
+                                   'experience', 'trainings', 'seminars', 'workshops')
+                    if cur.lower() in section_stop or _detect_section_heading(cur):
                         break
                     out.append(cur)
                     j += 1
@@ -409,6 +474,53 @@ def parse_skills_from_lines(lines: list[str]) -> dict:
     if not hard and not soft:
         blob = '\n'.join(lines)
         return extract_skills(blob)
+    
+    # If we have explicit headings but they didn't capture content, check if there are "Soft Skills" or "Hard Skills" lines
+    # that were not captured - they might be in a different section
+    if not soft:
+        # Check for soft skills lines that weren't captured
+        for i, ln in enumerate(lines):
+            lower = ln.strip().lower()
+            if lower == 'soft skills':
+                # Collect lines after this heading
+                j = i + 1
+                while j < len(lines):
+                    cur = lines[j].strip()
+                    if not cur:
+                        j += 1
+                        continue
+                    # Stop at next heading
+                    if _detect_section_heading(cur) or cur.lower() in ('hard skills', 'projects', 'references', 'education', 'experience'):
+                        break
+                    # Skip strand keywords
+                    if 'science, technology, engineering' in cur.lower() or 'stem' in cur.lower():
+                        j += 1
+                        continue
+                    if cur.lower() in ('seminar', 'training', 'workshop'):
+                        j += 1
+                        continue
+                    soft.append(cur)
+                    j += 1
+                break
+    
+    if not hard:
+        # Check for hard skills lines that weren't captured
+        for i, ln in enumerate(lines):
+            lower = ln.strip().lower()
+            if lower == 'hard skills':
+                # Collect lines after this heading
+                j = i + 1
+                while j < len(lines):
+                    cur = lines[j].strip()
+                    if not cur:
+                        j += 1
+                        continue
+                    # Stop at next heading
+                    if _detect_section_heading(cur) or cur.lower() in ('soft skills', 'projects', 'references', 'education', 'experience'):
+                        break
+                    hard.append(cur)
+                    j += 1
+                break
 
     # Normalize casing a bit, preserve common tech case
     def norm(item: str) -> str:
@@ -525,10 +637,20 @@ def parse_trainings_from_lines(lines: list[str], is_section_block: bool = False)
 
 
 def parse_projects_from_lines(lines: list[str], is_section_block: bool = False) -> list[dict]:
-    """Parse projects from lines. If is_section_block=True, treats first line as project name if no heading found."""
+    """Parse projects from lines. If is_section_block=True, treats first line as project name if no heading found.
+    
+    Post-processing:
+    - Deduplicate projects by normalized project name (case-insensitive)
+    - Treat role lines (e.g., "Game Designer") as details of the previous project, not a new project
+    """
     projects: list[dict] = []
     found_projects_heading = False
     current = None
+    
+    # Role keywords that should be treated as project details, not new projects
+    role_keywords = ['developer', 'designer', 'role', 'ui/ux', 'front-end', 'back-end', 'engineer',
+                     'leader', 'manager', 'coordinator', 'member', 'team lead', 'programmer',
+                     'game designer', 'game developer', 'web developer', 'mobile developer']
     
     for i, ln in enumerate(lines):
         # Look for projects heading if not already found
@@ -553,16 +675,18 @@ def parse_projects_from_lines(lines: list[str], is_section_block: bool = False) 
                     projects.append(current)
                 break
             
+            # Check if this looks like a role line (should be details of previous project)
+            is_role_line = any(w in cur.lower() for w in role_keywords)
+            
             # Check if this looks like a new project title (short line, no role keywords)
-            role_keywords = ['developer', 'designer', 'role', 'ui/ux', 'front-end', 'back-end', 'engineer']
-            if len(cur) <= 60 and not any(w in cur.lower() for w in role_keywords):
+            if len(cur) <= 60 and not is_role_line:
                 # Save previous project
                 if current:
                     projects.append(current)
                 # Start new project
                 current = {'name': cur, 'details': []}
             else:
-                # This is a description/detail line - add to current project
+                # This is a description/detail line OR a role line - add to current project
                 if not current:
                     # No current project, create one
                     current = {'name': cur, 'details': []}
@@ -573,9 +697,36 @@ def parse_projects_from_lines(lines: list[str], is_section_block: bool = False) 
     if current:
         projects.append(current)
     
+    # Deduplicate projects by normalized name
+    seen_names = set()
+    deduplicated = []
+    for p in projects:
+        if not p.get('name'):
+            continue
+        # Normalize name for comparison
+        normalized_name = p['name'].lower().strip()
+        if not normalized_name:
+            continue
+        if normalized_name in seen_names:
+            # Merge details with existing project
+            for existing in deduplicated:
+                if existing['name'].lower().strip() == normalized_name:
+                    # Merge details
+                    existing_details = existing.get('details', []) or []
+                    new_details = p.get('details', []) or []
+                    # Add any new details that aren't already there
+                    for d in new_details:
+                        if d.lower() not in [x.lower() for x in existing_details]:
+                            existing_details.append(d)
+                    existing['details'] = existing_details
+                    break
+            continue
+        seen_names.add(normalized_name)
+        deduplicated.append(p)
+    
     # finalize
     out = []
-    for p in projects:
+    for p in deduplicated:
         out.append(
             {
                 'name': p.get('name'),
@@ -1070,11 +1221,13 @@ SECTION_ALIASES = {
     'PROFILE': ['profile', 'summary', 'objective', 'about me'],
     'EDUCATION': ['education', 'educational background', 'academic background'],
     'SKILLS': ['skills', 'technical skills', 'core skills', 'competencies'],
+    'SOFT SKILLS': ['soft skills'],
+    'HARD SKILLS': ['hard skills', 'technical skills'],
     'EXPERIENCE': ['experience', 'work experience', 'employment history', 'professional experience', 'career history'],
     'PROJECTS': ['projects', 'personal projects', 'academic projects'],
     'ACHIEVEMENTS': ['achievements', 'awards', 'honors', 'recognitions'],
-    'SEMINARS/TRAINING': ['seminars', 'trainings', 'training', 'seminars and trainings', 'workshops', 'seminar attended'],
-    'CONTACT': ['contact', 'contact information'],
+    'SEMINARS/TRAINING': ['seminars', 'trainings', 'training', 'seminars and trainings', 'workshops', 'seminar attended', 'seminars/training'],
+    'CONTACT': ['contact', 'contact information', 'contact info'],
 }
 
 
@@ -1436,6 +1589,13 @@ def _detect_section_heading(line: str) -> str | None:
             # For other aliases, allow partial match
             if alias in candidate:
                 return canonical
+    
+    # Additional stop markers for CONTACT section - these should also end CONTACT
+    # but won't create new sections (they'll be picked up by SKILLS parsing)
+    contact_stop_markers = ['soft skills', 'hard skills', 'skills']
+    if candidate in contact_stop_markers:
+        return 'SKILLS'  # Redirect to SKILLS section
+    
     return None
 
 
@@ -1486,6 +1646,13 @@ def parse_resume(raw_text):
             cleaned_text, gpt_cleaning_status = clean_with_gpt(raw_text)
             if gpt_cleaning_status == 'success':
                 print("GPT text cleaning successful!")
+            elif gpt_cleaning_status == 'lossless_failed':
+                # Lossless validation failed - GPT cleaned but lost important content
+                # Fall back to raw_text for NER (this was already done in clean_with_gpt)
+                print("WARNING: GPT cleaning FAILED LOSSLESS validation - strand keywords missing")
+                print("WARNING: Using raw_text for NER to preserve all content")
+                cleaned_text = raw_text  # Ensure we use raw text
+                text_for_parsing = cleaned_text
             else:
                 # GPT cleaning failed/skipped - this should NOT happen in normal operation
                 # Log error but try to continue with raw_text (for backwards compatibility)
@@ -1503,7 +1670,7 @@ def parse_resume(raw_text):
             "NER cannot process raw PDF text - GPT cleaning is mandatory."
         )
     
-    # Use cleaned text for NER
+    # Use cleaned text for NER (or raw_text if lossless validation failed)
     text_for_parsing = cleaned_text
     
     # 1) Reconstruct & segment into sections
@@ -1539,6 +1706,9 @@ def parse_resume(raw_text):
     # 3) Contact info only from header/profile
     contact_source = header_block + "\n\n" + contact_block + "\n\n" + profile_block
     name = extract_full_name(contact_source) or _first_nonempty_str(bert_header.get('names')) or extract_name(contact_source)
+    # Apply name casing normalization
+    if name:
+        name = _normalize_name_case(name)
     # Email/phone can appear anywhere in interleaved layouts; fall back to full raw_text
     email = _pick_best_email(
         _first_nonempty_str(bert_header.get('emails')),
@@ -1594,6 +1764,26 @@ def parse_resume(raw_text):
         
         return True
 
+    def _has_degree_in_block(entry_text: str, block_text: str) -> bool:
+        """
+        Check if degree appears within the same education block (not carried over from previous entry).
+        This prevents degree carryover: only attach degree to an education entry if the degree
+        text appears within the same nearby education block.
+        """
+        if not entry_text or not block_text:
+            return False
+        
+        entry_lower = entry_text.lower()
+        block_lower = block_text.lower()
+        
+        # Degree keywords to check
+        degree_keywords = ['bachelor', 'bs', 'ba', 'bsc', 'msc', 'ms', 'ma', 'mba', 'master', 'doctor', 'phd']
+        
+        for kw in degree_keywords:
+            if kw in entry_lower and kw in block_lower:
+                return True
+        return False
+
     def edu_key(e: dict) -> tuple:
         """Generate a stable deduplication key for education entries."""
         return (
@@ -1605,13 +1795,30 @@ def parse_resume(raw_text):
 
     seen = set()
     education: list[dict] = []
+    last_degree = None  # Track last seen degree to detect carryover
+    
     for e in education_candidates:
         # Skip invalid entries (e.g., university paired with STEM which belongs to high school)
         if not _is_valid_education_entry(e):
             continue
+        
         k = edu_key(e)
         if k in seen:
             continue
+        
+        # Prevent degree carryover: if this entry has no degree/strand but previous entry did,
+        # check if the degree appears in the same block
+        course = e.get('course_or_strand') or ''
+        if not course or not _has_degree_in_block(course, e.get('raw_text', '')):
+            # If no clear degree in this entry's text, check if it's carrying over from previous
+            if last_degree and not course:
+                # This entry likely inherited degree from previous - skip it
+                continue
+        
+        # Update last seen degree
+        if course:
+            last_degree = course
+        
         seen.add(k)
         education.append(e)
 

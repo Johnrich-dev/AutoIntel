@@ -9,59 +9,136 @@ Two modes of operation:
 The GPT model and API key are read from environment variables:
 - OPENAI_API_KEY: Required for GPT calls
 - GPT_MODEL: Model name (default: gpt-4o-mini)
+
+IMPORTANT: GPT cleaning is a LOSSLESS operation - it should only reorder and join
+wrapped lines, never delete, omit, or merge-away any content including strand keywords.
 """
 
 import json
 import os
 import re
 import time
+from pathlib import Path
+from dotenv import load_dotenv
 
-# Load environment variables
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except Exception:
-    pass
+# Load environment variables from project root .env
+_project_root = Path(__file__).resolve().parent
+load_dotenv(dotenv_path=_project_root / ".env")
 
-# Configuration
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-GPT_MODEL = os.getenv("GPT_MODEL", "gpt-4o-mini")
+# Check if running in test mode (disable GPT calls)
+TEST_MODE = os.getenv("TEST_MODE", "false").lower() == "true"
+
+# Configuration - read dynamically
+def _get_gpt_model():
+    """Get GPT model name from environment."""
+    return os.getenv("GPT_MODEL", "gpt-4o-mini")
 
 # Retry configuration
 MAX_RETRIES = 2
 INITIAL_DELAY = 1.0  # seconds
 
+# Strand keywords for validation
+STRAND_KEYWORDS = [
+    'stem', 'abm', 'humss', 'tvl', 'gas',
+    'arts and design', 'sports track',
+    'science, technology, engineering and mathematics',
+    'accountancy, business and management',
+    'humanities and social sciences',
+    'general academic strand',
+    'technical-vocational-livelihood',
+]
+
 
 def _get_gpt_client():
-    """Get OpenAI client (lazy import to avoid issues when not needed)."""
+    """Get OpenAI client with proper environment loading."""
     from openai import OpenAI
-    if not OPENAI_API_KEY:
-        raise RuntimeError("OPENAI_API_KEY environment variable is not set")
-    return OpenAI(api_key=OPENAI_API_KEY)
+    
+    # Read API key dynamically
+    api_key = os.getenv("OPENAI_API_KEY")
+    
+    # Debug: print first 7 chars to verify loading
+    if api_key:
+        print(f"[DEBUG] OPENAI_API_KEY loaded: {api_key[:7]}...")
+    else:
+        print("[DEBUG] OPENAI_API_KEY is None or empty")
+    
+    # Check for missing or placeholder key
+    if not api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY environment variable is not set. "
+            "Please add OPENAI_API_KEY=your-key to .env file."
+        )
+    
+    if "sk-your-" in api_key.lower() or api_key == "sk-your-openai-api-key-here":
+        raise RuntimeError(
+            f"OPENAI_API_KEY appears to be a placeholder value: {api_key[:20]}... "
+            "Please replace with your real API key from https://platform.openai.com/account/api-keys"
+        )
+    
+    return OpenAI(api_key=api_key)
 
 
 CLEANING_PROMPT = """You are a resume text restructuring engine.
 
 Reconstruct the following resume text into proper logical human reading order.
 
-Rules:
-- Do NOT remove any information.
-- Do NOT summarize.
+CRITICAL LOSSLESS REQUIREMENTS:
+- Do NOT delete, omit, or merge-away any lines or information.
+- Do NOT summarize or rewrite any content.
 - Do NOT classify into JSON.
 - Do NOT interpret or categorize.
-- Do NOT rewrite wording.
 - Do NOT rename headings.
-- Only reorder lines and merge broken lines.
+- PRESERVE EVERY LINE exactly as is.
+- Only reorder lines and merge broken/wrapped lines that span multiple lines.
 - Group related lines under their correct existing section headings.
-- Preserve all original content exactly.
+- Keep ALL education strands (STEM, ABM, HUMSS, TVL, GAS, Arts and Design, Sports Track, etc.)
+- Keep ALL degree information (BS, BA, Bachelor, etc.)
+- Keep ALL school names and course information.
 
-Return ONLY the cleaned resume text.
+Return ONLY the cleaned resume text with no explanations or JSON.
 """
+
+# Stricter prompt for retry when lossless validation fails
+STRICT_LOSSLESS_PROMPT = """You are a LOSSLESS resume text restructuring engine.
+
+CRITICAL: This is a STRICT LOSSLESS operation. You MUST preserve EVERY piece of information.
+
+Rules (MUST FOLLOW):
+1. PRESERVE ALL LINES - do not remove any lines under any circumstances.
+2. PRESERVE ALL STRAND KEYWORDS: STEM, ABM, HUMSS, TVL, GAS, Arts and Design, Sports Track, etc.
+3. PRESERVE ALL DEGREE INFO: Bachelor of Science, BS, BA, etc.
+4. PRESERVE ALL SCHOOL NAMES.
+5. Only join wrapped/broken lines that clearly belong together (same sentence split across lines).
+6. Do NOT change any wording, only reorder if needed for logical flow.
+7. Do NOT create any new sections or headings.
+
+Return ONLY the cleaned text, no JSON, no explanations.
+"""
+
+
+def _check_strand_keywords_present(raw_text: str, cleaned_text: str) -> bool:
+    """
+    Check if strand keywords present in raw_text are also in cleaned_text.
+    Returns True if all strand keywords are preserved (validation passed).
+    Returns False if any strand keywords are missing (validation failed).
+    """
+    raw_lower = raw_text.lower()
+    cleaned_lower = cleaned_text.lower()
+    
+    for keyword in STRAND_KEYWORDS:
+        if keyword in raw_lower and keyword not in cleaned_lower:
+            print(f"[LOSSLESS CHECK] Missing strand keyword in cleaned text: '{keyword}'")
+            return False
+    return True
 
 
 def clean_with_gpt(raw_text: str, max_retries: int = MAX_RETRIES) -> tuple[str, str]:
     """
     Clean and reorganize messy resume text using GPT.
+    
+    This function ensures LOSSLESS cleaning - it validates that strand keywords
+    from the original text are preserved in the cleaned output. If validation
+    fails, it retries with a stricter prompt.
     
     Args:
         raw_text: Raw text extracted from PDF (may have multi-column issues)
@@ -69,17 +146,22 @@ def clean_with_gpt(raw_text: str, max_retries: int = MAX_RETRIES) -> tuple[str, 
     Returns:
         tuple: (cleaned_text, status) where status is 'success', 'failed', or 'skipped'
     """
+    # Skip GPT in test mode
+    if TEST_MODE:
+        return raw_text, 'skipped'
+    
     if not raw_text or len(raw_text.strip()) < 50:
         print("GPT cleaning SKIPPED: Input text too short (< 50 chars)")
         return raw_text, 'skipped'
     
-    if not OPENAI_API_KEY:
+    if not os.getenv("OPENAI_API_KEY"):
         print("GPT cleaning SKIPPED: OPENAI_API_KEY environment variable is not set")
         print("Please set OPENAI_API_KEY in your .env file or environment")
         return raw_text, 'skipped'
     
     client = _get_gpt_client()
     
+    # First attempt with standard lossless prompt
     prompt = f"""{CLEANING_PROMPT}
 
 ---
@@ -90,11 +172,24 @@ Cleaned resume text:"""
     
     last_error = None
     delay = INITIAL_DELAY
+    used_strict_prompt = False
     
     for attempt in range(max_retries + 1):
         try:
+            # Use stricter prompt on retry if validation failed
+            if attempt > 0 and not used_strict_prompt:
+                print("Retrying with STRICT LOSSLESS prompt...")
+                prompt = f"""{STRICT_LOSSLESS_PROMPT}
+
+---
+{raw_text}
+---
+
+Cleaned resume text:"""
+                used_strict_prompt = True
+            
             response = client.chat.completions.create(
-                model=GPT_MODEL,
+                model=_get_gpt_model(),
                 messages=[
                     {"role": "system", "content": "You are a resume text restructuring engine. Return ONLY cleaned text, no JSON, no explanations."},
                     {"role": "user", "content": prompt}
@@ -118,6 +213,18 @@ Cleaned resume text:"""
                 else:
                     # Fall back to original text
                     return raw_text, 'failed'
+            
+            # LOSSLESS VALIDATION: Check if strand keywords are preserved
+            if not _check_strand_keywords_present(raw_text, content):
+                if attempt < max_retries:
+                    print(f"LOSSLESS VALIDATION FAILED: Strand keywords missing. Retrying...")
+                    time.sleep(delay)
+                    delay *= 2
+                    continue
+                else:
+                    # Validation still failed after retries - fall back to raw_text
+                    print("LOSSLESS VALIDATION FAILED after retries. Falling back to raw_text for NER.")
+                    return raw_text, 'lossless_failed'
             
             # Success - return cleaned text
             return content.strip(), 'success'
@@ -224,7 +331,7 @@ def extract_resume_json(raw_text: str, max_retries: int = MAX_RETRIES) -> tuple[
     if not raw_text or len(raw_text.strip()) < 50:
         return {}, 'skipped'
     
-    if not OPENAI_API_KEY:
+    if not os.getenv("OPENAI_API_KEY"):
         return {}, 'skipped'
     
     client = _get_gpt_client()
@@ -237,7 +344,7 @@ def extract_resume_json(raw_text: str, max_retries: int = MAX_RETRIES) -> tuple[
     for attempt in range(max_retries + 1):
         try:
             response = client.chat.completions.create(
-                model=GPT_MODEL,
+                model=_get_gpt_model(),
                 messages=[
                     {
                         "role": "system",
@@ -364,7 +471,7 @@ def run_gpt_extraction(raw_text: str, max_retries: int = MAX_RETRIES) -> dict:
     return {
         "cleaned_text": cleaned_text,
         "status": status,
-        "gpt_model": GPT_MODEL,
+        "gpt_model": _get_gpt_model(),
     }
 
 
