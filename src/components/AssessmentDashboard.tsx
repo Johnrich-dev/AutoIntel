@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Video, ClipboardList, CheckCircle, Clock, LogOut } from 'lucide-react';
+import { Video, ClipboardList, CheckCircle, Clock, LogOut, Camera } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { getSupabaseClient, VideoAssessment, PersonalityTest } from '../lib/supabase';
+import { getSupabaseClient, getSupabaseAdminClient, VideoAssessment, PersonalityTest } from '../lib/supabase';
 
 interface AssessmentDashboardProps {
   onStartVideo: () => void;
@@ -9,10 +9,13 @@ interface AssessmentDashboardProps {
 }
 
 export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: AssessmentDashboardProps) {
-  const { applicant, logout, accessToken } = useAuth();
+  const { applicant, logout, accessToken, updateApplicant } = useAuth();
   const [videoStatus, setVideoStatus] = useState<VideoAssessment | null>(null);
   const [testStatus, setTestStatus] = useState<PersonalityTest | null>(null);
   const [loading, setLoading] = useState(true);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  console.log('Applicant photo_url:', applicant?.photo_url);
 
   useEffect(() => {
     loadAssessmentStatus();
@@ -42,6 +45,66 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
       console.error('Error loading assessment status:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePhotoUpload = async (file: File) => {
+    if (!applicant) return;
+
+    try {
+      setUploadingPhoto(true);
+      const client = getSupabaseClient(accessToken ?? undefined);
+
+      // First convert file to base64 for immediate local update
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Try to upload to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${applicant.id}-${Date.now()}.${fileExt}`;
+
+      const { data: uploadData, error: uploadError } = await client.storage
+        .from('applicant-photos')
+        .upload(fileName, file);
+
+      let photoUrl: string;
+
+      if (uploadError) {
+        console.log('Storage upload failed, using base64 approach:', uploadError);
+        photoUrl = await base64Promise;
+      } else {
+        // Get public URL
+        const { data: { publicUrl } } = client.storage
+          .from('applicant-photos')
+          .getPublicUrl(fileName);
+        photoUrl = publicUrl;
+      }
+
+      // Update database with photo URL (use admin client to bypass RLS)
+      const { error: updateError } = await getSupabaseAdminClient()
+        .from('applicants')
+        .update({ photo_url: photoUrl })
+        .eq('id', applicant.id);
+
+      if (updateError) {
+        console.error('Failed to update photo_url in database:', updateError);
+        alert('Failed to save photo. Please make sure the photo_url column exists in your database.');
+        setUploadingPhoto(false);
+        return;
+      }
+
+      console.log('Photo URL saved successfully:', photoUrl);
+      // Update local state
+      updateApplicant({ photo_url: photoUrl });
+      setUploadingPhoto(false);
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+      setUploadingPhoto(false);
+      alert('Failed to upload photo. Please try again.');
     }
   };
 
@@ -75,9 +138,43 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
           <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
             <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold mb-1">Welcome, {applicant?.name}</h1>
-                <p className="text-blue-100">Position: {applicant?.position}</p>
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  {applicant?.photo_url ? (
+                    <img
+                      src={applicant.photo_url}
+                      alt={applicant?.name}
+                      className="w-16 h-16 rounded-full object-cover border-2 border-white"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-white/20 border-2 border-dashed border-white/50 flex items-center justify-center">
+                      <Camera className="w-8 h-8 text-white/70" />
+                    </div>
+                  )}
+                  <label className="absolute bottom-0 right-0 cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handlePhotoUpload(file);
+                      }}
+                      disabled={uploadingPhoto}
+                    />
+                    <span className={`w-6 h-6 bg-white rounded-full flex items-center justify-center text-blue-600 shadow-md ${uploadingPhoto ? 'opacity-50' : 'hover:bg-gray-100'}`}>
+                      {uploadingPhoto ? (
+                        <span className="animate-spin text-xs">⏳</span>
+                      ) : (
+                        <Camera className="w-3 h-3" />
+                      )}
+                    </span>
+                  </label>
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold mb-1">Welcome, {applicant?.name}</h1>
+                  <p className="text-blue-100">Position: {applicant?.position}</p>
+                </div>
               </div>
               <button
                 onClick={logout}
