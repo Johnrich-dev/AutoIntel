@@ -11,6 +11,13 @@ Model: openai/whisper-small (~244MB)
 import os
 import tempfile
 import subprocess
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed, use system env vars
 import torch
 import warnings
 from typing import Optional, Dict, Any, List
@@ -75,23 +82,17 @@ def load_pipeline():
 
 def get_ffmpeg_path() -> str:
     """Get the path to ffmpeg executable."""
-    # Try common locations on Windows
-    possible_paths = [
-        "ffmpeg",  # Try PATH first
-        r"C:\Users\Joshua\Downloads\ffmpeg-8.0.1-essentials_build\bin\ffmpeg.exe",
-        r"C:\ffmpeg\bin\ffmpeg.exe",
-        r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
-        r"C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe",
-    ]
-    
-    for path in possible_paths:
+    # First check for environment variable
+    env_path = os.environ.get("FFMPEG_PATH")
+    if env_path and os.path.isfile(env_path):
         try:
-            subprocess.run([path, "-version"], capture_output=True, check=True)
-            return path
+            subprocess.run([env_path, "-version"], capture_output=True, check=True)
+            return env_path
         except (subprocess.CalledProcessError, FileNotFoundError):
-            continue
+            pass
     
-    return "ffmpeg"  # Fallback to PATH
+    # Fallback to PATH
+    return "ffmpeg"
 
 
 def extract_audio_from_video(video_path: str, output_audio_path: str) -> bool:
