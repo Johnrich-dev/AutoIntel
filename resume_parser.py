@@ -2282,6 +2282,63 @@ def parse_experience_section(text: str) -> list[dict]:
                 i += 1
                 continue
 
+        # Pattern: Company + Years on same line (e.g., "CONCEPCION BUSINESS SERVICES, INC. AUGUST 2025-SEPTEMBER 2025")
+        # followed by Role on next line (e.g., "DATA ENGINEER INTERN")
+        year_range_pattern = re.compile(
+            r'(\b(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\.?\s+\d{4}\s*[-–—]\s*(?:\b(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\.?\s+)?\d{4}\b)',
+            re.IGNORECASE
+        )
+        year_range_alt = re.compile(
+            r'(\b\d{4}\s*[-–—]\s*(?:\d{4}|present|current)\b)',
+            re.IGNORECASE
+        )
+        
+        year_match = year_range_pattern.search(ln) or year_range_alt.search(ln)
+        if year_match:
+            years = year_match.group(1).strip()
+            # Company is the part before the year range
+            company = ln[:year_match.start()].strip()
+            # Remove trailing punctuation from company
+            company = re.sub(r'[\s,;:\-]+$', '', company).strip()
+            
+            role = None
+            bullets: list[str] = []
+            
+            # Next line is the role (unless it's a section header)
+            j = i + 1
+            if j < len(lines):
+                next_line = lines[j]
+                if not _detect_section_heading(next_line) and not re.search(r'(19|20)\d{2}', next_line):
+                    role = next_line.title()
+                    j += 1
+            
+            # Collect remaining lines as bullets/summary
+            while j < len(lines):
+                nxt = lines[j]
+                if _detect_section_heading(nxt):
+                    break
+                # Next company+years pattern starts
+                if (year_range_pattern.search(nxt) or year_range_alt.search(nxt)):
+                    break
+                # Next uppercase company line starts
+                if nxt.isupper() and any(k in nxt for k in ['INC', 'CORP', 'LLC', 'CO.', 'COMPANY', 'SERVICES']):
+                    break
+                bullets.append(nxt)
+                j += 1
+            
+            summary = ' '.join(bullets).strip() if bullets else None
+            entries.append(
+                {
+                    'role': role,
+                    'years': years,
+                    'company': company,
+                    'summary': summary,
+                    'raw_text': f"{company} | {role} | {years}" if role else f"{company} | {years}",
+                }
+            )
+            i = j
+            continue
+
         # Company lines are often uppercase and have INC./CORP/etc
         if ln.isupper() and any(k in ln for k in ['INC', 'CORP', 'LLC', 'CO.', 'COMPANY', 'SERVICES']):
             company = ln
