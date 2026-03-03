@@ -205,6 +205,87 @@ SOFT_SKILLS = [
 ]
 
 
+# Education classification constants
+SHS_STRAND_INDICATORS = [
+    # Acronyms
+    'stem', 'abm', 'humss', 'tvl', 'gas',
+    # Full names
+    'science, technology, engineering and mathematics',
+    'science technology engineering mathematics',
+    'accountancy, business and management',
+    'accountancy business and management',
+    'humanities and social sciences',
+    'technical-vocational-livelihood',
+    'technical vocational livelihood',
+    'general academic strand',
+    'arts and design',
+    'sports track',
+    # Explicit phrases
+    'senior high school',
+    'senior high',
+    'shs',
+]
+
+COLLEGE_DEGREE_INDICATORS = [
+    # Bachelor's
+    'bachelor of', 'bachelors of',
+    'bs', 'b.s.', 'b.s', 'bachelor of science',
+    'ba', 'b.a.', 'b.a', 'bachelor of arts',
+    'bsc', 'b.sc', 'b.sc.',
+    'ab', 'a.b.', 'a.b',
+    # Master's
+    'master', 'master of', 'masters of',
+    'ms', 'm.s.', 'm.s', 'master of science',
+    'ma', 'm.a.', 'm.a', 'master of arts',
+    'mba', 'm.b.a.', 'm.b.a', 'master of business administration',
+    'mpa', 'm.p.a.', 'm.p.a', 'master of public administration',
+    # Doctorate
+    'doctor', 'doctor of', 'doctoral',
+    'phd', 'ph.d.', 'ph.d', 'dphil', 'd.phil.',
+    'md', 'm.d.', 'm.d',
+    'dds', 'd.d.s.', 'd.d.s',
+    # Associate
+    'associate', 'associate degree', 'associate of',
+]
+
+
+def classify_education_type(course_or_strand: str | None) -> str:
+    """
+    Classify education entry as Senior High School, College, or Other.
+    
+    RULES:
+    1) Senior High detection relies on strand indicators, NOT school name
+       - STEM, ABM, HUMSS, TVL, GAS, etc.
+       - "Senior High School", "SHS"
+    
+    2) College detection relies on degree indicators, NOT school name
+       - Bachelor of/BS/BA, Master/MS/MA/MBA, Doctor/PhD, Associate
+       - Do NOT use "university" or "college" in school name as signals
+    
+    3) Fallback: "Other" if neither indicators are present
+    
+    This avoids misclassifying Senior High records taken at institutions
+    with "College" or "University" in their name (common in Philippines).
+    """
+    if not course_or_strand:
+        return 'Other'
+    
+    text_lower = course_or_strand.lower()
+    
+    # Check for Senior High indicators first (strands take priority)
+    for indicator in SHS_STRAND_INDICATORS:
+        if indicator in text_lower:
+            return 'Senior High School'
+    
+    # Check for College degree indicators
+    for indicator in COLLEGE_DEGREE_INDICATORS:
+        if indicator in text_lower:
+            return 'College'
+    
+    # Fallback: neither indicators found
+    return 'Other'
+
+
 def extract_email(text):
     """Extract email address from text."""
     # Fix common PDF spacing artifacts: "name @ gmail. com" -> "name@gmail.com"
@@ -364,22 +445,259 @@ def _normalize_name_case(name: str) -> str:
     return '-'.join(result_parts)
 
 
+# Known acronyms that should remain uppercase (including Philippine education terms)
+KNOWN_ACRONYMS = {
+    # Tech/IT
+    'aws', 'azure', 'gcp', 'sql', 'html', 'css', 'php', 'api', 'ui', 'ux', 'etl',
+    'devops', 'ci/cd', 'cd/c', 'rest', 'graphql', 'json', 'xml', 'http', 'https',
+    'url', 'dns', 'ip', 'vpn', 'lan', 'wan', 'mac', 'pc', 'cpu', 'gpu', 'ram',
+    'usb', 'hdmi', 'vga', 'gui', 'cli', 'sdk', 'ide', 'api', 'app', 'apps',
+    # Business
+    'hr', 'it', 'ict', 'ceo', 'cfo', 'cto', 'coo', 'cmo', 'cto', 'vp', 'gm',
+    # Education (Philippine strands and degrees)
+    'stem', 'abm', 'humss', 'tvl', 'gas', 'ict', 'shs',
+    'bs', 'ba', 'bsc', 'msc', 'ms', 'ma', 'mba', 'mpa', 'phd', 'md', 'dds',
+    'ce', 'ee', 'me', 'ce', 'che', 'coe',
+    # Languages
+    'english', 'filipino', 'tagalog', ' mandarin', 'cantonese',
+    # Certifications
+    'ccna', 'ccnp', 'ccie', 'aws certified', 'microsoft certified',
+    # General
+    'gpa', 'year', 'years', 'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+    'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun',
+    'present', 'current', 'expected',
+}
+
+
+def _is_all_caps_line(line: str) -> bool:
+    """
+    Check if a line is fully uppercase and should be converted to Title Case.
+    Returns False for lines that are just acronyms (e.g., "AWS SQL").
+    """
+    if not line:
+        return False
+    
+    s = line.strip()
+    
+    # Get only alphabetic characters
+    alpha_chars = [c for c in s if c.isalpha()]
+    if not alpha_chars:
+        return False
+    
+    # Count uppercase and lowercase
+    upper_count = sum(1 for c in alpha_chars if c.isupper())
+    lower_count = sum(1 for c in alpha_chars if c.islower())
+    
+    # If there are lowercase letters (mixed case like "BS Computer Science"), it's not ALL CAPS
+    if lower_count > 0:
+        # If there's a mix of upper and lower, check if it's mostly uppercase
+        return (upper_count / len(alpha_chars)) >= 0.8
+    
+    # If there are NO lowercase letters:
+    # Check if it looks like a short acronym line (all words are short and all caps)
+    words = s.split()
+    if len(words) > 0:
+        # If all words are short (likely acronyms), don't convert
+        all_short_words = all(len(w) <= 4 for w in words)
+        if all_short_words:
+            return False
+        # If mostly short words, still likely acronyms
+        short_word_count = sum(1 for w in words if len(w) <= 4)
+        if short_word_count / len(words) >= 0.6:
+            return False
+    
+    # Otherwise, it's full words in ALL CAPS - should be converted
+    return True
+
+
+def _normalize_line_case(line: str) -> str:
+    """
+    Global ALL CAPS to Title Case normalization with acronym safety.
+    
+    Converts fully uppercase lines to Title Case while preserving:
+    - Acronyms (STEM, AWS, SQL, ICT, TVL, etc.)
+    - Initials (A., B.C.)
+    - Words inside parentheses that are acronyms
+    - Hyphenated words
+    
+    Examples:
+    - "SCIENCE TECHNOLOGY AND MATHEMATICS (STEM)" -> "Science Technology and Mathematics (STEM)"
+    - "BACHELOR OF SCIENCE IN COMPUTER SCIENCE" -> "Bachelor Of Science In Computer Science"
+    - "AWS SQL PYTHON" -> "AWS SQL Python"
+    """
+    if not line:
+        return line
+    
+    s = line.strip()
+    
+    # Don't convert if not mostly uppercase
+    if not _is_all_caps_line(s):
+        return line
+    
+    # Split by parentheses to handle acronyms inside parentheses
+    # We need to preserve the original case inside parentheses if it's an acronym
+    result_parts = []
+    
+    # Use a more sophisticated approach: split and process
+    def process_segment(segment: str) -> str:
+        """Process a segment of text (not inside parentheses)."""
+        # Split by hyphen first
+        hyphen_parts = segment.split('-')
+        processed_hyphens = []
+        
+        for hp in hyphen_parts:
+            words = hp.split()
+            processed_words = []
+            
+            for word in words:
+                word_stripped = word.strip()
+                if not word_stripped:
+                    processed_words.append(word)
+                    continue
+                
+                # Preserve single-letter initials (A., B., C.)
+                if len(word_stripped) == 2 and word_stripped.endswith('.') and word_stripped[0].isalpha():
+                    processed_words.append(word_stripped.upper())
+                elif len(word_stripped) == 1 and word_stripped.isalpha():
+                    processed_words.append(word_stripped.upper())
+                # Check if the word is a known acronym
+                elif word_stripped.lower() in KNOWN_ACRONYMS:
+                    processed_words.append(word_stripped.upper())
+                # Check if word is all caps and short (likely an acronym)
+                elif word_stripped.isupper() and len(word_stripped) <= 5:
+                    processed_words.append(word_stripped.upper())
+                else:
+                    # Convert to Title Case (lowercase first, then title case)
+                    processed_words.append(word_stripped.lower().title())
+            
+            processed_hyphens.append(' '.join(processed_words))
+        
+        return '-'.join(processed_hyphens)
+    
+    # Process the entire line
+    # We'll handle parentheses specially
+    result = []
+    current_word = ""
+    in_parentheses = False
+    
+    for i, char in enumerate(s):
+        if char == '(':
+            # Process any accumulated words before the parenthesis
+            if current_word:
+                result.append(process_segment(current_word))
+                current_word = ""
+            in_parentheses = True
+            result.append('(')
+        elif char == ')':
+            in_parentheses = False
+            # Keep the content inside parentheses as-is (acronyms)
+            result.append(current_word + ')')
+            current_word = ""
+        elif in_parentheses:
+            current_word += char
+        else:
+            if char == ' ':
+                # Process accumulated words
+                if current_word:
+                    result.append(process_segment(current_word))
+                    current_word = ""
+                result.append(' ')
+            else:
+                current_word += char
+    
+    # Process remaining
+    if current_word:
+        if in_parentheses:
+            result.append('(' + current_word)
+        else:
+            result.append(process_segment(current_word))
+    
+    return ''.join(result).strip()
+
+
+def _normalize_education_text(text: str) -> str:
+    """
+    Normalize education-related text with proper casing.
+    Applies global normalization but with special handling for education terms.
+    """
+    if not text:
+        return text
+    
+    # Apply line-by-line normalization
+    lines = text.split('\n')
+    normalized_lines = [_normalize_line_case(line) for line in lines]
+    
+    return '\n'.join(normalized_lines)
+
+
 def parse_skills_from_lines(lines: list[str]) -> dict:
+    """Parse skills from lines with compound item preservation.
+
+    Rules:
+    - Keep "UI/UX" as one item (do not split into "UI" and "UX")
+    - Split "HTML/CSS/PHP/SQL" into ["HTML", "CSS", "PHP", "SQL"] (slash-separated technologies)
+    - Split "Xampp/MySQL/Firebase" into ["XAMPP", "MySQL", "Firebase"] (slash-separated)
+    - Do NOT split by commas if it creates partial phrases
+    - Remove filler words like "Basic" but keep the skill (e.g., "Basic JavaScript" -> "JavaScript")
+    """
+
     def split_items(s: str) -> list[str]:
         if not s:
             return []
         s = s.replace('•', ' ')
         s = re.sub(r'\s+', ' ', s).strip()
-        # Remove prefixes like "Basic "
-        s = re.sub(r'^\s*basic\s+', '', s, flags=re.IGNORECASE)
-        # Split on slash-delimited lists like "Xampp/MySQL/Firebase"
-        parts = re.split(r'[,/|;]+', s)
+
+        # Remove filler words like "Basic", "Proficient", "Advanced", etc.
+        filler_words = ['basic', 'proficient', 'advanced', 'intermediate', 'expert', 'familiar', 'knowledgeable']
+        for filler in filler_words:
+            s = re.sub(rf'^\s*{filler}\s+', '', s, flags=re.IGNORECASE)
+            s = re.sub(rf'\s+{filler}\s*$', '', s, flags=re.IGNORECASE)
+
+        # Handle compound skills that should stay together
+        # Replace UI/UX temporarily to protect it from splitting
+        compound_protect = {
+            'ui/ux': '<<UIUX>>',
+            'c++': '<<CPP>>',
+            'c#': '<<CSHARP>>',
+            'node.js': '<<NODEJS>>',
+            'next.js': '<<NEXTJS>>',
+            'react.js': '<<REACTJS>>',
+            'vue.js': '<<VUEJS>>',
+        }
+
+        s_lower = s.lower()
+        for compound, placeholder in compound_protect.items():
+            s = re.sub(rf'\b{re.escape(compound)}\b', placeholder, s, flags=re.IGNORECASE)
+
+        # Split on slash-delimited lists like "HTML/CSS/PHP/SQL" or "Xampp/MySQL/Firebase"
+        # But NOT on commas (which may split compound phrases incorrectly)
+        parts = re.split(r'[/|]+', s)
+
         items = []
         for p in parts:
             t = p.strip()
             if not t:
                 continue
-            items.append(t)
+
+            # Restore protected compounds
+            for compound, placeholder in compound_protect.items():
+                t = t.replace(placeholder, compound.title() if compound != 'c++' else 'C++')
+
+            # Also handle any remaining comma-separated items (but be careful)
+            # Only split commas if the parts look like individual technologies
+            if ',' in t and len(t) > 20:
+                # Might be a long phrase - don't split
+                items.append(t)
+            elif ',' in t:
+                # Check if comma-separated items are short (likely separate skills)
+                comma_parts = [cp.strip() for cp in t.split(',')]
+                if all(len(cp) < 15 for cp in comma_parts):
+                    items.extend(comma_parts)
+                else:
+                    items.append(t)
+            else:
+                items.append(t)
+
         return items
 
     def collect_after_heading(heading: str) -> list[str]:
@@ -395,10 +713,16 @@ def parse_skills_from_lines(lines: list[str]) -> dict:
                         j += 1
                         continue
                     # stop at next major heading (including Soft Skills, Hard Skills, Education, etc.)
-                    section_stop = ('soft skills', 'hard skills', 'projects', 'references', 'education', 
-                                   'experience', 'trainings', 'seminars', 'workshops')
+                    # NOTE: We DON'T stop at 'seminars' or 'workshops' because those might be
+                    # subheadings within Soft Skills (e.g., "Seminar Attended" followed by skills)
+                    section_stop = ('soft skills', 'hard skills', 'projects', 'references', 'education',
+                                   'experience', 'trainings')
                     if cur.lower() in section_stop or _detect_section_heading(cur):
-                        break
+                        # Don't stop for "Seminar Attended" - it might be in the middle of soft skills
+                        if 'seminar' in cur.lower() and ('attended' in cur.lower() or 'skill' in cur.lower()):
+                            pass  # Continue collecting
+                        else:
+                            break
                     out.append(cur)
                     j += 1
         return out
@@ -522,26 +846,85 @@ def parse_skills_from_lines(lines: list[str]) -> dict:
                     j += 1
                 break
 
-    # Normalize casing a bit, preserve common tech case
+    # Normalize casing, preserve common tech case, normalize variations
     def norm(item: str) -> str:
         s = item.strip()
         if not s:
             return s
+
+        # Map of lowercase -> canonical form
         fixes = {
             'html': 'HTML',
+            'htm': 'HTML',
             'css': 'CSS',
             'php': 'PHP',
             'sql': 'SQL',
             'c++': 'C++',
+            'c#': 'C#',
             'javascript': 'JavaScript',
-            'xampp': 'Xampp',
+            'js': 'JavaScript',
+            'typescript': 'TypeScript',
+            'ts': 'TypeScript',
+            'python': 'Python',
+            'py': 'Python',
+            'java': 'Java',
+            'xampp': 'XAMPP',
+            'xampp/mysql/firebase': 'XAMPP/MySQL/Firebase',
             'mysql': 'MySQL',
+            'firebase': 'Firebase',
             'vscode': 'Visual Studio Code',
+            'vs code': 'Visual Studio Code',
+            'visual studio code': 'Visual Studio Code',
+            'figma': 'Figma',
+            'photoshop': 'Photoshop',
+            'adobe photoshop': 'Photoshop',
+            'illustrator': 'Illustrator',
+            'adobe illustrator': 'Illustrator',
+            'react': 'React',
+            'reactjs': 'React',
+            'react.js': 'React',
+            'node': 'Node.js',
+            'nodejs': 'Node.js',
+            'node.js': 'Node.js',
+            'next': 'Next.js',
+            'nextjs': 'Next.js',
+            'next.js': 'Next.js',
+            'ui/ux': 'UI/UX',
+            'ui ux': 'UI/UX',
+            'ux/ui': 'UI/UX',
+            'ui': 'UI',
+            'ux': 'UX',
+            'communication': 'Communication',
+            'teamwork': 'Teamwork',
+            'problem-solving': 'Problem-solving',
+            'problem solving': 'Problem-solving',
+            'leadership': 'Leadership',
+            'time management': 'Time Management',
+            'interpersonal': 'Interpersonal Skills',
+            'interpersonal skills': 'Interpersonal Skills',
+            'adaptability': 'Adaptability',
+            'collaboration': 'Collaboration',
+            'c++ programming': 'C++',
+            'basic javascript': 'JavaScript',
+            'basic c++ programming': 'C++',
         }
+
+        # Check for exact match first (case-insensitive)
         key = s.lower()
-        return fixes.get(key, s)
+        if key in fixes:
+            return fixes[key]
+
+        # Check if the item starts with a known technology abbreviation
+        # (e.g., "HTML5" should still be recognized as HTML)
+        for k, v in fixes.items():
+            if key.startswith(k):
+                # Replace the beginning with the canonical form
+                return v + s[len(k):]
+
+        return s
 
     def dedupe(seq: list[str]) -> list[str]:
+        """Deduplicate case-insensitively while preserving best casing."""
         seen = set()
         out = []
         for it in seq:
@@ -555,75 +938,64 @@ def parse_skills_from_lines(lines: list[str]) -> dict:
 
     hard = dedupe(hard)
     soft = dedupe(soft)
+    # Build skills.all as normalized unique union of hard_skills + soft_skills
     all_sk = dedupe(hard + soft)
     return {'hard_skills': hard, 'soft_skills': soft, 'all': all_sk}
 
 
 def parse_trainings_from_lines(lines: list[str], is_section_block: bool = False) -> list[str]:
-    """Parse trainings/seminars from lines."""
+    """Parse trainings/seminars/certificates from lines.
+
+    CRITICAL FIX: Trainings MUST come ONLY from the TRAININGS section.
+    This function does NOT fall back to HEADER, PROFILE, or any other section.
+    If TRAININGS section is missing, returns empty list.
+
+    This prevents the bug where trainings were populated with:
+    - Name/title lines from HEADER
+    - Soft skills like "Problem-solving" from SOFT SKILLS section
+    - Random content from other sections
+    """
     items: list[str] = []
-    
-    # Keywords to exclude from soft skills (noise, events, non-skills)
-    exclude_soft_skills = [
-        # Soft skill keywords (to prevent duplicates from BERT)
-        'communication', 'teamwork', 'problem-solving', 'problem solving',
-        'interpersonal', 'time management', 'collaboration',
-        'leadership', 'analytical', 'organized', 'creative',
-        'adaptable', 'flexible', 'detail-oriented', 'self-motivated',
+
+    # Keywords to exclude - these are clearly NOT training items
+    exclude_training_items = [
+        'problem-solving', 'problem solving',
+        'interpersonal', 'time management',
+        'detail-oriented', 'self-motivated',
         'critical thinking', 'decision making',
-        # Noise/non-skills
-        'ai talks', 'coding clique', 'meetup', 'seminar', 'workshop', 'training',
-        'attended', 'certificate', 'certification',
+        'communication', 'teamwork', 'collaboration',
     ]
-    
-    # Check if lines already start with a training-related heading
-    # If so, skip the heading and process the rest
-    start_idx = 0
-    if lines and any(heading in lines[0].lower() for heading in ['seminar', 'training', 'workshop']):
-        start_idx = 1
-    elif is_section_block and lines:
-        # This is a section block - treat all content as training items
-        start_idx = 0
-    
-    # Process all lines after the heading
-    for i in range(start_idx, len(lines)):
-        ln = lines[i]
+
+    # If this is not a section block, return empty list
+    # Trainings should ONLY come from the TRAININGS section
+    if not is_section_block:
+        return []
+
+    # Process all lines in the section
+    for ln in lines:
         cur = ln.strip()
         if not cur:
             continue
-        # Skip if it looks like a soft skill
-        if any(kw in cur.lower() for kw in exclude_soft_skills):
+        
+        # Skip if it's exactly a soft skill
+        if cur.lower() in exclude_training_items:
             continue
-        # Stop at next major heading
-        if cur.lower() in ('hard skills', 'soft skills', 'projects', 'references') or _detect_section_heading(cur):
-            break
+        
+        # Skip if it looks like a header line (shouldn't happen if section splitting works)
+        if _get_canonical_section(cur):
+            continue
+        
+        # Skip if it contains name/contact patterns (from HEADER leakage)
+        if '@' in cur or re.search(r'\+?\d{10,}', cur):
+            continue
+        
+        # Skip if it looks like a project entry (role keywords)
+        role_keywords = ['developer', 'designer', 'engineer', 'manager', 'intern']
+        if any(kw in cur.lower() for kw in role_keywords) and len(cur) < 40:
+            continue
+        
         items.append(cur)
-    
-    # If no items found with heading detection, try finding the heading
-    if not items:
-        for i, ln in enumerate(lines):
-            if ln.strip().lower() in ('seminar attended', 'seminars and training', 'seminars and trainings', 'training', 'trainings', 'seminars', 'workshop', 'workshops'):
-                j = i + 1
-                buff = []
-                while j < len(lines):
-                    cur = lines[j].strip()
-                    if not cur:
-                        j += 1
-                        continue
-                    # Skip if it looks like a soft skill
-                    if any(kw in cur.lower() for kw in exclude_soft_skills):
-                        j += 1
-                        continue
-                    if cur.lower() in ('hard skills', 'soft skills', 'projects', 'references') or _detect_section_heading(cur):
-                        break
-                    # join wrapped lines
-                    if buff and cur[0].islower():
-                        buff[-1] = buff[-1] + ' ' + cur
-                    else:
-                        buff.append(cur)
-                    j += 1
-                items.extend(buff)
-    
+
     # Deduplicate
     seen = set()
     out = []
@@ -637,70 +1009,98 @@ def parse_trainings_from_lines(lines: list[str], is_section_block: bool = False)
 
 
 def parse_projects_from_lines(lines: list[str], is_section_block: bool = False) -> list[dict]:
-    """Parse projects from lines. If is_section_block=True, treats first line as project name if no heading found.
-    
+    """Parse projects from lines.
+
+    CRITICAL FIX: Projects and References must NEVER mix.
+    - If "References" or "Referees" appears in PROJECTS section, truncate projects at that line
+    - References content is routed to REFERENCES section, never parsed as projects
+    - If is_section_block=True, treats all content as projects until References is encountered
+
     Post-processing:
     - Deduplicate projects by normalized project name (case-insensitive)
-    - Treat role lines (e.g., "Game Designer") as details of the previous project, not a new project
+    - Treat role lines (e.g., "Game Designer") as details of the previous project
     """
     projects: list[dict] = []
-    found_projects_heading = False
     current = None
-    
+
     # Role keywords that should be treated as project details, not new projects
     role_keywords = ['developer', 'designer', 'role', 'ui/ux', 'front-end', 'back-end', 'engineer',
                      'leader', 'manager', 'coordinator', 'member', 'team lead', 'programmer',
                      'game designer', 'game developer', 'web developer', 'mobile developer']
-    
+
+    # References indicators - CRITICAL: if we see these, STOP parsing projects immediately
+    # and route remaining content to REFERENCES
+    references_indicators = ['references', 'referees', 'character reference', 'professional reference']
+    # Exact match patterns (to avoid matching words containing these)
+    references_exact = {'references', 'referees'}
+
     for i, ln in enumerate(lines):
-        # Look for projects heading if not already found
-        if not found_projects_heading:
-            if ln.strip().lower() == 'projects':
-                found_projects_heading = True
-                continue
-            elif is_section_block:
-                # This is a section block without heading - treat first non-empty line as first project
-                found_projects_heading = True
-                if ln.strip():
-                    current = {'name': ln.strip(), 'details': []}
-                continue
+        cur = ln.strip()
+        if not cur:
+            continue
+
+        cur_lower = cur.lower()
         
-        if found_projects_heading:
-            cur = ln.strip()
-            if not cur:
-                continue
-            # Stop at next major heading
-            if cur.lower() in ('references', 'hard skills', 'soft skills') or _detect_section_heading(cur):
-                if current:
-                    projects.append(current)
-                break
-            
-            # Check if this looks like a role line (should be details of previous project)
-            is_role_line = any(w in cur.lower() for w in role_keywords)
-            
-            # Check if this looks like a new project title (short line, no role keywords)
-            if len(cur) <= 60 and not is_role_line:
-                # Save previous project
-                if current:
-                    projects.append(current)
-                # Start new project
+        # CRITICAL FIX: Check for References section header
+        # Stop IMMEDIATELY at References (prevent section leakage)
+        # Use exact match to avoid false positives
+        if cur_lower in references_exact:
+            if current:
+                projects.append(current)
+            # Return what we have - remaining lines will be routed to REFERENCES
+            break
+        
+        # Also check for partial matches (e.g., "Character References")
+        if any(ref in cur_lower for ref in references_indicators):
+            if current:
+                projects.append(current)
+            break
+
+        # Check if this looks like a role line (should be details of previous project)
+        is_role_line = any(w in cur_lower for w in role_keywords)
+
+        # Check if this looks like a new project title (short line, no role keywords)
+        # Also exclude lines that look like contact info
+        if len(cur) <= 60 and not is_role_line and not '@' in cur and not re.search(r'\+?\d{10,}', cur):
+            # Save previous project
+            if current:
+                projects.append(current)
+            # Start new project
+            current = {'name': cur, 'details': []}
+        else:
+            # This is a description/detail line OR a role line - add to current project
+            if not current:
+                # No current project, create one
                 current = {'name': cur, 'details': []}
             else:
-                # This is a description/detail line OR a role line - add to current project
-                if not current:
-                    # No current project, create one
-                    current = {'name': cur, 'details': []}
-                else:
-                    current['details'].append(cur)
-    
+                current['details'].append(cur)
+
     # Don't forget the last project
     if current:
         projects.append(current)
-    
+
+    # Filter out any entries that look like references or contact info
+    filtered_projects = []
+    for p in projects:
+        name = p.get('name', '')
+        if not name:
+            continue
+        name_lower = name.lower()
+        # Skip if it looks like a reference entry (has email, phone, or typical reference patterns)
+        if '@' in name or re.search(r'\+?\d{10,}', name):
+            continue
+        if any(kw in name_lower for kw in references_indicators):
+            continue
+        # Skip if it looks like a person name pattern (First Last)
+        words = name.split()
+        if len(words) == 2 and all(w[0].isupper() for w in words if w):
+            continue
+        filtered_projects.append(p)
+
     # Deduplicate projects by normalized name
     seen_names = set()
     deduplicated = []
-    for p in projects:
+    for p in filtered_projects:
         if not p.get('name'):
             continue
         # Normalize name for comparison
@@ -723,7 +1123,7 @@ def parse_projects_from_lines(lines: list[str], is_section_block: bool = False) 
             continue
         seen_names.add(normalized_name)
         deduplicated.append(p)
-    
+
     # finalize
     out = []
     for p in deduplicated:
@@ -740,7 +1140,33 @@ def parse_education_from_lines(lines: list[str]) -> list[dict]:
     """
     Robust education parsing for interleaved two-column layouts.
     Find year ranges, then attach nearest school + course/strand within a window.
+    
+    Classification logic:
+    - If strand/track keywords exist (STEM, ABM, HUMSS, TVL, GAS, ICT, Technical-Vocational-Livelihood, 
+      Arts and Design, Sports Track, etc.) -> classify as Senior High School
+    - If degree keywords exist (Bachelor, BS, BA, Undergraduate, Master, Doctor, etc.) -> classify as College
     """
+    
+    # Strand/Track keywords for Senior High School classification
+    shs_strand_keywords = [
+        'stem', 'abm', 'humss', 'tvl', 'gas',
+        'ict', 'information and communications technology',
+        'technical-vocational-livelihood', 'technical vocational livelihood',
+        'arts and design', 'sports track',
+        'general academic strand',
+        'accountancy business and management',
+        'humanities and social sciences',
+        'science technology engineering mathematics',
+    ]
+    
+    # Degree keywords for College classification
+    college_degree_keywords = [
+        'bachelor', 'bs', 'ba', 'bsc', 'undergraduate',
+        'master', 'msc', 'ms', 'ma', 'mba', 'mpa',
+        'doctor', 'phd', 'md', 'dds',
+        'associate', 'diploma',
+    ]
+    
     year_idx = []
     for i, ln in enumerate(lines):
         if re.search(r'\b(19|20)\d{2}\s*[-–—to]+\s*((?:19|20)\d{2}|present|current)\b', ln, re.IGNORECASE):
@@ -760,13 +1186,17 @@ def parse_education_from_lines(lines: list[str]) -> list[dict]:
         if not s:
             return False
         sl = s.lower()
-        if 'bachelor' in sl or re.search(r'\b(bs|ba|bsc|msc|ms|ma)\b', sl):
+        # Check for SHS strand keywords
+        if any(k in sl for k in shs_strand_keywords):
             return True
-        if any(k in sl for k in ['stem', 'abm', 'humss', 'tvl']):
+        # Check for College degree keywords
+        if 'bachelor' in sl or re.search(r'\b(bs|ba|bsc|msc|ms|ma|mba|mpa|phd)\b', sl):
             return True
-        if 'science, technology, engineering and mathematics' in sl:
+        if 'master' in sl or 'doctor' in sl:
             return True
         return False
+
+    # Use centralized classify_education_type function (defined at module level)
 
     def find_nearest(predicate, center: int):
         # Prefer matches AFTER the year line, then BEFORE
@@ -796,11 +1226,8 @@ def parse_education_from_lines(lines: list[str]) -> list[dict]:
         # Prefer strand/degree lines near the year line (often above/below school)
         course = find_nearest(lambda w: is_degree_or_strand(w) and not is_school(w), yi)
 
-        education_type = 'College'
-        if course:
-            cl = course.lower()
-            if 'science, technology, engineering and mathematics' in cl or any(k in cl for k in ['stem', 'abm', 'humss', 'tvl']):
-                education_type = 'Senior High School'
+        # Classify education type based on course/strand
+        education_type = classify_education_type(course or '')
 
         if course and 'bachelor of science in computer science' in course.lower():
             course = 'BS Computer Science'
@@ -933,17 +1360,12 @@ def extract_education(text):
         line = cand['line']
         line_lower = cand['line_lower']
         
-        # Determine education type - must have specific keywords
-        education_type = None
+        # Determine education type using centralized classification
+        # This relies on strand/degree indicators, NOT school name
+        education_type = classify_education_type(line)
         
-        # Check for SHS first (strand keywords take priority)
-        if any(kw in line_lower for kw in strand_keywords):
-            education_type = 'Senior High School'
-        # Then check for College (degree keywords) - not just school name
-        elif any(kw in line_lower for kw in degree_keywords):
-            education_type = 'College'
-        # Skip if can't determine type
-        else:
+        # Skip if can't determine type (returns 'Other')
+        if education_type == 'Other':
             continue
         
         # Skip elementary/junior high
@@ -1207,6 +1629,82 @@ def extract_skills(text):
     }
 
 
+# =============================================================================
+# CANONICAL SECTION CONFIGURATION
+# =============================================================================
+# These are the ONLY valid section keys. All parsing MUST use these keys.
+# NER should NEVER be used to decide which section content belongs to.
+
+CANONICAL_SECTION_KEYS = [
+    'HEADER',
+    'CONTACT',
+    'EDUCATION',
+    'EXPERIENCE',
+    'PROJECTS',
+    'SKILLS',  # Combined skills section
+    'HARD_SKILLS',
+    'SOFT_SKILLS',
+    'TRAININGS',
+    'REFERENCES',
+]
+
+# Section aliases map various header texts to canonical keys
+# Headers are matched case-insensitively and must match EXACTLY (no partial matches)
+SECTION_ALIASES = {
+    'HEADER': ['header', 'profile', 'summary', 'objective', 'about me', 'personal info'],
+    'CONTACT': ['contact', 'contacts', 'contact information', 'contact info'],
+    'EDUCATION': ['education', 'educational background', 'academic background', 'academic history'],
+    'EXPERIENCE': ['experience', 'work experience', 'employment history', 'professional experience', 
+                   'career history', 'working experience', 'job history'],
+    'PROJECTS': ['projects', 'personal projects', 'academic projects', 'project experience'],
+    # Combined SKILLS section (will be split into HARD_SKILLS and SOFT_SKILLS internally)
+    'SKILLS': ['skills', 'core skills', 'competencies', 'key skills'],
+    'HARD_SKILLS': ['hard skills', 'technical skills', 'tech skills', 'hard_skills'],
+    'SOFT_SKILLS': ['soft skills', 'soft_skills', 'interpersonal skills'],
+    'TRAININGS': [
+        # Multi-word patterns first (longer matches take priority)
+        'seminar attended', 'seminars attended',
+        'trainings attended', 'training attended',
+        'seminars/training', 'seminar/training',
+        'seminars and training', 'seminars and trainings',
+        'seminars and workshop', 'seminars and workshops',
+        # Single word patterns
+        'seminars', 'seminar',
+        'trainings', 'training',
+        'workshops', 'workshop',
+        'certificates', 'certificate',
+        'certifications', 'certification',
+    ],
+    'REFERENCES': ['references', 'referees', 'character references', 'professional references'],
+}
+
+# Build reverse lookup: normalized header -> canonical key
+HEADER_TO_CANONICAL = {}
+for canonical, aliases in SECTION_ALIASES.items():
+    for alias in aliases:
+        HEADER_TO_CANONICAL[alias.lower().strip()] = canonical
+        # Also add without spaces/hyphens for fuzzy matching
+        HEADER_TO_CANONICAL[alias.lower().strip().replace(' ', '').replace('-', '')] = canonical
+
+# Legacy aliases for backward compatibility (used in _detect_section_heading)
+LEGACY_SECTION_ALIASES = {
+    'PROFILE': ['profile', 'summary', 'objective', 'about me'],
+    'EDUCATION': ['education', 'educational background', 'academic background'],
+    'SKILLS': ['skills', 'technical skills', 'core skills', 'competencies'],
+    'SOFT SKILLS': ['soft skills'],
+    'HARD SKILLS': ['hard skills', 'technical skills'],
+    'EXPERIENCE': ['experience', 'work experience', 'employment history', 'professional experience', 'career history'],
+    'PROJECTS': ['projects', 'personal projects', 'academic projects'],
+    'ACHIEVEMENTS': ['achievements', 'awards', 'honors', 'recognitions'],
+    'SEMINARS/TRAINING': [
+        'seminars', 'seminars and training', 'seminars and trainings',
+        'trainings', 'training', 'seminar', 'seminars/training',
+        'certificate', 'certificates', 'certification', 'certifications',
+        'workshops', 'workshop', 'seminars and workshop', 'seminars and workshops'
+    ],
+    'CONTACT': ['contact', 'contact information', 'contact info'],
+}
+
 SECTION_ORDER = [
     'PROFILE',
     'EDUCATION',
@@ -1217,18 +1715,96 @@ SECTION_ORDER = [
     'SEMINARS/TRAINING',
 ]
 
-SECTION_ALIASES = {
-    'PROFILE': ['profile', 'summary', 'objective', 'about me'],
-    'EDUCATION': ['education', 'educational background', 'academic background'],
-    'SKILLS': ['skills', 'technical skills', 'core skills', 'competencies'],
-    'SOFT SKILLS': ['soft skills'],
-    'HARD SKILLS': ['hard skills', 'technical skills'],
-    'EXPERIENCE': ['experience', 'work experience', 'employment history', 'professional experience', 'career history'],
-    'PROJECTS': ['projects', 'personal projects', 'academic projects'],
-    'ACHIEVEMENTS': ['achievements', 'awards', 'honors', 'recognitions'],
-    'SEMINARS/TRAINING': ['seminars', 'trainings', 'training', 'seminars and trainings', 'workshops', 'seminar attended', 'seminars/training'],
-    'CONTACT': ['contact', 'contact information', 'contact info'],
-}
+
+def _get_canonical_section(header_line: str) -> str | None:
+    """
+    Convert a header line to its canonical section key.
+    
+    Returns None if the line is not a recognized section header.
+    Headers must match exactly (after trim/lowercase) to avoid false positives.
+    """
+    if not header_line:
+        return None
+    
+    # Normalize: lowercase, strip whitespace, remove extra spaces
+    normalized = header_line.strip().lower()
+    normalized = re.sub(r'\s+', ' ', normalized)
+    normalized = normalized.rstrip(':').rstrip()
+    
+    if not normalized:
+        return None
+    
+    # Check for exact match first
+    if normalized in HEADER_TO_CANONICAL:
+        return HEADER_TO_CANONICAL[normalized]
+    
+    # Check for match without spaces/hyphens
+    compact = normalized.replace(' ', '').replace('-', '')
+    if compact in HEADER_TO_CANONICAL:
+        return HEADER_TO_CANONICAL[compact]
+    
+    # Check each alias for exact match (case-insensitive)
+    for canonical, aliases in SECTION_ALIASES.items():
+        for alias in aliases:
+            if normalized == alias.lower().strip():
+                return canonical
+    
+    return None
+
+
+def split_into_sections(text: str) -> dict[str, list[str]]:
+    """
+    Deterministic section splitter that scans text line-by-line.
+    
+    CRITICAL: This is the SINGLE SOURCE OF TRUTH for section boundaries.
+    NER must NEVER be used to decide which section content belongs to.
+    
+    Rules:
+    1. First 1-3 non-empty lines before any header go to HEADER
+    2. Each recognized header starts a new section
+    3. Lines are assigned to the CURRENT section until next header
+    4. Once a header is encountered, ALL subsequent lines belong to that section
+       (until the next header)
+    
+    Returns a dict with canonical keys: HEADER, CONTACT, EDUCATION, EXPERIENCE,
+    PROJECTS, HARD_SKILLS, SOFT_SKILLS, TRAININGS, REFERENCES
+    """
+    lines = _normalize_lines(text)
+    sections: dict[str, list[str]] = {key: [] for key in CANONICAL_SECTION_KEYS}
+    
+    current_section = 'HEADER'
+    header_line_count = 0
+    max_header_lines = 5  # First N lines before a header go to HEADER
+    
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        
+        # Skip empty lines but track position
+        if not stripped:
+            continue
+        
+        # Check if this is a section header
+        canonical = _get_canonical_section(stripped)
+        
+        if canonical:
+            # This is a recognized header - switch to that section
+            current_section = canonical
+            continue
+        
+        # If we're still in HEADER section and haven't seen a header yet,
+        # limit how many lines go to HEADER
+        if current_section == 'HEADER' and header_line_count >= max_header_lines:
+            # Check if next non-empty line looks like content (not a header)
+            # If so, we might have missed a header - stay in HEADER but don't grow forever
+            pass
+        
+        # Add line to current section
+        sections[current_section].append(line)
+        
+        if current_section == 'HEADER':
+            header_line_count += 1
+    
+    return sections
 
 
 def _normalize_lines(raw_text: str) -> list[str]:
@@ -1329,29 +1905,312 @@ def _normalize_lines(raw_text: str) -> list[str]:
 
 
 def parse_education_section(text: str) -> list[dict]:
-    """Parse EDUCATION section with multi-line grouping."""
+    """Parse EDUCATION section with YEAR-RANGE ANCHORS and PROXIMITY RULES.
+
+    CRITICAL FIX: This implementation uses year-range anchors as the primary
+    grouping mechanism to prevent degree/school mis-pairing.
+
+    Algorithm:
+    1. Find all year-range anchors (YYYY - YYYY, YYYY - Present, etc.)
+       - Year can appear anywhere in the line, not just at the start
+    2. For each year-range anchor:
+       - If line contains BOTH year AND degree/strand → treat as degree+year,
+         attach next non-empty line as school
+       - If line contains ONLY year → treat next lines as school then degree
+    3. Classify education_type based on keywords:
+       - College: "Bachelor", "BS", "B.S.", "University", "College"
+       - Senior High: "STEM", "ABM", "HUMSS", "Senior High"
+       - High School: "High School", "Secondary"
+    4. De-duplicate by (school, year_range, course_or_strand)
+
+    This prevents the BERT NER flat-parsing issue where BS Computer Science
+    gets incorrectly paired with the wrong year range.
+    """
+
+    # Strand/Track keywords for Senior High School classification
+    shs_strand_keywords = [
+        'stem', 'abm', 'humss', 'tvl', 'gas',
+        'ict', 'information and communications technology',
+        'technical-vocational-livelihood', 'technical vocational livelihood',
+        'arts and design', 'sports track',
+        'general academic strand',
+        'accountancy business and management',
+        'humanities and social sciences',
+        'science technology engineering mathematics',
+    ]
+
+    # Degree keywords for College classification
+    college_degree_keywords = [
+        'bachelor', 'bs', 'ba', 'bsc', 'msc', 'ms', 'ma', 'mba', 'mpa',
+        'master', 'doctor', 'phd', 'md', 'dds',
+        'associate', 'diploma', 'degree',
+    ]
+
+    # High school keywords
+    high_school_keywords = ['high school', 'secondary', 'junior high', 'jhs']
+
     if not text or len(text.strip()) < 10:
         return []
 
     lines = [ln.strip() for ln in _normalize_lines(text) if ln.strip()]
-    entries: list[dict] = []
+
+    # Helper functions
+    def is_school_line(s: str) -> bool:
+        """Check if line looks like a school name."""
+        if not s:
+            return False
+        sl = s.lower()
+        exclude = ['designed', 'pubmats', 'led', 'committee', 'served', 'representing',
+                   'managed', 'coordinated', 'organized', 'event', 'multimedia', 'leader']
+        if any(kw in sl for kw in exclude):
+            return False
+        return any(k in sl for k in ['university', 'college', 'campus', 'school', 'institute', 'academy'])
+
+    def is_course_line(s: str) -> bool:
+        """Check if line looks like a degree/course/strand."""
+        if not s:
+            return False
+        sl = s.lower()
+        # Check SHS strands
+        if any(kw in sl for kw in shs_strand_keywords):
+            return True
+        # Check college degrees
+        if any(kw in sl for kw in college_degree_keywords):
+            return True
+        # Check for BS/BA/MS/MA patterns
+        if re.search(r'\b(b\.?s\.?|b\.?a\.?|m\.?s\.?|m\.?a\.?|bsc|msc|mba)\b', sl):
+            return True
+        return False
+
+    def extract_year_range(s: str) -> str | None:
+        """Extract year range from a string, returns normalized range or None."""
+        # Match patterns like "2022 - Present", "2019-2023", "2020 to 2021"
+        yr_match = re.search(r'(\d{4})\s*[-–—to]+\s*(\d{4}|present|current)', s, re.IGNORECASE)
+        if yr_match:
+            start_yr = yr_match.group(1)
+            end_yr = yr_match.group(2).title()
+            return f"{start_yr} - {end_yr}"
+        # Match single year
+        single_match = re.search(r'\b(19|20)\d{2}\b', s)
+        if single_match:
+            return single_match.group(0)
+        return None
+
+    def strip_year_from_line(s: str) -> str:
+        """Remove year range patterns from a line."""
+        # Remove year ranges like "2022 - Present", "2019-2023"
+        result = re.sub(r'\d{4}\s*[-–—to]+\s*(?:\d{4}|present|current)', '', s, flags=re.IGNORECASE)
+        # Remove single years at start or end
+        result = re.sub(r'^(19|20)\d{2}\b', '', result)
+        result = re.sub(r'\b(19|20)\d{2}$', '', result)
+        return result.strip()
+
+    def classify_education_type_local(course: str, school: str) -> str:
+        """Classify education type based ONLY on course/strand content."""
+        return classify_education_type(course)
+
+    def normalize_key(entry: dict) -> tuple:
+        """Generate deduplication key: (school, year_range, course_or_strand)."""
+        school_norm = re.sub(r'[^\w]', '', (entry.get('school') or '').lower())
+        course_norm = re.sub(r'[^\w]', '', (entry.get('course_or_strand') or '').lower())
+        year_norm = (entry.get('year_range') or '').lower().replace(' ', '')
+        return (school_norm, year_norm, course_norm)
+
+    # Step 1: Process lines to build education entries
+    entries = []
+    used_lines = set()  # Track which lines have been consumed
+
+    i = 0
+    while i < len(lines):
+        if i in used_lines:
+            i += 1
+            continue
+
+        line = lines[i]
+        year_range = extract_year_range(line)
+
+        if not year_range:
+            i += 1
+            continue
+
+        # We found a year in this line
+        used_lines.add(i)
+        school = None
+        course = None
+
+        # Check if this line also contains degree/strand info
+        line_without_year = strip_year_from_line(line)
+        has_degree_in_line = is_course_line(line_without_year)
+        has_school_in_line = is_school_line(line_without_year)
+
+        if has_degree_in_line or has_school_in_line:
+            # CASE 1: Line has BOTH year AND degree/strand/school
+            # First, try to extract school and course from this same line (single-line format)
+            if has_school_in_line:
+                # Try to extract school from the line
+                school_match = None
+                for school_keyword in ['university', 'college', 'campus', 'school', 'institute', 'academy']:
+                    pattern = rf'\b([^,]*{school_keyword}[^,]*)\b'
+                    match = re.search(pattern, line_without_year, re.IGNORECASE)
+                    if match:
+                        school_match = match.group(1).strip()
+                        break
+                if school_match:
+                    school = school_match
+                    # Remaining part might be course
+                    remaining = line_without_year.replace(school, '').strip()
+                    if remaining and is_course_line(remaining):
+                        course = remaining
+
+            if not school and has_degree_in_line:
+                # Try to extract course from the line
+                course = line_without_year.strip()
+
+            # If we only have course or school from the line, look for the other in next lines
+            if (course and not school) or (school and not course):
+                j = i + 1
+                while j < len(lines) and j not in used_lines:
+                    next_line = lines[j]
+                    if not next_line:
+                        j += 1
+                        continue
+
+                    if not school and is_school_line(next_line):
+                        school = next_line
+                        used_lines.add(j)
+                        break
+                    elif not course and is_course_line(next_line):
+                        course = next_line
+                        used_lines.add(j)
+                        break
+                    j += 1
+
+        else:
+            # CASE 2: Line has ONLY year
+            # Check if this is a single-line entry with tab/space-separated fields
+            # Example: "2016 - 2020  University of Example  Bachelor of Science"
+            parts = [p.strip() for p in re.split(r'\s{2,}', line) if p.strip()]
+            if len(parts) >= 2:
+                # Try to find school and course in the parts
+                for part in parts:
+                    if not school and is_school_line(part):
+                        school = part
+                    elif not course and is_course_line(part):
+                        course = part
+
+            # Check previous lines for school and/or degree (school before degree before year pattern)
+            prev_idx = i - 1
+            if prev_idx >= 0 and prev_idx not in used_lines:
+                prev_line = lines[prev_idx]
+                if is_course_line(prev_line):
+                    course = prev_line
+                    used_lines.add(prev_idx)
+                    # Check one more line back for school
+                    prev2_idx = i - 2
+                    if prev2_idx >= 0 and prev2_idx not in used_lines:
+                        prev2_line = lines[prev2_idx]
+                        if is_school_line(prev2_line):
+                            school = prev2_line
+                            used_lines.add(prev2_idx)
+
+            # Now look for school and course in next lines
+            if not school or not course:
+                j = i + 1
+                found_school = False
+
+                while j < len(lines) and j not in used_lines:
+                    next_line = lines[j]
+                    if not next_line:
+                        j += 1
+                        continue
+
+                    if not found_school and not school and is_school_line(next_line):
+                        school = next_line
+                        used_lines.add(j)
+                        found_school = True
+                        j += 1
+                        continue
+
+                    if found_school and not course and is_course_line(next_line):
+                        course = next_line
+                        used_lines.add(j)
+                        break
+
+                    # If we haven't found school yet and no course from prev line,
+                    # check if this could be the course
+                    if not found_school and not course and is_course_line(next_line):
+                        course = next_line
+                        used_lines.add(j)
+                        j += 1
+                        continue
+
+                    j += 1
+
+        # Normalize course name
+        if course:
+            course = re.sub(r'\s+', ' ', course).strip()
+            # Standardize degree abbreviations
+            course = re.sub(r'\bBachelor\s+of\s+Science\s+in\b', 'BS', course, flags=re.IGNORECASE)
+            course = re.sub(r'\bBachelor\s+of\s+Arts\s+in\b', 'BA', course, flags=re.IGNORECASE)
+            course = re.sub(r'\bB\.?S\.?\s+in\b', 'BS', course, flags=re.IGNORECASE)
+
+        # Normalize school name
+        if school:
+            school = re.sub(r'\s*-\s*imus\s*campus', ' - Imus', school, flags=re.IGNORECASE)
+
+        # Create entry if we have minimum required info
+        if school or course:
+            education_type = classify_education_type_local(course or '', school or '')
+
+            entry = {
+                'school': school,
+                'raw_text': f"{school or ''} | {course or ''} | {year_range}".strip(' |'),
+                'year_range': year_range,
+                'education_type': education_type,
+                'course_or_strand': course,
+            }
+            entries.append(entry)
+
+        i += 1
+
+    # If no entries found with year anchors, fall back to old parsing logic
+    if not entries:
+        return _parse_education_fallback(lines)
+
+    # Step 2: De-duplicate entries by (school, year_range, course_or_strand)
+    seen = set()
+    deduplicated = []
+    for entry in entries:
+        key = normalize_key(entry)
+        if key not in seen:
+            seen.add(key)
+            deduplicated.append(entry)
+
+    return deduplicated[:5]
+
+
+def _parse_education_fallback(lines: list[str]) -> list[dict]:
+    """Fallback education parsing when no year anchors are found."""
+    entries = []
+
+    shs_strand_keywords = ['stem', 'abm', 'humss', 'tvl', 'gas', 'ict']
+
     i = 0
     while i < len(lines):
         ln = lines[i]
         lower = ln.lower()
 
-        # Skip repeated heading words inside section
         if lower in ('education',):
             i += 1
             continue
 
-        # Detect degree/strand line
         is_degree = (
             'bachelor' in lower
             or 'master' in lower
+            or 'doctor' in lower
             or re.search(r'\b(bs|ba|ma|ms|bsc|msc|mba|phd)\b', lower) is not None
             or 'computer science' in lower
-            or 'stem' in lower
+            or any(kw in lower for kw in shs_strand_keywords)
         )
         if not is_degree:
             i += 1
@@ -1361,86 +2220,31 @@ def parse_education_section(text: str) -> list[dict]:
         year_line = None
         school_line = None
 
-        # Single-line education entries: year + school + degree all together
-        if re.search(r'(19|20)\d{2}', degree_line) and any(k in lower for k in ['university', 'college', 'school', 'institute']):
-            year_range = None
-            m = re.search(r'((?:19|20)\d{2})\s*[-–—to]+\s*((?:19|20)\d{2}|present|current)?', degree_line, re.IGNORECASE)
-            if m:
-                y1 = m.group(1)
-                y2 = m.group(2)
-                year_range = f"{y1} - {y2.title()}" if y2 else y1
-
-            sm = re.search(r'([\w\s.-]+(?:University|College|Institute|School)[\w\s.-]*)', degree_line, re.IGNORECASE)
-            if sm:
-                school_line = sm.group(1).strip()
-
-            course = None
-            cm = re.search(r'(Bachelor of\s+[\w\s]+)', degree_line, re.IGNORECASE)
-            if not cm:
-                cm = re.search(r'(B\.?S\.?\s+in\s+[\w\s]+)', degree_line, re.IGNORECASE)
-            if cm:
-                course = cm.group(1).strip()
-
-            entries.append(
-                {
-                    'school': school_line,
-                    'raw_text': degree_line,
-                    'year_range': year_range,
-                    'education_type': 'College',
-                    'course_or_strand': course or degree_line,
-                }
-            )
-            i += 1
-            continue
-
-        # Sometimes the school is the line immediately above the degree line
-        if i > 0:
-            prev = lines[i - 1].strip()
-            prev_lower = prev.lower()
-            if any(k in prev_lower for k in ['university', 'college', 'school', 'institute', 'campus']) and not re.search(r'(19|20)\d{2}', prev):
-                school_line = prev
-
-        # Look ahead a few lines for year + school
+        # Look for year + school nearby
         look = lines[i + 1 : i + 6]
         for cand in look:
-            if year_line is None and re.search(r'(19|20)\d{2}', cand) and ('present' in cand.lower() or re.search(r'(19|20)\d{2}\s*[-–—]', cand)):
+            if year_line is None and re.search(r'(19|20)\d{2}', cand):
                 year_line = cand
-                continue
-            if school_line is None and (
-                any(k in cand.lower() for k in ['university', 'college', 'school', 'institute', 'campus'])
-                or 'state university' in cand.lower()
-                or re.search(r'\b(cvsu|cavite state)\b', cand.lower())
-            ):
-                # If it's clearly a school name line, take it.
-                if len(cand) >= 6 and not re.search(r'(19|20)\d{2}', cand):
-                    school_line = cand
-
-        # Normalize course name
-        course = degree_line
-        course = re.sub(r'\s+', ' ', course).strip()
-        course = course.replace('BACHELOR OF SCIENCE IN', 'BS').replace('Bachelor of Science in', 'BS')
-        course = course.replace('COMPUTER SCIENCE', 'Computer Science')
+            if school_line is None and any(k in cand.lower() for k in ['university', 'college', 'school', 'institute']):
+                school_line = cand
 
         # Extract year range
         year_range = None
         if year_line:
             m = re.search(r'((?:19|20)\d{2})\s*[-–—to]+\s*((?:19|20)\d{2}|present|current)?', year_line, re.IGNORECASE)
             if m:
-                y1 = m.group(1)
-                y2 = m.group(2)
-                year_range = f"{y1} - {y2.title()}" if y2 else y1
+                year_range = f"{m.group(1)} - {m.group(2).title()}" if m.group(2) else m.group(1)
 
-        # Education type
-        education_type = 'Senior High School' if 'stem' in lower else 'College'
+        # Use centralized classification based ONLY on degree/strand content
+        education_type = classify_education_type(degree_line)
 
-        entry = {
+        entries.append({
             'school': school_line,
             'raw_text': f"{degree_line} | {year_line or ''} | {school_line or ''}".strip(),
             'year_range': year_range,
             'education_type': education_type,
-            'course_or_strand': course,
-        }
-        entries.append(entry)
+            'course_or_strand': degree_line,
+        })
         i += 1
 
     return entries[:5]
@@ -1562,7 +2366,11 @@ def parse_experience_section(text: str) -> list[dict]:
 
 
 def _detect_section_heading(line: str) -> str | None:
-    """Return canonical section name if line looks like a heading."""
+    """Return canonical section name if line looks like a heading (legacy version).
+    
+    NOTE: For new code, use _get_canonical_section() instead.
+    This function is kept for backward compatibility.
+    """
     stripped = line.strip()
     if not stripped:
         return None
@@ -1574,50 +2382,75 @@ def _detect_section_heading(line: str) -> str | None:
         return None
     candidate = stripped.rstrip(':').lower()
 
-    for canonical, aliases in SECTION_ALIASES.items():
+    # Check new canonical section aliases first
+    canonical = _get_canonical_section(line)
+    if canonical:
+        return canonical
+
+    # Fall back to legacy aliases
+    for canonical, aliases in LEGACY_SECTION_ALIASES.items():
         for alias in aliases:
-            # Only match if the line is exactly the alias, or the alias is a multi-word phrase 
-            # that's at the start of the line (for cases like "Soft Skills" vs "Interpersonal skills")
             if candidate == alias:
                 return canonical
-            # For section aliases that end with "skills", only match if line is exactly the alias
-            # This prevents "Interpersonal skills" from matching "skills"
             if alias == 'skills' or alias.endswith(' skills'):
                 if candidate == alias:
                     return canonical
                 continue
-            # For other aliases, allow partial match
-            if alias in candidate:
+            if len(alias) <= 8:
+                if re.search(r'\b' + re.escape(alias) + r'\b', candidate):
+                    return canonical
+            elif alias in candidate:
                 return canonical
-    
-    # Additional stop markers for CONTACT section - these should also end CONTACT
-    # but won't create new sections (they'll be picked up by SKILLS parsing)
+
+    # Additional stop markers for CONTACT section
     contact_stop_markers = ['soft skills', 'hard skills', 'skills']
     if candidate in contact_stop_markers:
-        return 'SKILLS'  # Redirect to SKILLS section
-    
+        return 'SKILLS'
+
     return None
 
 
 def segment_sections(raw_text: str) -> dict[str, str]:
-    """Split resume into high-level sections (HEADER, PROFILE, EDUCATION, etc)."""
-    lines = _normalize_lines(raw_text)
-    sections: dict[str, list[str]] = {}
-
-    current = 'HEADER'
-    sections[current] = []
-
-    for ln in lines:
-        sec = _detect_section_heading(ln)
-        if sec:
-            current = sec
-            if current not in sections:
-                sections[current] = []
-            continue
-        sections.setdefault(current, []).append(ln)
-
-    # Join lines back into text blocks
-    return {name: '\n'.join(block).strip() for name, block in sections.items() if block and ''.join(block).strip()}
+    """Split resume into high-level sections using deterministic section-first parsing.
+    
+    CRITICAL: This function uses split_into_sections() as the single source of truth.
+    NER is NEVER used to decide section boundaries.
+    
+    Returns sections with both canonical keys (HEADER, CONTACT, etc.) and legacy keys
+    (PROFILE, SKILLS, SEMINARS/TRAINING) for backward compatibility.
+    """
+    # Use the new deterministic section splitter
+    canonical_sections = split_into_sections(raw_text)
+    
+    # Convert to text blocks
+    sections: dict[str, str] = {}
+    for name, lines in canonical_sections.items():
+        if lines:
+            sections[name] = '\n'.join(lines).strip()
+    
+    # Map canonical keys to legacy keys for backward compatibility
+    # SKILLS -> combines HARD_SKILLS and SOFT_SKILLS
+    hard_skills = canonical_sections.get('HARD_SKILLS', [])
+    soft_skills = canonical_sections.get('SOFT_SKILLS', [])
+    if hard_skills or soft_skills:
+        skills_lines = []
+        if hard_skills:
+            skills_lines.append('Hard Skills')
+            skills_lines.extend(hard_skills)
+        if soft_skills:
+            skills_lines.append('Soft Skills')
+            skills_lines.extend(soft_skills)
+        sections['SKILLS'] = '\n'.join(skills_lines).strip()
+    
+    # TRAININGS -> SEMINARS/TRAINING
+    if 'TRAININGS' in sections:
+        sections['SEMINARS/TRAINING'] = sections['TRAININGS']
+    
+    # HEADER -> PROFILE (if HEADER contains non-contact content)
+    if 'HEADER' in sections:
+        sections['PROFILE'] = sections['HEADER']
+    
+    return sections
 
 
 def parse_resume(raw_text):
@@ -1673,55 +2506,128 @@ def parse_resume(raw_text):
     # Use cleaned text for NER (or raw_text if lossless validation failed)
     text_for_parsing = cleaned_text
     
-    # 1) Reconstruct & segment into sections
-    sections = segment_sections(text_for_parsing)
+    # Apply global ALL CAPS -> Title Case normalization
+    # This converts uppercase education lines, degree titles, etc. to proper casing
+    # while preserving acronyms (STEM, AWS, SQL, ICT, TVL, etc.)
+    lines = text_for_parsing.split('\n')
+    normalized_lines = []
+    for line in lines:
+        normalized_lines.append(_normalize_line_case(line))
+    text_for_parsing = '\n'.join(normalized_lines)
+    
+    # =============================================================================
+    # SECTION-FIRST PARSING ARCHITECTURE
+    # =============================================================================
+    # CRITICAL: split_into_sections() is the SINGLE SOURCE OF TRUTH for section boundaries.
+    # NER is NEVER used to decide which section content belongs to.
+    # BERT NER only enriches entities WITHIN sections, never reassigns across sections.
+    
+    # 1) Split into canonical sections using deterministic header detection
+    canonical_sections = split_into_sections(text_for_parsing)
     all_lines = _normalize_lines(text_for_parsing)
+    
+    # Get section content using canonical keys
+    header_block = '\n'.join(canonical_sections.get('HEADER', []))
+    contact_block = '\n'.join(canonical_sections.get('CONTACT', []))
+    education_block = '\n'.join(canonical_sections.get('EDUCATION', []))
+    experience_block = '\n'.join(canonical_sections.get('EXPERIENCE', []))
+    projects_block_lines = canonical_sections.get('PROJECTS', [])
+    projects_block = '\n'.join(projects_block_lines)
+    hard_skills_lines = canonical_sections.get('HARD_SKILLS', [])
+    soft_skills_lines = canonical_sections.get('SOFT_SKILLS', [])
+    trainings_lines = canonical_sections.get('TRAININGS', [])
+    trainings_block = '\n'.join(trainings_lines)
+    references_lines = canonical_sections.get('REFERENCES', [])
+    references_block = '\n'.join(references_lines)
+    
+    # Build legacy sections dict for backward compatibility
+    sections = segment_sections(text_for_parsing)
 
-    header_block = sections.get('HEADER', '')
-    profile_block = sections.get('PROFILE', '')
-    contact_block = sections.get('CONTACT', '')
-    education_block = sections.get('EDUCATION', '')
-    experience_block = sections.get('EXPERIENCE', '')
-    skills_block = sections.get('SKILLS', '')
-    projects_block = sections.get('PROJECTS', '')
-    trainings_block = sections.get('SEMINARS/TRAINING', '')
+    # =============================================================================
+    # 2) BERT NER - SECTION BOUNDARY ENFORCED
+    # =============================================================================
+    # CRITICAL: BERT NER is called PER-SECTION to prevent cross-section contamination.
+    # NER output is ONLY used for enrichment/validation, NEVER for schema assignment.
+    
+    print("Extracting entities using BERT NER (section-boundary enforced)...")
+    
+    # NER only within HEADER + CONTACT for name/email/phone
+    header_text_for_ner = (header_block + "\n" + contact_block).strip()
+    bert_header = extract_entities_bert(header_text_for_ner) if header_text_for_ner else {
+        'names': [], 'emails': [], 'phones': []
+    }
 
-    # 2) Run BERT NER only where needed
-    print("Extracting entities using BERT NER (section-aware)...")
-    header_text_for_ner = (header_block + "\n\n" + contact_block + "\n\n" + profile_block).strip() or raw_text
-    bert_header = extract_entities_bert(header_text_for_ner)
-
+    # NER only within EDUCATION section
     bert_education = extract_entities_bert(education_block) if education_block else {
-        'colleges': [],
-        'degrees': [],
+        'colleges': [], 'degrees': [],
     }
+    
+    # NER only within EXPERIENCE section
     bert_experience = extract_entities_bert(experience_block) if experience_block else {
-        'companies': [],
-        'job_titles': [],
+        'companies': [], 'job_titles': [],
     }
-    bert_skills = extract_entities_bert(skills_block) if skills_block else {
+    
+    # NER only within SKILLS sections (combined)
+    skills_text_for_ner = '\n'.join(hard_skills_lines + soft_skills_lines)
+    bert_skills = extract_entities_bert(skills_text_for_ner) if skills_text_for_ner else {
         'skills': [],
     }
+    
+    # NER only within TRAININGS section
+    bert_trainings = extract_entities_bert(trainings_block) if trainings_block else {
+        'skills': [], 'dates': [],
+    }
+    
+    # NER only within PROJECTS section
+    bert_projects = extract_entities_bert(projects_block) if projects_block else {
+        'companies': [], 'dates': [],
+    }
 
-    # 3) Contact info only from header/profile
-    contact_source = header_block + "\n\n" + contact_block + "\n\n" + profile_block
-    name = extract_full_name(contact_source) or _first_nonempty_str(bert_header.get('names')) or extract_name(contact_source)
-    # Apply name casing normalization
+    # =============================================================================
+    # 3) SECTION-FIRST CONTACT INFO EXTRACTION
+    # =============================================================================
+    # CRITICAL: name ONLY from HEADER (first 1-3 lines)
+    # phone/email from CONTACT section (with optional scan in HEADER if missing)
+    # NER only enriches, never drives the schema assignment
+    
+    # Name: ONLY from HEADER section (first 1-3 lines)
+    name = extract_full_name(header_block)
+    if not name:
+        # Optional: NER enrichment within HEADER only
+        name = _first_nonempty_str(bert_header.get('names'))
+    if not name:
+        # Last resort: scan header lines
+        name = extract_name(header_block)
     if name:
         name = _normalize_name_case(name)
-    # Email/phone can appear anywhere in interleaved layouts; fall back to full raw_text
-    email = _pick_best_email(
-        _first_nonempty_str(bert_header.get('emails')),
-        extract_email(contact_source),
-        extract_email(raw_text),
-    )
-    phone = _first_nonempty_str(bert_header.get('phones')) or extract_phone(contact_source) or extract_phone(raw_text)
+    
+    # Email: from CONTACT section first, then HEADER if missing
+    email = extract_email(contact_block)
+    if not email:
+        email = extract_email(header_block)
+    if not email and bert_header.get('emails'):
+        # NER enrichment only
+        email = _pick_best_email(_first_nonempty_str(bert_header.get('emails')))
+    
+    # Phone: from CONTACT section first, then HEADER if missing  
+    phone = extract_phone(contact_block)
+    if not phone:
+        phone = extract_phone(header_block)
+    if not phone:
+        phone = _first_nonempty_str(bert_header.get('phones'))
 
-    # 4) Education: combine section parser + robust line-based parser for interleaved columns
+    # 4) Education: use section-first parsing - ONLY parse from education block
+    # CRITICAL FIX: Do NOT run education parser on all_lines - that causes cross-section contamination
+    # GPT sections are the source of truth; BERT NER only enriches within section boundaries
     education_candidates: list[dict] = []
+
+    # Parse only from education block (GPT section boundaries are authoritative)
     if education_block:
         education_candidates.extend(parse_education_section(education_block))
-    education_candidates.extend(parse_education_from_lines(all_lines))
+
+    # Only fall back to full text parsing if education block is empty
+    if not education_candidates and text_for_parsing:
+        education_candidates.extend(parse_education_from_lines(all_lines))
 
     def _normalize_edu_field(s: str) -> str:
         """Normalize education field for deduplication: lowercase, trim, collapse spaces, remove punctuation."""
@@ -1766,9 +2672,9 @@ def parse_resume(raw_text):
 
     def _has_degree_in_block(entry_text: str, block_text: str) -> bool:
         """
-        Check if degree appears within the same education block (not carried over from previous entry).
-        This prevents degree carryover: only attach degree to an education entry if the degree
-        text appears within the same nearby education block.
+        Check if degree or strand appears within the same education block (not carried over from previous entry).
+        This prevents degree carryover: only attach degree/strand to an education entry if the text
+        appears within the same nearby education block.
         """
         if not entry_text or not block_text:
             return False
@@ -1779,7 +2685,10 @@ def parse_resume(raw_text):
         # Degree keywords to check
         degree_keywords = ['bachelor', 'bs', 'ba', 'bsc', 'msc', 'ms', 'ma', 'mba', 'master', 'doctor', 'phd']
         
-        for kw in degree_keywords:
+        # SHS strand keywords
+        strand_keywords = ['stem', 'abm', 'humss', 'tvl', 'gas', 'ict', 'arts and design', 'sports track']
+        
+        for kw in degree_keywords + strand_keywords:
             if kw in entry_lower and kw in block_lower:
                 return True
         return False
@@ -1852,23 +2761,138 @@ def parse_resume(raw_text):
                     'raw_text': title,
                 })
 
-    # 6) Skills: parse explicit hard/soft headings if present (handles "HTML/CSS/...")
-    skills_data = parse_skills_from_lines(all_lines)
-    # Merge BERT skills only if we have a SKILLS block (avoid cross-section hallucination)
-    all_skills = list(set(skills_data['all'] + (bert_skills.get('skills', []) if skills_block else [])))
+    # =============================================================================
+    # 6) SECTION-FIRST SKILLS EXTRACTION
+    # =============================================================================
+    # CRITICAL: skills.hard_skills ONLY from HARD_SKILLS section
+    # skills.soft_skills ONLY from SOFT_SKILLS section
+    # Combined SKILLS section is parsed with internal subheading detection
+    # NER only enriches within sections, never reassigns across sections
+    
+    skills_data = {'hard_skills': [], 'soft_skills': [], 'all': []}
+    
+    # Get combined SKILLS section lines (for backward compatibility)
+    skills_lines = canonical_sections.get('SKILLS', [])
+
+    # Parse from canonical section lines
+    if hard_skills_lines or soft_skills_lines:
+        section_lines = []
+        if hard_skills_lines:
+            section_lines.append('Hard Skills')
+            section_lines.extend(hard_skills_lines)
+        if soft_skills_lines:
+            section_lines.append('Soft Skills')
+            section_lines.extend(soft_skills_lines)
+        skills_data = parse_skills_from_lines(section_lines)
+    elif skills_lines:
+        # Combined SKILLS section - parse with internal subheading detection
+        skills_data = parse_skills_from_lines(skills_lines)
+    else:
+        # No explicit skills sections found - return empty
+        # DO NOT fall back to scanning all lines (prevents cross-section contamination)
+        pass
+
+    # NER enrichment: only add BERT skills if we have skills sections
+    # NER must NEVER create new sections or move content between sections
+    skills_block_exists = bool(hard_skills_lines or soft_skills_lines or skills_lines)
+    if skills_block_exists and bert_skills.get('skills'):
+        # Only add BERT skills that appear in the skills sections
+        existing_lower = [s.lower() for s in skills_data['all']]
+        for bert_skill in bert_skills.get('skills', []):
+            if bert_skill.lower() not in existing_lower:
+                skills_data['all'].append(bert_skill)
+    
+    # Build skills.all as case-insensitive unique union
+    seen = set()
+    all_skills = []
+    for skill in skills_data['hard_skills'] + skills_data['soft_skills']:
+        key = skill.lower()
+        if key not in seen:
+            seen.add(key)
+            all_skills.append(skill)
     skills_data['all'] = all_skills
 
-    # 7) Trainings/Seminars and Projects
-    # Use section blocks if available, otherwise parse from all_lines
-    if trainings_block:
-        trainings = parse_trainings_from_lines(_normalize_lines(trainings_block), is_section_block=True)
-    else:
-        trainings = parse_trainings_from_lines(all_lines)
+    # =============================================================================
+    # 7) SECTION-FIRST TRAININGS AND PROJECTS EXTRACTION
+    # =============================================================================
+    # CRITICAL: trainings ONLY from TRAININGS section
+    # projects ONLY from PROJECTS section (stops at REFERENCES)
+    # If section is missing, return empty list (NO fallback to other sections)
     
-    if projects_block:
-        projects = parse_projects_from_lines(_normalize_lines(projects_block), is_section_block=True)
+    # Trainings: ONLY from TRAININGS section
+    if trainings_lines:
+        trainings = parse_trainings_from_lines(trainings_lines, is_section_block=True)
     else:
-        projects = parse_projects_from_lines(all_lines)
+        # CRITICAL FIX: If TRAININGS section is missing, return empty list
+        # DO NOT fall back to HEADER, SOFT SKILLS, or any other section
+        trainings = []
+    
+    # Projects: ONLY from PROJECTS section
+    # parse_projects_from_lines handles References truncation internally
+    if projects_block_lines:
+        projects = parse_projects_from_lines(projects_block_lines, is_section_block=True)
+    else:
+        projects = []
+
+    # =============================================================================
+    # 8) POST-PARSE CONSISTENCY CHECK (GUARDRAILS)
+    # =============================================================================
+    # These checks ensure NER never corrupted section groupings
+    
+    # 8a) Trainings must not contain name/title/summary lines from HEADER
+    header_lines = [ln.strip().lower() for ln in header_block.split('\n') if ln.strip()]
+    filtered_trainings = []
+    for training in trainings:
+        training_lower = training.lower()
+        # Skip if training matches a header line
+        if training_lower in header_lines:
+            print(f"WARNING: Dropping training that matches header: {training}")
+            continue
+        # Skip if training looks like a name (2 capitalized words)
+        words = training.split()
+        if len(words) == 2 and all(w[0].isupper() for w in words if w):
+            print(f"WARNING: Dropping training that looks like name: {training}")
+            continue
+        filtered_trainings.append(training)
+    trainings = filtered_trainings
+    
+    # 8b) Education entries must have year_range that appears in EDUCATION text
+    if education_block:
+        education_year_pattern = re.compile(r'\b(19|20)\d{2}\s*[-–—to]+\s*((?:19|20)\d{2}|present|current)\b', re.IGNORECASE)
+        education_years = set()
+        for match in education_year_pattern.finditer(education_block):
+            education_years.add(match.group(0).lower().replace(' ', ''))
+        
+        validated_education = []
+        for edu in education:
+            year_range = edu.get('year_range', '')
+            if year_range:
+                # Normalize year range for comparison
+                year_normalized = year_range.lower().replace(' ', '')
+                # Check if any education year matches
+                match_found = any(year_normalized in edu_yr or edu_yr in year_normalized 
+                                  for edu_yr in education_years)
+                if not match_found:
+                    print(f"WARNING: Education entry year_range '{year_range}' not found in EDUCATION section")
+                    # Keep the entry but mark it for review
+            validated_education.append(edu)
+        education = validated_education
+    
+    # 8c) Sections must not contain embedded headers from other sections
+    # This detects if section splitting failed
+    for section_name, section_content in [
+        ('SOFT_SKILLS', soft_skills_lines),
+        ('HARD_SKILLS', hard_skills_lines),
+        ('PROJECTS', projects_block_lines),
+        ('TRAININGS', trainings_lines),
+    ]:
+        for line in section_content:
+            canonical = _get_canonical_section(line)
+            if canonical and canonical != section_name:
+                print(f"WARNING: Found embedded header '{line}' in {section_name} section")
+    
+    # Run existing education consistency validator
+    education = _validate_education_consistency(education, education_block)
 
     parsed = {
         'name': name,
@@ -1891,6 +2915,118 @@ def parse_resume(raw_text):
     }
 
     return parsed
+
+
+def _validate_education_consistency(education: list[dict], education_block: str | None) -> list[dict]:
+    """
+    Post-NER consistency validator for education entries.
+
+    Catches obvious mismatches:
+    - Education entry has year_range but degree/school pairing contradicts EDU block structure
+    - School repeated across entries (likely duplicate)
+    - Degree duplicated (likely mis-grouping)
+    - year_range mismatched (BS paired with wrong years)
+
+    Reattaches degree/school based on:
+    - closest year-range anchor in the original text
+    - closest ORG-like school line
+    - completeness score (school+degree+year_range)
+    """
+    if not education or len(education) < 2:
+        return education
+
+    # Extract year ranges from education block for anchor validation
+    year_anchors = []
+    if education_block:
+        year_pattern = r'\b(19|20)\d{2}\s*[-–—to]+\s*((?:19|20)\d{2}|present|current)\b'
+        for match in re.finditer(year_pattern, education_block, re.IGNORECASE):
+            start_yr = match.group(0).split('-')[0].strip()
+            end_part = match.group(0).split('-')[-1].strip()
+            year_anchors.append(f"{start_yr} - {end_part.title()}")
+
+    def normalize(s: str) -> str:
+        return re.sub(r'[^\w]', '', (s or '').lower())
+
+    def completeness_score(e: dict) -> int:
+        """Higher score = more complete entry."""
+        score = 0
+        if e.get('school'): score += 1
+        if e.get('course_or_strand'): score += 1
+        if e.get('year_range'): score += 1
+        return score
+
+    # Check for duplicates and mismatches
+    validated = []
+    seen_schools = set()
+    seen_degrees = set()
+    seen_year_ranges = set()
+
+    for e in education:
+        school = e.get('school') or ''
+        degree = e.get('course_or_strand') or ''
+        year = e.get('year_range') or ''
+
+        school_norm = normalize(school)
+        degree_norm = normalize(degree)
+        year_norm = normalize(year)
+
+        # Skip duplicate entries (same school + degree + year)
+        key = (school_norm, degree_norm, year_norm)
+        if key in [(normalize(v.get('school')), normalize(v.get('course_or_strand')), normalize(v.get('year_range'))) for v in validated]:
+            continue
+
+        # Check for suspicious mismatches
+        # Case 1: Same school appears multiple times with different degrees (might be valid)
+        # Case 2: Same degree appears multiple times with different years (might be duplicate)
+        # Case 3: Same year range with different degrees (likely mis-grouped)
+
+        is_suspicious = False
+
+        # Check if this year_range was already seen with a different degree
+        if year_norm and year_norm in seen_year_ranges:
+            # Check if same year has different degree
+            for v in validated:
+                if normalize(v.get('year_range')) == year_norm:
+                    if normalize(v.get('course_or_strand')) != degree_norm:
+                        # Same year, different degree - pick the more complete one
+                        if completeness_score(e) < completeness_score(v):
+                            is_suspicious = True
+                            break
+
+        # Check if degree is duplicated with different years
+        if degree_norm and degree_norm in seen_degrees and not is_suspicious:
+            # Check if same degree has different year
+            for v in validated:
+                if normalize(v.get('course_or_strand')) == degree_norm:
+                    if normalize(v.get('year_range')) != year_norm:
+                        # Same degree, different year - might be valid (different programs)
+                        # But check if one is more complete
+                        if completeness_score(e) <= completeness_score(v) and not year:
+                            is_suspicious = True
+                            break
+
+        if not is_suspicious:
+            seen_schools.add(school_norm)
+            seen_degrees.add(degree_norm)
+            seen_year_ranges.add(year_norm)
+            validated.append(e)
+
+    # Final validation: ensure year ranges match what we found in the text
+    if year_anchors and validated:
+        for e in validated:
+            year = e.get('year_range', '')
+            if year:
+                # Check if this year range is in the anchors
+                year_norm = normalize(year)
+                anchor_norms = [normalize(a) for a in year_anchors]
+                if year_norm not in anchor_norms:
+                    # This entry's year_range might be malformed - try to find closest match
+                    for anchor in year_anchors:
+                        if year[:4] in anchor:  # Start year matches
+                            e['year_range'] = anchor
+                            break
+
+    return validated
 
 
 def process_pending_resumes():

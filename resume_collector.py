@@ -7,6 +7,7 @@ Automatically collects job application resumes from Gmail inbox and uploads to d
 import email
 import imaplib
 import io
+import json
 import os
 import re
 import sys
@@ -33,6 +34,12 @@ except ImportError as exc:
         "and a local /supabase folder isn't shadowing it."
     ) from exc
 from PyPDF2 import PdfReader
+
+# Import resume parser to process resumes immediately after extraction
+try:
+    from resume_parser import parse_resume
+except ImportError:
+    parse_resume = None
 
 # Load environment variables from .env if present
 try:
@@ -324,11 +331,37 @@ def extract_sender_info(msg):
     return name, email_addr, position
 
 def extract_text_from_pdf(file_content):
-    """Extract text content from PDF file."""
+    """Extract text content from PDF file.
+    
+    Uses pdfplumber as primary extractor for better multi-column layout preservation.
+    Falls back to PyMuPDF, then PyPDF2 if pdfplumber fails.
+    Returns tuple of (text, extractor_used) or (None, None) on failure.
+    """
     if not file_content:
-        return None
+        return None, None
 
-    # Prefer PyMuPDF for better reading order when available.
+    # Try pdfplumber first (best for multi-column layouts)
+    try:
+        import pdfplumber
+        
+        pdf_file = io.BytesIO(file_content)
+        with pdfplumber.open(pdf_file) as pdf:
+            lines = []
+            for page in pdf.pages:
+                # Extract text while preserving layout
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    lines.append(page_text.strip())
+            
+            text = "\n\n".join(lines).strip()
+            
+            # Verify we got meaningful content (not just a few characters)
+            if text and len(text) > 50:
+                return text, "pdfplumber"
+    except Exception as e:
+        print(f"pdfplumber extraction failed: {e}")
+
+    # Fallback to PyMuPDF for better reading order
     try:
         import fitz  # PyMuPDF
 
@@ -342,11 +375,13 @@ def extract_text_from_pdf(file_content):
                 if t:
                     lines.append(t)
         text = "\n".join(lines).strip()
-        return text or None
-    except Exception:
-        pass
+        
+        if text and len(text) > 50:
+            return text, "pymupdf"
+    except Exception as e:
+        print(f"PyMuPDF extraction failed: {e}")
 
-    # Fallback to PyPDF2
+    # Last resort: PyPDF2
     try:
         pdf_file = io.BytesIO(file_content)
         reader = PdfReader(pdf_file)
@@ -356,10 +391,13 @@ def extract_text_from_pdf(file_content):
             if page_text.strip():
                 chunks.append(page_text.strip())
         text = "\n\n".join(chunks).strip()
-        return text or None
+        
+        if text and len(text) > 50:
+            return text, "pypdf2"
     except Exception as e:
         print(f"PDF extraction failed: {e}")
-        return None
+
+    return None, None
 
 def process_attachments(msg, applicant_id, sender_name, sender_email):
     """Upload resume attachments to Supabase storage."""
@@ -411,23 +449,54 @@ def process_attachments(msg, applicant_id, sender_name, sender_email):
 
                     # Extract text from PDF
                     extracted_text = None
+                    extractor_used = None
                     if filename.lower().endswith('.pdf'):
-                        extracted_text = extract_text_from_pdf(file_content)
+                        extracted_text, extractor_used = extract_text_from_pdf(file_content)
                         if extracted_text:
-                            print(f"Extracted {len(extracted_text)} characters from PDF")
+                            print(f"Extracted {len(extracted_text)} characters from PDF using {extractor_used}")
                         else:
                             print("Warning: Could not extract text from PDF")
 
-                    insert_result = supabase.table('resumes').insert({
+                    # Prepare insert data
+                    insert_data = {
                         'applicant_id': applicant_id,
                         'resume_url': resume_url,
                         'raw_extracted_content': extracted_text,
                         'status': 'pending',
                         'ner_status': 'pending',
                         'uploaded_at': datetime.now().isoformat()
-                    }).execute()
+                    }
+                    
+                    # Add extractor_used if we have it
+                    if extractor_used:
+                        insert_data['extractor_used'] = extractor_used
+                    
+                    insert_result = supabase.table('resumes').insert(insert_data).execute()
                     print(f"Insert result: {insert_result}")
-
+                    
+                    # Get the resume ID from the insert result
+                    if insert_result.data and len(insert_result.data) > 0:
+                        resume_id = insert_result.data[0].get('id')
+                        
+                        # Immediately parse the resume after extraction
+                        if parse_resume and extracted_text:
+                            try:
+                                print(f"Parsing resume {resume_id}...")
+                                parsed_data = parse_resume(extracted_text)
+                                
+                                # Update resume with parsed data
+                                update_data = {
+                                    'parsed_data': json.dumps(parsed_data),
+                                    'cleaned_resume_text': parsed_data.get('cleaned_resume_text'),
+                                    'gpt_cleaning_status': parsed_data.get('gpt_cleaning_status', 'completed'),
+                                    'ner_status': 'completed',
+                                }
+                                
+                                supabase.table('resumes').update(update_data).eq('id', resume_id).execute()
+                                print(f"  Parsed: {parsed_data.get('name')} - {parsed_data.get('email')}")
+                            except Exception as parse_err:
+                                print(f"  Parse error: {parse_err}")
+                    
                     uploaded_files.append(new_filename)
                     print(f"Successfully processed: {new_filename}")
 
