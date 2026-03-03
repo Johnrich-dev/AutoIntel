@@ -491,6 +491,98 @@ export function AdminDashboard() {
                       </p>
                     </div>
                   </div>
+
+                  {/* Transcription Section */}
+                  {selectedApplicant.video?.status === 'submitted' && (
+                    <div className="mb-3 border-t border-gray-200 pt-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                          <FileText className="w-4 h-4" />
+                          Video Transcription
+                        </h4>
+                        {selectedApplicant.video?.transcription_status && (
+                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                            selectedApplicant.video.transcription_status === 'completed'
+                              ? 'bg-green-100 text-green-800'
+                              : selectedApplicant.video.transcription_status === 'processing'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : selectedApplicant.video.transcription_status === 'failed'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {selectedApplicant.video.transcription_status === 'completed' && '✓ Transcribed'}
+                            {selectedApplicant.video.transcription_status === 'processing' && '⏳ Processing...'}
+                            {selectedApplicant.video.transcription_status === 'failed' && '✗ Failed'}
+                            {selectedApplicant.video.transcription_status === 'pending' && '⏸ Pending'}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Transcription Content */}
+                      {selectedApplicant.video?.transcription_status === 'completed' && selectedApplicant.video?.transcription && (
+                        <div className="bg-white border border-gray-200 rounded-lg p-3 max-h-60 overflow-y-auto">
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                            {selectedApplicant.video.transcription}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Segments with Timestamps */}
+                      {selectedApplicant.video?.transcription_status === 'completed' &&
+                       selectedApplicant.video?.transcription_segments &&
+                       selectedApplicant.video.transcription_segments.length > 0 && (
+                        <div className="mt-3">
+                          <h5 className="text-xs font-medium text-gray-500 uppercase mb-2">Timestamped Segments</h5>
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {selectedApplicant.video.transcription_segments.map((segment, idx) => (
+                              <div key={idx} className="flex gap-3 text-sm">
+                                <span className="text-gray-400 font-mono text-xs whitespace-nowrap pt-0.5">
+                                  {Math.floor(segment.start / 60)}:{(segment.start % 60).toString().padStart(2, '0')}
+                                </span>
+                                <p className="text-gray-700">{segment.text}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Error Message */}
+                      {selectedApplicant.video?.transcription_status === 'failed' && selectedApplicant.video?.transcription_error && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                          <p className="text-sm text-red-700">
+                            <span className="font-medium">Error:</span> {selectedApplicant.video.transcription_error}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Processing Status */}
+                      {selectedApplicant.video?.transcription_status === 'processing' && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-center gap-2">
+                          <div className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />
+                          <p className="text-sm text-yellow-700">Transcription is being processed...</p>
+                        </div>
+                      )}
+
+                      {/* Pending Status */}
+                      {(!selectedApplicant.video?.transcription_status || selectedApplicant.video?.transcription_status === 'pending') && (
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                          <p className="text-sm text-gray-600">Transcription not started yet.</p>
+                          {selectedApplicant.video?.video_url && (
+                            <button
+                              onClick={() => {
+                                // Trigger transcription processing
+                                console.log('Trigger transcription for:', selectedApplicant.id);
+                                alert('Transcription processing would be triggered here');
+                              }}
+                              className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                              Start Transcription →
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {selectedApplicant.video?.status === 'pending' && (
                     <button
                       onClick={() =>

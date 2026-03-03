@@ -126,6 +126,16 @@ export interface VideoAssessment {
   status: string;
   submitted_at: string | null;
   created_at: string;
+  // Transcription fields
+  transcription?: string | null;
+  transcription_status?: string | null;
+  transcription_error?: string | null;
+  transcribed_at?: string | null;
+  transcription_segments?: Array<{
+    start: number;
+    end: number;
+    text: string;
+  }> | null;
 }
 
 export interface PersonalityTest {

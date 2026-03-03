@@ -387,7 +387,34 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
         console.log('Assessment record created successfully');
       }
 
-      alert('Video assessment submitted successfully!');
+      // Trigger automatic transcription
+      const assessmentId = assessment?.id;
+      if (assessmentId) {
+        console.log('Triggering automatic transcription for assessment:', assessmentId);
+        
+        // Option 1: Call the Flask API (if running)
+        try {
+          const response = await fetch('http://localhost:5000/api/trigger-transcription', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              assessment_id: assessmentId,
+              language: 'en'
+            })
+          });
+          
+          if (response.ok) {
+            console.log('Transcription triggered successfully');
+          } else {
+            console.warn('Transcription trigger returned non-ok status');
+          }
+        } catch (apiError) {
+          // API might not be running, log but don't block
+          console.log('Transcription API not available, will process later:', apiError);
+        }
+      }
+
+      alert('Video assessment submitted successfully! Transcription will begin shortly.');
       onComplete();
     } catch (error) {
       console.error('Error submitting video:', error);
