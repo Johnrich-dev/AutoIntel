@@ -1023,16 +1023,97 @@ def parse_projects_from_lines(lines: list[str], is_section_block: bool = False) 
     projects: list[dict] = []
     current = None
 
+    # HARD BOUNDARY: Stop parsing projects immediately if these headers appear
+    stop_headers = {
+        'achievements', 'experience', 'education', 'skills', 'trainings',
+        'seminars', 'certificates', 'references', 'referees',
+        'work experience', 'professional experience', 'employment history',
+        'technical skills', 'hard skills', 'soft skills', 'character reference',
+        'professional reference', 'academic achievements'
+    }
+
     # Role keywords that should be treated as project details, not new projects
     role_keywords = ['developer', 'designer', 'role', 'ui/ux', 'front-end', 'back-end', 'engineer',
                      'leader', 'manager', 'coordinator', 'member', 'team lead', 'programmer',
-                     'game designer', 'game developer', 'web developer', 'mobile developer']
+                     'game designer', 'game developer', 'web developer', 'mobile developer',
+                     'full-stack', 'backend', 'frontend', 'full stack']
+
+    # Description verbs - lines containing these are likely descriptions, not titles
+    description_verbs = [
+        'developed', 'designed', 'implemented', 'built', 'created', 'automated',
+        'utilized', 'enhanced', 'collaborated', 'contributed', 'worked', 'used',
+        'integrated', 'deployed', 'managed', 'led', 'maintained', 'optimized',
+        'programmed', 'coded', 'wrote', 'fixed', 'tested', 'refactored', 'improved',
+        'assisted', 'helped', 'participated', 'supported', 'learned', 'applied',
+        'configured', 'installed', 'set up', 'updated', 'upgraded', 'monitored',
+        'analyzed', 'researched', 'documented', 'prepared', 'presented', 'demonstrated',
+        'using', 'via', 'through', 'with', 'by', 'for', 'to', 'of', 'in', 'on', 'at'
+    ]
 
     # References indicators - CRITICAL: if we see these, STOP parsing projects immediately
-    # and route remaining content to REFERENCES
     references_indicators = ['references', 'referees', 'character reference', 'professional reference']
     # Exact match patterns (to avoid matching words containing these)
     references_exact = {'references', 'referees'}
+
+    def _is_title_line(line: str) -> bool:
+        """Check if a line looks like a project title (not a description)."""
+        # Must be reasonably short
+        if len(line) > 80:
+            return False
+        
+        # Must not end with a period
+        if line.rstrip().endswith('.'):
+            return False
+        
+        line_lower = line.lower()
+        words = line_lower.split()
+        if not words:
+            return False
+        
+        first_word = words[0]
+        
+        # Must not start with description verbs
+        if first_word in description_verbs:
+            return False
+        
+        # Must not contain certain prepositions/article patterns that indicate descriptions
+        # Project titles are typically noun phrases
+        description_indicators = [' using ', ' via ', ' through ', ' with ', ' by ', ' for ',
+                                   ' to ', ' of ', ' in ', ' on ', ' at ', ' from ', ' as ',
+                                   ' and ', ' or ', ' but ', ' that ', ' which ', ' who ',
+                                   ' was ', ' were ', ' is ', ' are ', ' been ', ' have ',
+                                   ' this ', ' these ', ' those ', ' there ', ' where ',
+                                   ' created', ' built', ' developed', ' designed', ' implemented']
+        for indicator in description_indicators:
+            if indicator in line_lower:
+                return False
+        
+        # Must not be contact info
+        if '@' in line or re.search(r'\+?\d{10,}', line):
+            return False
+        
+        # Project titles typically don't have more than 6 words
+        if len(words) > 6:
+            return False
+        
+        # Project titles typically have at least 2 words (unless it's a proper name like "Lambda")
+        if len(words) < 2:
+            # Single word titles are only valid if they look like proper nouns (capitalized)
+            if not line[0].isupper():
+                return False
+        
+        # Project titles typically don't start with generic words like "some", "various", "multiple"
+        generic_starters = ['some', 'various', 'multiple', 'several', 'certain', 'many', 'few',
+                           'description', 'details', 'information', 'overview', 'summary']
+        if first_word in generic_starters:
+            return False
+        
+        return True
+
+    def _is_role_line(line: str) -> bool:
+        """Check if a line looks like a role/title."""
+        line_lower = line.lower()
+        return any(w in line_lower for w in role_keywords)
 
     for i, ln in enumerate(lines):
         cur = ln.strip()
@@ -1041,6 +1122,22 @@ def parse_projects_from_lines(lines: list[str], is_section_block: bool = False) 
 
         cur_lower = cur.lower()
         
+        # HARD BOUNDARY FIX: Check for section headers that should stop project parsing
+        # Use exact match or contains check for multi-word headers
+        is_stop_header = cur_lower in stop_headers
+        if not is_stop_header:
+            # Check for partial matches for multi-word headers
+            for header in stop_headers:
+                if ' ' in header and header in cur_lower:
+                    is_stop_header = True
+                    break
+        
+        if is_stop_header:
+            if current:
+                projects.append(current)
+            # Stop immediately - do not parse further
+            break
+
         # CRITICAL FIX: Check for References section header
         # Stop IMMEDIATELY at References (prevent section leakage)
         # Use exact match to avoid false positives
@@ -1057,11 +1154,11 @@ def parse_projects_from_lines(lines: list[str], is_section_block: bool = False) 
             break
 
         # Check if this looks like a role line (should be details of previous project)
-        is_role_line = any(w in cur_lower for w in role_keywords)
+        is_role = _is_role_line(cur)
 
-        # Check if this looks like a new project title (short line, no role keywords)
-        # Also exclude lines that look like contact info
-        if len(cur) <= 60 and not is_role_line and not '@' in cur and not re.search(r'\+?\d{10,}', cur):
+        # Check if this looks like a new project title
+        # Title heuristic: short, no period at end, doesn't start with description verbs
+        if _is_title_line(cur) and not is_role:
             # Save previous project
             if current:
                 projects.append(current)
@@ -1070,8 +1167,8 @@ def parse_projects_from_lines(lines: list[str], is_section_block: bool = False) 
         else:
             # This is a description/detail line OR a role line - add to current project
             if not current:
-                # No current project, create one
-                current = {'name': cur, 'details': []}
+                # No current project, skip this line (don't create project from description)
+                continue
             else:
                 current['details'].append(cur)
 
@@ -1090,10 +1187,6 @@ def parse_projects_from_lines(lines: list[str], is_section_block: bool = False) 
         if '@' in name or re.search(r'\+?\d{10,}', name):
             continue
         if any(kw in name_lower for kw in references_indicators):
-            continue
-        # Skip if it looks like a person name pattern (First Last)
-        words = name.split()
-        if len(words) == 2 and all(w[0].isupper() for w in words if w):
             continue
         filtered_projects.append(p)
 
