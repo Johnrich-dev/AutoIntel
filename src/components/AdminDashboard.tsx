@@ -135,7 +135,7 @@ export function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="h-screen bg-gray-50 flex overflow-hidden">
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div 
@@ -145,8 +145,8 @@ export function AdminDashboard() {
       )}
 
       {/* Sidebar */}
-      <aside 
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col transform transition-transform duration-300 ease-in-out ${
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col transform transition-transform duration-300 ease-in-out ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
@@ -206,7 +206,7 @@ export function AdminDashboard() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 lg:ml-64 overflow-hidden">
         {/* Mobile Header with Hamburger */}
         <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -224,7 +224,7 @@ export function AdminDashboard() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 p-4 lg:p-8 overflow-auto">
+        <div className="flex-1 p-4 lg:p-8 overflow-y-auto">
           {error && (
             <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               {error}
