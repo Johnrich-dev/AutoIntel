@@ -1,5 +1,5 @@
 /*
-  # SentinelAI Automated Hiring System Schema
+  # AutoIntel Automated Hiring System Schema
 
   1. New Tables
     - `applicants`

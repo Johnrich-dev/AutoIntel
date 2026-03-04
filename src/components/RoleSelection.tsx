@@ -14,7 +14,7 @@ export function RoleSelection({ onSelectApplicant, onSelectAdmin }: RoleSelectio
             <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
               <Shield className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">SentinelAI</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">AutoIntel</h1>
             <p className="text-gray-600">Automated Hiring System</p>
             <p className="text-sm text-gray-500 mt-2">Select your role to continue</p>
           </div>

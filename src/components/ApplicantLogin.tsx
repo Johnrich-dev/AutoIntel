@@ -35,7 +35,7 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
             <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
               <Lock className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">SentinelAI</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">AutoIntel</h1>
             <p className="text-gray-600">Automated Hiring System</p>
           </div>
 

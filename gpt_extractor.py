@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-GPT-based Resume Extractor for SentinelAI
+GPT-based Resume Extractor for AutoIntel
 
 Two modes of operation:
 1. clean_with_gpt() - Cleans/reorganizes messy PDF text before BERT NER

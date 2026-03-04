@@ -131,7 +131,7 @@ export function AdminDashboard() {
                 <Users className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">SentinelAI Admin Dashboard</h1>
+                <h1 className="text-2xl font-bold text-gray-900">AutoIntel Admin Dashboard</h1>
                 <p className="text-sm text-gray-600">Manage applicants and review assessments</p>
               </div>
             </div>

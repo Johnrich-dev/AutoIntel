@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Resume Parser for SentinelAI
+Resume Parser for AutoIntel
 Parses raw extracted resume content into structured JSON data using BERT NER.
 GPT is used as a preprocessing layer to clean/reorganize messy PDF text extraction.
 """
@@ -3322,6 +3322,6 @@ def process_pending_resumes():
 
 
 if __name__ == "__main__":
-    print("Starting Resume Parser for SentinelAI...")
+    print("Starting Resume Parser for AutoIntel...")
     process_pending_resumes()
     print("Resume parsing completed.")

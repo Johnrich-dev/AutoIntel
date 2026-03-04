@@ -84,7 +84,7 @@ export function RulesAndTerms({ onAccept }: RulesAndTermsProps) {
               <h2 className="text-lg font-semibold text-gray-900 mb-2">Data Privacy & Usage</h2>
               <p className="text-gray-700 leading-relaxed mb-2">
                 Your assessment data, including video recordings and test responses, will be processed
-                by SentinelAI's automated hiring system. This data will be used solely for evaluation
+                by AutoIntel's automated hiring system. This data will be used solely for evaluation
                 purposes and shared only with authorized hiring personnel.
               </p>
               <p className="text-gray-700 leading-relaxed">
@@ -126,7 +126,7 @@ export function RulesAndTerms({ onAccept }: RulesAndTermsProps) {
               />
               <span className="text-sm text-gray-700">
                 I have read and agree to the assessment rules and terms. I understand that my data
-                will be processed by SentinelAI's automated hiring system and consent to this processing.
+                will be processed by AutoIntel's automated hiring system and consent to this processing.
               </span>
             </label>
           </div>
