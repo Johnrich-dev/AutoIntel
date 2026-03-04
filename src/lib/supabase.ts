@@ -154,3 +154,53 @@ export interface AdminAction {
   notes: string | null;
   created_at: string;
 }
+
+// ============================================================================
+// AutoIntel Recruitment System Types
+// ============================================================================
+
+export interface JobPosting {
+  job_id: string;
+  title: string;
+  description: string | null;
+  role_family: string | null;
+  skills: string[];
+  keywords: string[];
+  required_education: string[];
+  expected_projects: string[];
+  preferred_certifications: string[];
+  min_years_experience: number | null;
+  max_years_experience: number | null;
+  source: 'dataset' | 'admin';
+  is_active: boolean;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScoringSettings {
+  settings_id: string;
+  experience_weight: number;
+  skills_weight: number;
+  education_weight: number;
+  projects_weight: number;
+  qualified_threshold: number;
+  review_threshold: number;
+  baseline_project_score: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Form input types for creating/updating jobs
+export interface JobPostingFormData {
+  title: string;
+  description: string;
+  role_family: string;
+  skills: string[];
+  keywords: string[];
+  required_education: string[];
+  expected_projects: string[];
+  preferred_certifications: string[];
+  min_years_experience: number | '';
+  max_years_experience: number | '';
+}

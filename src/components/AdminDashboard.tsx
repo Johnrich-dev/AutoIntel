@@ -1,4 +1,6 @@
-import { Calendar, CheckCircle, ClipboardList, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, XCircle, Briefcase, BarChart3 } from 'lucide-react';
+import { Calendar, CheckCircle, ClipboardList, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, XCircle, Briefcase, BarChart3, Sliders } from 'lucide-react';
+import { AdminJobManagement } from './AdminJobManagement';
+import { AdminScoringSettings } from './AdminScoringSettings';
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Applicant, PersonalityTest, Resume, ResumeParsedData, getSupabaseAdminClient, VideoAssessment } from '../lib/supabase';
@@ -25,11 +27,14 @@ const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'applicants', label: 'Applicants', icon: Users },
   { id: 'shortlisted', label: 'Shortlisted', icon: CheckCircle },
-  { id: 'positions', label: 'Job Positions', icon: Briefcase },
+  { id: 'job-management', label: 'Job Management', icon: Briefcase },
+  { id: 'scoring-settings', label: 'Scoring Settings', icon: Sliders },
   { id: 'assessments', label: 'Assessments', icon: ClipboardList },
   { id: 'reports', label: 'Reports', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
+
+type MenuId = typeof menuItems[number]['id'];
 
 export function AdminDashboard() {
   const { logout } = useAuth();
@@ -40,7 +45,7 @@ export function AdminDashboard() {
   const [filter, setFilter] = useState<'all' | 'filtered' | 'unfiltered'>('all');
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeMenu, setActiveMenu] = useState('applicants');
+  const [activeMenu, setActiveMenu] = useState<MenuId>('applicants');
 
   useEffect(() => {
     loadApplicants();
@@ -224,7 +229,11 @@ export function AdminDashboard() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 p-4 lg:p-8 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto">
+          {activeMenu === 'job-management' && <AdminJobManagement />}
+          {activeMenu === 'scoring-settings' && <AdminScoringSettings />}
+          {(activeMenu === 'applicants' || activeMenu === 'dashboard' || activeMenu === 'shortlisted' || activeMenu === 'assessments' || activeMenu === 'reports' || activeMenu === 'settings') && (
+            <div className="p-4 lg:p-8">
           {error && (
             <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               {error}
@@ -325,6 +334,8 @@ export function AdminDashboard() {
               </table>
             </div>
           </div>
+        </div>
+          )}
         </div>
       </main>
 

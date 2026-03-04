@@ -55,39 +55,48 @@ def get_supabase_client() -> Client:
 
 def validate_job_data(job: Dict[str, Any]) -> tuple[bool, Optional[str]]:
     """Validate a single job record."""
-    required_fields = ['job_id', 'title']
+    # Support both lowercase and capitalized field names
+    job_id = job.get('job_id') or job.get('JobID')
+    title = job.get('title') or job.get('Title')
     
-    for field in required_fields:
-        if field not in job or not job[field]:
-            return False, f"Missing required field: {field}"
+    if not job_id:
+        return False, "Missing required field: job_id (or JobID)"
+    if not title:
+        return False, "Missing required field: title (or Title)"
     
     return True, None
 
 
 def transform_job_record(job: Dict[str, Any]) -> Dict[str, Any]:
     """Transform ETL job record to database format."""
+    # Get fields with support for both lowercase and capitalized names
+    job_id = job.get('job_id') or job.get('JobID', '')
+    title = job.get('title') or job.get('Title', '')
+    description = job.get('description') or job.get('Responsibilities') or job.get('JobSummary') or None
+    role_family = job.get('role_family') or job.get('roleFamily') or job.get('RoleFamily') or 'General'
+    
     # Handle skills - could be a string or list
-    skills = job.get('skills', [])
+    skills = job.get('skills') or job.get('Skills') or []
     if isinstance(skills, str):
         skills = [s.strip() for s in skills.split(',') if s.strip()]
     
     # Handle keywords - could be a string or list
-    keywords = job.get('keywords', [])
+    keywords = job.get('keywords') or job.get('Keywords') or []
     if isinstance(keywords, str):
         keywords = [k.strip() for k in keywords.split(',') if k.strip()]
     
     # Handle education - ensure it's a list
-    required_education = job.get('required_education', [])
+    required_education = job.get('required_education') or job.get('requiredEducation') or job.get('RequiredEducation') or []
     if isinstance(required_education, str):
         required_education = [e.strip() for e in required_education.split(',') if e.strip()]
     
     # Handle projects - ensure it's a list
-    expected_projects = job.get('expected_projects', [])
+    expected_projects = job.get('expected_projects') or job.get('expectedProjects') or job.get('ExpectedProjects') or []
     if isinstance(expected_projects, str):
         expected_projects = [p.strip() for p in expected_projects.split(',') if p.strip()]
     
     # Handle certifications - ensure it's a list
-    preferred_certifications = job.get('preferred_certifications', [])
+    preferred_certifications = job.get('preferred_certifications') or job.get('preferredCertifications') or job.get('PreferredCertifications') or []
     if isinstance(preferred_certifications, str):
         preferred_certifications = [c.strip() for c in preferred_certifications.split(',') if c.strip()]
     
@@ -121,10 +130,10 @@ def transform_job_record(job: Dict[str, Any]) -> Dict[str, Any]:
             pass
     
     return {
-        'job_id': str(job['job_id']),
-        'title': str(job['title']),
-        'description': job.get('description') or job.get('job_summary') or None,
-        'role_family': job.get('role_family') or job.get('job_family') or None,
+        'job_id': str(job_id),
+        'title': str(title),
+        'description': description,
+        'role_family': role_family,
         'skills': json.dumps(skills) if skills else '[]',
         'keywords': json.dumps(keywords) if keywords else '[]',
         'required_education': json.dumps(required_education) if required_education else '[]',
