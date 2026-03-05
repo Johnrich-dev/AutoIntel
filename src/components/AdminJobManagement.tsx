@@ -621,8 +621,14 @@ export function AdminJobManagement() {
                                 {job.title}
                               </div>
                               <div className="text-sm text-gray-500">
-                                {job.skills.slice(0, 3).map(s => s).join(', ')}
-                                {job.skills.length > 3 && ` +${job.skills.length - 3} more`}
+                                {Array.isArray(job.skills) && job.skills.length > 0 ? (
+                                  <>
+                                    {job.skills.slice(0, 3).join(', ')}
+                                    {job.skills.length > 3 && ` +${job.skills.length - 3} more`}
+                                  </>
+                                ) : (
+                                  '-'
+                                )}
                               </div>
                             </div>
                           </div>
@@ -706,7 +712,7 @@ export function AdminJobManagement() {
                                 </div>
                               )}
                               
-                              {job.skills.length > 0 && (
+                              {Array.isArray(job.skills) && job.skills.length > 0 && (
                                 <div>
                                   <h4 className="text-xs font-medium text-gray-500 uppercase mb-1">Skills ({job.skills.length})</h4>
                                   <div className="flex flex-wrap gap-1">
@@ -719,7 +725,7 @@ export function AdminJobManagement() {
                                 </div>
                               )}
                               
-                              {job.keywords.length > 0 && (
+                              {Array.isArray(job.keywords) && job.keywords.length > 0 && (
                                 <div>
                                   <h4 className="text-xs font-medium text-gray-500 uppercase mb-1">Keywords ({job.keywords.length})</h4>
                                   <div className="flex flex-wrap gap-1">
@@ -732,7 +738,7 @@ export function AdminJobManagement() {
                                 </div>
                               )}
                               
-                              {job.required_education.length > 0 && (
+                              {Array.isArray(job.required_education) && job.required_education.length > 0 && (
                                 <div>
                                   <h4 className="text-xs font-medium text-gray-500 uppercase mb-1">Required Education</h4>
                                   <ul className="text-sm text-gray-700 space-y-1">
@@ -743,7 +749,7 @@ export function AdminJobManagement() {
                                 </div>
                               )}
                               
-                              {job.expected_projects.length > 0 && (
+                              {Array.isArray(job.expected_projects) && job.expected_projects.length > 0 && (
                                 <div>
                                   <h4 className="text-xs font-medium text-gray-500 uppercase mb-1">Expected Projects</h4>
                                   <ul className="text-sm text-gray-700 space-y-1">
@@ -754,7 +760,7 @@ export function AdminJobManagement() {
                                 </div>
                               )}
                               
-                              {job.preferred_certifications.length > 0 && (
+                              {Array.isArray(job.preferred_certifications) && job.preferred_certifications.length > 0 && (
                                 <div>
                                   <h4 className="text-xs font-medium text-gray-500 uppercase mb-1">Preferred Certifications</h4>
                                   <ul className="text-sm text-gray-700 space-y-1">

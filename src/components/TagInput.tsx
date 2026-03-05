@@ -19,6 +19,9 @@ export function TagInput({
   className = '',
 }: TagInputProps) {
   const [inputValue, setInputValue] = useState('');
+  
+  // Ensure tags is always an array
+  const safeTags = Array.isArray(tags) ? tags : [];
 
   // Normalize a tag: lowercase, trim, remove extra spaces
   const normalizeTag = (tag: string): string => {
@@ -32,15 +35,15 @@ export function TagInput({
     const normalizedTag = normalizeTag(rawTag);
     
     if (!normalizedTag) return;
-    if (tags.includes(normalizedTag)) return; // Avoid duplicates
-    if (tags.length >= maxTags) return;
+    if (safeTags.includes(normalizedTag)) return; // Avoid duplicates
+    if (safeTags.length >= maxTags) return;
 
-    onChange([...tags, normalizedTag]);
+    onChange([...safeTags, normalizedTag]);
     setInputValue('');
   };
 
   const removeTag = (index: number) => {
-    onChange(tags.filter((_, i) => i !== index));
+    onChange(safeTags.filter((_, i) => i !== index));
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -64,12 +67,12 @@ export function TagInput({
     <div className={`space-y-2 ${className}`}>
       <label className="block text-sm font-medium text-gray-700">
         {label}
-        <span className="text-gray-400 text-xs ml-2">({tags.length}/{maxTags})</span>
+        <span className="text-gray-400 text-xs ml-2">({safeTags.length}/{maxTags})</span>
       </label>
       
       <div className="min-h-[100px] p-2 border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
         <div className="flex flex-wrap gap-2 mb-2">
-          {tags.map((tag, index) => (
+          {safeTags.map((tag, index) => (
             <span
               key={`${tag}-${index}`}
               className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded-md"
