@@ -1,6 +1,10 @@
 import { Calendar, CheckCircle, ClipboardList, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, XCircle, Briefcase, BarChart3, Sliders, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AdminJobManagement } from './AdminJobManagement';
 import { AdminScoringSettings } from './AdminScoringSettings';
+import { DashboardLanding } from './DashboardLanding';
+import { ApplicantsList } from './ApplicantsList';
+import { ReportsDashboard } from './ReportsDashboard';
+import { AdminSettings } from './AdminSettings';
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Applicant, PersonalityTest, Resume, ResumeParsedData, getSupabaseAdminClient, VideoAssessment } from '../lib/supabase';
@@ -46,7 +50,7 @@ export function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeMenu, setActiveMenu] = useState<MenuId>('applicants');
+  const [activeMenu, setActiveMenu] = useState<MenuId>('dashboard');
 
   useEffect(() => {
     loadApplicants();
@@ -243,9 +247,13 @@ export function AdminDashboard() {
 
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
+          {activeMenu === 'dashboard' && <DashboardLanding applicants={applicants} onMenuChange={setActiveMenu} />}
+          {activeMenu === 'applicants' && <ApplicantsList applicants={applicants} />}
+          {activeMenu === 'reports' && <ReportsDashboard applicants={applicants} />}
+          {activeMenu === 'settings' && <AdminSettings />}
           {activeMenu === 'job-management' && <AdminJobManagement />}
           {activeMenu === 'scoring-settings' && <AdminScoringSettings />}
-          {(activeMenu === 'applicants' || activeMenu === 'dashboard' || activeMenu === 'shortlisted' || activeMenu === 'assessments' || activeMenu === 'reports' || activeMenu === 'settings') && (
+          {(activeMenu === 'shortlisted' || activeMenu === 'assessments') && (
             <div className="p-4 lg:p-8">
           {error && (
             <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
