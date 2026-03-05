@@ -502,7 +502,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
             <AlertCircle className="w-6 h-6 text-blue-600" />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900">Recruitment Pipeline Status</h3>
+            <h3 className="text-lg font-bold text-gray-900">Recruitment Status</h3>
             <p className="text-gray-600 mt-1">
               You have <span className="font-semibold text-blue-600">{resumeStages.pending}</span> resumes pending review and{' '}
               <span className="font-semibold text-orange-600">{testStages.notStarted}</span> candidates waiting to complete their assessments.
