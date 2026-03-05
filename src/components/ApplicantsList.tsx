@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
   Filter, 
@@ -25,11 +25,11 @@ import {
   User,
   ArrowUpDown,
   CalendarDays,
-  Briefcase,
   Award,
   Tag
 } from 'lucide-react';
-import { Applicant, Resume, VideoAssessment, PersonalityTest, ResumeParsedData } from '../lib/supabase';
+import { Applicant, Resume, VideoAssessment, PersonalityTest, ResumeParsedData, ScoringSettings } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { ApplicantDetailModal } from './ApplicantDetailModal';
 
 interface ApplicantWithDetails extends Applicant {
@@ -54,26 +54,60 @@ function getParsedResumeData(resume: Resume | undefined): ResumeParsedData | nul
   }
 }
 
-// Calculate resume score (mock algorithm - can be replaced with actual scoring)
-function calculateResumeScore(resume?: Resume): number {
+// Default scoring settings
+const DEFAULT_SCORING_SETTINGS: ScoringSettings = {
+  settings_id: 'default',
+  experience_weight: 40,
+  skills_weight: 30,
+  education_weight: 20,
+  projects_weight: 10,
+  qualified_threshold: 80,
+  review_threshold: 60,
+  baseline_project_score: 2,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+};
+
+// Calculate resume score using HR-configurable settings
+function calculateResumeScore(resume?: Resume, settings?: ScoringSettings | null): number {
   if (!resume || !resume.parsed_data) return 0;
   const parsed = getParsedResumeData(resume);
   if (!parsed) return 0;
   
-  let score = 0;
-  // Skills diversity
-  if (parsed.skills?.hard_skills?.length) score += Math.min(parsed.skills.hard_skills.length * 5, 30);
-  if (parsed.skills?.soft_skills?.length) score += Math.min(parsed.skills.soft_skills.length * 3, 15);
-  // Experience
-  if (parsed.experience?.length) score += Math.min(parsed.experience.length * 5, 20);
-  // Education
-  if (parsed.education?.length) score += Math.min(parsed.education.length * 5, 15);
-  // Projects
-  if (parsed.projects?.length) score += Math.min(parsed.projects.length * 4, 12);
-  // Trainings
-  if (parsed.trainings?.length) score += Math.min(parsed.trainings.length * 3, 8);
+  // Use HR settings or defaults
+  const config = settings || DEFAULT_SCORING_SETTINGS;
   
-  return Math.min(Math.round(score), 100);
+  // Calculate raw scores for each category (0-100 scale)
+  let skillsScore = 0;
+  let experienceScore = 0;
+  let educationScore = 0;
+  let projectsScore = 0;
+  
+  // Skills: Based on number of skills (max 20 skills = 100 points)
+  const totalSkills = (parsed.skills?.hard_skills?.length || 0) + (parsed.skills?.soft_skills?.length || 0);
+  skillsScore = Math.min((totalSkills / 20) * 100, 100);
+  
+  // Experience: Based on number of experiences (max 5 experiences = 100 points)
+  experienceScore = Math.min(((parsed.experience?.length || 0) / 5) * 100, 100);
+  
+  // Education: Based on number of education entries (max 3 entries = 100 points)
+  educationScore = Math.min(((parsed.education?.length || 0) / 3) * 100, 100);
+  
+  // Projects: Based on number of projects relative to baseline
+  const projectCount = parsed.projects?.length || 0;
+  projectsScore = projectCount >= config.baseline_project_score
+    ? Math.min((projectCount / config.baseline_project_score) * 100, 100)
+    : (projectCount / config.baseline_project_score) * 50; // Below baseline gives partial credit
+  
+  // Calculate weighted total using HR settings
+  const weightedScore = (
+    (skillsScore * (config.skills_weight / 100)) +
+    (experienceScore * (config.experience_weight / 100)) +
+    (educationScore * (config.education_weight / 100)) +
+    (projectsScore * (config.projects_weight / 100))
+  );
+  
+  return Math.min(Math.round(weightedScore), 100);
 }
 
 // Calculate video assessment score
@@ -148,6 +182,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
   const [selectedApplicant, setSelectedApplicant] = useState<ApplicantWithDetails | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [applicantTags, setApplicantTags] = useState<Record<string, string[]>>({});
+  const [scoringSettings, setScoringSettings] = useState<ScoringSettings | null>(null);
   const itemsPerPage = 10;
 
   // Load tags from localStorage
@@ -158,10 +193,36 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
     }
   });
 
+  // Fetch scoring settings from database
+  useEffect(() => {
+    async function fetchScoringSettings() {
+      try {
+        const { data, error } = await supabase
+          .from('scoring_settings')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (error) {
+          console.warn('Failed to fetch scoring settings, using defaults:', error);
+          setScoringSettings(DEFAULT_SCORING_SETTINGS);
+        } else if (data) {
+          setScoringSettings(data);
+        }
+      } catch (err) {
+        console.error('Error fetching scoring settings:', err);
+        setScoringSettings(DEFAULT_SCORING_SETTINGS);
+      }
+    }
+    
+    fetchScoringSettings();
+  }, []);
+
   // Process applicants with scores
   const processedApplicants = useMemo(() => {
     return applicants.map(applicant => {
-      const resumeScore = calculateResumeScore(applicant.resume);
+      const resumeScore = calculateResumeScore(applicant.resume, scoringSettings);
       const videoScore = calculateVideoScore(applicant.video);
       const profileFit = calculateProfileFit(applicant.test);
       const overall = calculateOverallScore(resumeScore, videoScore, profileFit);
@@ -182,7 +243,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
         status,
       };
     });
-  }, [applicants]);
+  }, [applicants, scoringSettings]);
 
   // Filter and sort
   const filteredApplicants = useMemo(() => {
@@ -302,73 +363,74 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
           </p>
         </div>
         
-        {/* Bulk Actions */}
-        {selectedApplicants.size > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">{selectedApplicants.size} selected:</span>
-            <button 
-              onClick={() => handleBulkAction('email')}
-              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Mail className="w-4 h-4" />
-              Email
-            </button>
-            <button 
-              onClick={() => handleBulkAction('export')}
-              className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
-            <button 
-              onClick={() => handleBulkAction('delete')}
-              className="flex items-center gap-2 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Search and Filters */}
-      <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm space-y-4">
-        <div className="flex flex-col lg:flex-row gap-4">
+        {/* Search, Filter, and Refresh */}
+        <div className="flex flex-col sm:flex-row gap-2">
           {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search by name, email, or position..."
+              placeholder="Search applicants..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
             />
           </div>
           
           {/* Filter Toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2.5 border rounded-lg transition-colors ${
+            className={`flex items-center justify-center gap-2 px-3 py-2 border rounded-lg transition-colors ${
               showFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
             }`}
           >
             <Filter className="w-4 h-4" />
-            Filters
+            <span className="sm:hidden">Filters</span>
             {statusFilter !== 'all' && (
-              <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">1</span>
+              <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">1</span>
             )}
           </button>
           
           {/* Refresh */}
           <button
             onClick={() => window.location.reload()}
-            className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
             title="Refresh data"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
+      </div>
+
+      {/* Bulk Actions & Filters */}
+      <div className="space-y-4">
+        {/* Bulk Actions */}
+        {selectedApplicants.size > 0 && (
+          <div className="flex items-center gap-2 bg-blue-50 p-3 rounded-lg">
+            <span className="text-sm text-gray-600">{selectedApplicants.size} selected:</span>
+            <button
+              onClick={() => handleBulkAction('email')}
+              className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+            >
+              <Mail className="w-4 h-4" />
+              Email
+            </button>
+            <button
+              onClick={() => handleBulkAction('export')}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </button>
+            <button
+              onClick={() => handleBulkAction('delete')}
+              className="flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+          </div>
+        )}
         
         {/* Filter Options */}
         {showFilters && (
@@ -544,7 +606,6 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                         <div className="min-w-0">
                           <p className="font-semibold text-gray-900">{applicant.name}</p>
                           <div className="flex items-center gap-2 text-sm">
-                            <Briefcase className="w-3.5 h-3.5 text-gray-400" />
                             <span className="text-gray-600">{applicant.position}</span>
                           </div>
                           {/* Tags */}

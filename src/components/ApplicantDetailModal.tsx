@@ -405,22 +405,80 @@ export function ApplicantDetailModal({
 
           {activeTab === 'resume' && parsedResume && (
             <div className="space-y-6">
+              {/* Resume File Download */}
+              {applicant.resume?.resume_url && (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900">Resume File</h3>
+                        <p className="text-sm text-gray-500">View or download the original resume</p>
+                      </div>
+                    </div>
+                    <a
+                      href={applicant.resume.resume_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      View Resume
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {/* Education */}
+              {parsedResume.education && parsedResume.education.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <h3 className="font-semibold text-gray-900 mb-3">Education</h3>
+                  <div className="space-y-3">
+                    {parsedResume.education.map((edu, idx) => (
+                      <div key={idx} className="border-l-2 border-emerald-200 pl-4">
+                        <p className="font-medium text-gray-900">{edu.course_or_strand}</p>
+                        <p className="text-sm text-gray-600">{edu.school}</p>
+                        <p className="text-xs text-gray-400">{edu.year_range}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Skills */}
               {parsedResume.skills && (
                 <div className="bg-white rounded-xl border border-gray-200 p-4">
                   <h3 className="font-semibold text-gray-900 mb-3">Skills</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {parsedResume.skills.hard_skills?.map((skill, idx) => (
-                      <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                        {skill}
-                      </span>
-                    ))}
-                    {parsedResume.skills.soft_skills?.map((skill, idx) => (
-                      <span key={idx} className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
+                  
+                  {/* Hard Skills */}
+                  {parsedResume.skills.hard_skills && parsedResume.skills.hard_skills.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Hard Skills</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {parsedResume.skills.hard_skills.map((skill, idx) => (
+                          <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Soft Skills */}
+                  {parsedResume.skills.soft_skills && parsedResume.skills.soft_skills.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Soft Skills</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {parsedResume.skills.soft_skills.map((skill, idx) => (
+                          <span key={idx} className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -440,16 +498,17 @@ export function ApplicantDetailModal({
                 </div>
               )}
 
-              {/* Education */}
-              {parsedResume.education && parsedResume.education.length > 0 && (
+              {/* Projects */}
+              {parsedResume.projects && parsedResume.projects.length > 0 && (
                 <div className="bg-white rounded-xl border border-gray-200 p-4">
-                  <h3 className="font-semibold text-gray-900 mb-3">Education</h3>
-                  <div className="space-y-3">
-                    {parsedResume.education.map((edu, idx) => (
-                      <div key={idx} className="border-l-2 border-emerald-200 pl-4">
-                        <p className="font-medium text-gray-900">{edu.course_or_strand}</p>
-                        <p className="text-sm text-gray-600">{edu.school}</p>
-                        <p className="text-xs text-gray-400">{edu.year_range}</p>
+                  <h3 className="font-semibold text-gray-900 mb-3">Projects</h3>
+                  <div className="space-y-4">
+                    {parsedResume.projects.map((project, idx) => (
+                      <div key={idx} className="border-l-2 border-purple-200 pl-4">
+                        <p className="font-medium text-gray-900">{project.name}</p>
+                        {project.details && (
+                          <p className="text-sm text-gray-600 mt-1">{project.details}</p>
+                        )}
                       </div>
                     ))}
                   </div>
