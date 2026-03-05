@@ -1,4 +1,4 @@
-import { Calendar, CheckCircle, ClipboardList, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, XCircle, Briefcase, BarChart3, Sliders } from 'lucide-react';
+import { Calendar, CheckCircle, ClipboardList, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, XCircle, Briefcase, BarChart3, Sliders, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AdminJobManagement } from './AdminJobManagement';
 import { AdminScoringSettings } from './AdminScoringSettings';
 import { useEffect, useState, useMemo } from 'react';
@@ -45,6 +45,7 @@ export function AdminDashboard() {
   const [filter, setFilter] = useState<'all' | 'filtered' | 'unfiltered'>('all');
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeMenu, setActiveMenu] = useState<MenuId>('applicants');
 
   useEffect(() => {
@@ -151,21 +152,31 @@ export function AdminDashboard() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col transform transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-y-0 left-0 z-50 bg-slate-900 text-white flex flex-col transform transition-all duration-300 ease-in-out ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}
+        } ${sidebarCollapsed ? 'lg:w-20' : 'w-64'}`}
       >
         {/* Sidebar Header - Branding */}
-        <div className="p-6 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+          <div className={`flex items-center gap-3 ${sidebarCollapsed ? 'lg:justify-center lg:w-full' : ''}`}>
+            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
               <Shield className="w-6 h-6 text-white" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-white">AutoIntel</h1>
-              <p className="text-xs text-slate-400">Admin Dashboard</p>
-            </div>
+            {!sidebarCollapsed && (
+              <div className="overflow-hidden whitespace-nowrap">
+                <h1 className="text-lg font-bold text-white">AutoIntel</h1>
+                <p className="text-xs text-slate-400">Admin Dashboard</p>
+              </div>
+            )}
           </div>
+          {/* Collapse/Expand Button - Desktop Only */}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="hidden lg:flex p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+          </button>
         </div>
 
         {/* Navigation Menu */}
@@ -184,10 +195,11 @@ export function AdminDashboard() {
                       activeMenu === item.id
                         ? 'bg-blue-600 text-white'
                         : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
+                    } ${sidebarCollapsed ? 'lg:justify-center' : ''}`}
+                    title={sidebarCollapsed ? item.label : undefined}
                   >
-                    <Icon className="w-5 h-5" />
-                    {item.label}
+                    <Icon className="w-5 h-5 flex-shrink-0" />
+                    {!sidebarCollapsed && <span className="whitespace-nowrap overflow-hidden">{item.label}</span>}
                   </button>
                 </li>
               );
@@ -202,16 +214,17 @@ export function AdminDashboard() {
               logout();
               window.location.href = '/';
             }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors ${sidebarCollapsed ? 'lg:justify-center' : ''}`}
+            title={sidebarCollapsed ? 'Logout' : undefined}
           >
-            <LogOut className="w-5 h-5" />
-            Logout
+            <LogOut className="w-5 h-5 flex-shrink-0" />
+            {!sidebarCollapsed && <span className="whitespace-nowrap overflow-hidden">Logout</span>}
           </button>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 lg:ml-64 overflow-hidden">
+      <main className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
         {/* Mobile Header with Hamburger */}
         <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
