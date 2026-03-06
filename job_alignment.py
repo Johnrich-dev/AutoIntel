@@ -428,11 +428,11 @@ def recommend_jobs(
     Returns:
         List of jobs sorted by match score (highest first) with full details
     """
-    # Get jobs list
-    if fetch_from_db:
-        job_list = fetch_jobs_from_database(limit=100, role_family=role_family)
-    elif jobs:
+    # Get jobs list - prioritize jobs parameter if provided
+    if jobs:
         job_list = jobs
+    elif fetch_from_db:
+        job_list = fetch_jobs_from_database(limit=100, role_family=role_family)
     else:
         print("Error: Either fetch_from_db=True or provide jobs list")
         return []

@@ -5,7 +5,7 @@ interface AuthContextType {
   applicant: Applicant | null;
   accessToken: string | null;
   loading: boolean;
-  login: (token: string) => Promise<boolean>;
+  login: (token: string, email: string) => Promise<boolean>;
   logout: () => void;
   updateApplicant: (updates: Partial<Applicant>) => void;
 }
@@ -58,15 +58,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (token: string): Promise<boolean> => {
+  const login = async (token: string, email: string): Promise<boolean> => {
     setLoading(true);
-    console.log('Attempting login with token:', token);
+    console.log('Attempting login with token:', token, 'email:', email);
     try {
       const client = getSupabaseClient(token);
       const { data, error } = await client
         .from('applicants')
         .select('*')
         .eq('access_token', token)
+        .eq('email', email)
         .maybeSingle();
 
       console.log('Query result - data:', data, 'error:', error);
@@ -87,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.log('Token has expired');
         }
       } else {
-        console.log('No applicant found with this token');
+        console.log('No applicant found with this email and token');
       }
 
       setLoading(false);

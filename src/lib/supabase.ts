@@ -89,6 +89,10 @@ export interface Applicant {
   rules_accepted: boolean;
   rules_accepted_at: string | null;
   created_at: string;
+  // New fields for recruitment workflow
+  status?: string;
+  screening_score?: number;
+  screening_fit_category?: string;
 }
 
 export interface Resume {

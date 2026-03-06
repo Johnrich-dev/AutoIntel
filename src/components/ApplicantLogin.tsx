@@ -1,4 +1,4 @@
-import { Lock } from 'lucide-react';
+import { Lock, Mail } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -7,6 +7,7 @@ interface ApplicantLoginProps {
 }
 
 export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
+  const [email, setEmail] = useState('');
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,12 +18,12 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
     setError('');
     setLoading(true);
 
-    const success = await login(token);
+    const success = await login(token, email);
 
     if (success) {
       onLoginSuccess();
     } else {
-      setError('Invalid or expired access token. Please check your email for the correct token.');
+      setError('Invalid email or access token. Please check your email for the correct credentials.');
     }
     setLoading(false);
   };
@@ -41,7 +42,24 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                <Mail className="w-4 h-4 inline mr-1" />
+                Email Address
+              </label>
+              <input
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email address"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                required
+              />
+            </div>
+
+            <div>
               <label htmlFor="token" className="block text-sm font-medium text-gray-700 mb-2">
+                <Lock className="w-4 h-4 inline mr-1" />
                 Access Token
               </label>
               <input
