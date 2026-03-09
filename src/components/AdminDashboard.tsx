@@ -5,6 +5,7 @@ import { DashboardLanding } from './DashboardLanding';
 import { ApplicantsList } from './ApplicantsList';
 import { ReportsDashboard } from './ReportsDashboard';
 import { AdminSettings } from './AdminSettings';
+import { ShortlistedCandidates } from './ShortlistedCandidates';
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Applicant, PersonalityTest, Resume, ResumeParsedData, getSupabaseAdminClient, VideoAssessment } from '../lib/supabase';
@@ -253,7 +254,8 @@ export function AdminDashboard() {
           {activeMenu === 'settings' && <AdminSettings />}
           {activeMenu === 'job-management' && <AdminJobManagement />}
           {activeMenu === 'scoring-settings' && <AdminScoringSettings />}
-          {(activeMenu === 'shortlisted' || activeMenu === 'assessments') && (
+          {activeMenu === 'shortlisted' && <ShortlistedCandidates applicants={applicants} />}
+          {activeMenu === 'assessments' && (
             <div className="p-4 lg:p-8">
           {error && (
             <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
