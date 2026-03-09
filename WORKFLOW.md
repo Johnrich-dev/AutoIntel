@@ -10,6 +10,7 @@ This document describes the complete recruitment workflow for the AutoIntel syst
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                        STAGE 1: APPLICATION RECEIPT                           │
+│                     (Includes Automatic Screening)                           │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
     Applicant sends email with:
@@ -21,29 +22,45 @@ This document describes the complete recruitment workflow for the AutoIntel syst
     ├── Extracts applicant name from email
     ├── Extracts job title from subject line (e.g., "Application Developer")
     ├── Downloads and parses resume (PDF → text)
-    └── Stores in database: recruitment_applicants table
+    └── Stores in database: applicants + resumes tables
 
     Database Entry Created:
     ├── applicant_id (UUID)
-    ├── applied_job_id (from job title lookup)
     ├── full_name
     ├── email
-    ├── resume_text
+    ├── position (job title from subject)
+    ├── resume_text (raw extracted)
     └── status: "pending_screening"
 
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        STAGE 2: AUTOMATED SCREENING                           │
-└─────────────────────────────────────────────────────────────────────────────────┘
+    ═══════════════════════════════════════════════════════════════════════════
+    AUTOMATIC SCREENING TRIGGERED (Within resume_collector.py)
+    ═══════════════════════════════════════════════════════════════════════════
 
-    System triggers /api/calculate-fit:
-    ├── Input: resume_text + job_description
-    ├── BERT model calculates semantic match score (0-100)
-    └── Output: semantic_score, confidence, fit_category
+    Step 1a: Look up job from job_postings table
+    │   ├── Match position to job title (case-insensitive)
+    │   └── Get job_description for matching
+    │
+    Step 1b: Call screening_service.process_applicant_screening()
+    │   ├── Uses BERT semantic scoring (all-MiniLM-L6-v2)
+    │   ├── Input: resume_text + job_description
+    │   └── Output: semantic_score (0-100), fit_category
+    │
+    Step 1c: Save results to database
+    │   ├── screening_score saved to applicants table
+    │   ├── screening_fit_category saved
+    │   └── status updated: passed_screening / needs_review / failed_screening
+    │
+    Step 1d: Send notification email (automatic)
+        ├── Score >= 80: Send PASS email with access token
+        ├── Score 60-79: Send REVIEW email
+        └── Score < 60: Send FAIL email
+
+    ═══════════════════════════════════════════════════════════════════════════
 
     Scoring Logic:
-    ├── score >= 80 → "Qualified" (PASS)
-    ├── score >= 60 → "Review" (NEEDS REVIEW)
-    └── score < 60 → "Not Qualified" (FAIL)
+    ├── score >= 80 → "Qualified" (PASS) → Email with access token
+    ├── score >= 60 → "Review" (NEEDS REVIEW) → Email notification
+    └── score < 60 → "Not Qualified" (FAIL) → Regret email
 
     Decision Engine:
     ├── IF score >= 80:
@@ -61,8 +78,11 @@ This document describes the complete recruitment workflow for the AutoIntel syst
         └── Trigger FAIL email notification
 
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        STAGE 3: NOTIFICATION (EMAIL)                          │
+│                        STAGE 2: NOTIFICATION (EMAIL)                         │
 └─────────────────────────────────────────────────────────────────────────────────┘
+
+    NOTE: Email is now sent AUTOMATICALLY within resume_collector.py after scoring.
+    This happens in Stage 1 (combined flow).
 
     ╔═══════════════════════════════════════════════════════════════════════════╗
     ║                    IF PASSED SCREENING (Score >= 80)                      ║
@@ -140,7 +160,7 @@ This document describes the complete recruitment workflow for the AutoIntel syst
     ╚═══════════════════════════════════════════════════════════════════════════╝
 
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        STAGE 4: APPLICANT ACCESS                               │
+│                        STAGE 3: APPLICANT ACCESS                               │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
     Applicant logs in with:
@@ -160,7 +180,7 @@ This document describes the complete recruitment workflow for the AutoIntel syst
     └── Progress indicator
 
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        STAGE 5: ASSESSMENTS                                   │
+│                        STAGE 4: ASSESSMENTS                                   │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
     ╔═══════════════════════════════════════════════════════════════════════╗
@@ -203,7 +223,7 @@ This document describes the complete recruitment workflow for the AutoIntel syst
     ╚═══════════════════════════════════════════════════════════════════════╝
 
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        STAGE 6: FINAL REVIEW                                  │
+│                        STAGE 5: FINAL REVIEW                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
     Admin reviews in Dashboard:
@@ -277,11 +297,11 @@ This document describes the complete recruitment workflow for the AutoIntel syst
 
 | Endpoint | Method | Stage | Description |
 |----------|--------|-------|-------------|
-| `/api/calculate-fit` | POST | 2 | Score resume against job |
-| `/api/trigger-email` | POST | 3 | Send pass/fail email |
-| `/api/generate-token` | POST | 3 | Generate access token |
-| `/api/validate-token` | POST | 4 | Validate applicant token |
+| `/api/calculate-fit` | POST | 1 | Score resume against job (BERT semantic) |
+| `/api/trigger-transcription` | POST | 4 | Trigger video transcription (Whisper) |
 | `/api/health` | GET | All | Health check |
+
+**Note**: Email sending and token generation are now done AUTOMATICALLY within resume_collector.py (Stage 1). No separate API calls needed.
 
 ---
 
@@ -289,14 +309,16 @@ This document describes the complete recruitment workflow for the AutoIntel syst
 
 | File | Purpose |
 |------|---------|
-| `resume_collector.py` | Stage 1: Email fetching & resume parsing |
-| `job_alignment.py` | Stage 2: BERT scoring |
-| `scoring_api.py` | Stage 2-3: API endpoints |
-| `email_service.py` | Stage 3: Email sending (NEW) |
-| `token_service.py` | Stage 3-4: Token management (NEW) |
-| `VideoAssessment.tsx` | Stage 5: Video recording |
-| `PersonalityTest.tsx` | Stage 5: Work profiling |
-| `ApplicantLogin.tsx` | Stage 4: Login with token |
+| `resume_collector.py` | Stage 1: Email fetching + AUTOMATIC screening + email notification |
+| `job_alignment.py` | Stage 1: BERT semantic scoring (all-MiniLM-L6-v2) |
+| `screening_service.py` | Stage 1: Orchestrates scoring → decision → notification |
+| `email_service.py` | Stage 1: Sends pass/review/fail emails with tokens |
+| `scoring_api.py` | Optional: Standalone scoring API (not required for auto-flow) |
+| `transcription_service.py` | Stage 4: Video transcription (Whisper) |
+| `VideoAssessment.tsx` | Stage 4: Video recording |
+| `PersonalityTest.tsx` | Stage 4: Work profiling |
+| `ApplicantLogin.tsx` | Stage 3: Login with token |
+| `AdminDashboard.tsx` | Stage 5: Admin review panel |
 
 ---
 

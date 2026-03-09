@@ -41,6 +41,12 @@ try:
 except ImportError:
     parse_resume = None
 
+# Import screening service for automatic resume screening
+try:
+    from screening_service import process_applicant_screening
+except ImportError:
+    process_applicant_screening = None
+
 # Load environment variables from .env if present
 try:
     from dotenv import load_dotenv  # type: ignore
@@ -598,6 +604,58 @@ def process_emails():
                             'sender_email': sender_email,
                             'date_received': date_received
                         })
+
+                # ============================================================
+                # AUTOMATIC SCREENING - Trigger semantic scoring
+                # ============================================================
+                if process_applicant_screening and uploaded_files:
+                    try:
+                        # Get the resume text from database
+                        resume_result = supabase.table('resumes').select(
+                            'id, raw_extracted_content'
+                        ).eq('applicant_id', applicant_id).execute()
+
+                        if resume_result.data and len(resume_result.data) > 0:
+                            resume_text = resume_result.data[0].get('raw_extracted_content')
+
+                            if resume_text:
+                                # Look up job from job_postings based on position
+                                job_result = supabase.table('job_postings').select(
+                                    'job_id, title, description'
+                                ).ilike('title', f'%{position}%').execute()
+
+                                job_id = None
+                                job_title = position
+                                job_description = ""
+
+                                if job_result.data and len(job_result.data) > 0:
+                                    job = job_result.data[0]
+                                    job_id = job.get('job_id')
+                                    job_title = job.get('title', position)
+                                    job_description = job.get('description') or ""
+
+                                if job_description:
+                                    print(f"Triggering automatic screening for {sender_name}...")
+                                    screening_result = process_applicant_screening(
+                                        applicant_id=applicant_id,
+                                        resume_text=resume_text,
+                                        job_id=job_id,
+                                        job_title=job_title,
+                                        job_description=job_description,
+                                        applicant_email=sender_email,
+                                        applicant_name=sender_name,
+                                        supabase_client=supabase
+                                    )
+                                    print(f"Screening result: {screening_result.get('decision')} - Score: {screening_result.get('score')}")
+                                else:
+                                    print(f"No matching job found for position: {position}, skipping screening")
+                            else:
+                                print("No resume text extracted, skipping screening")
+                        else:
+                            print("No resume found for applicant, skipping screening")
+                    except Exception as screening_error:
+                        print(f"Error during automatic screening: {screening_error}")
+                # ============================================================
 
                 mark_as_read(mail, email_id)
                 move_to_processed(mail, email_id)
