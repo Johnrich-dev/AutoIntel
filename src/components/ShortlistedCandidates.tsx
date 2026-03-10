@@ -110,7 +110,14 @@ const DEFAULT_SCORING_SETTINGS: ScoringSettings = {
   updated_at: new Date().toISOString(),
 };
 
-function calculateResumeScore(resume?: Resume, settings?: ScoringSettings | null): number {
+function calculateResumeScore(applicant?: ApplicantWithDetails, settings?: ScoringSettings | null): number {
+  // Use backend screening_score if available (combined semantic + count)
+  if (applicant?.screening_score !== undefined && applicant?.screening_score !== null) {
+    return applicant.screening_score;
+  }
+  
+  // Fallback to count-based calculation if no screening_score
+  const resume = applicant?.resume;
   if (!resume || !resume.parsed_data) return 0;
   const parsed = getParsedResumeData(resume);
   if (!parsed) return 0;
@@ -821,7 +828,7 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
   // Process applicants with scores
   const processedApplicants = useMemo(() => {
     return applicants.map((applicant) => {
-      const resumeScore = calculateResumeScore(applicant.resume, scoringSettings);
+      const resumeScore = calculateResumeScore(applicant, scoringSettings);
       const videoScore = calculateVideoScore(applicant.video);
       const profileFit = calculateProfileFit(applicant.test);
       const overall = calculateOverallScore(resumeScore, videoScore, profileFit);

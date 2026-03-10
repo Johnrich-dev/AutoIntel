@@ -13,6 +13,7 @@ Stage 2: Core Semantic Functions
 import os
 import sys
 import re
+import json
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
@@ -27,6 +28,14 @@ except ImportError:
 MODEL_NAME = "all-MiniLM-L6-v2"  # ~80MB, BERT-distilled, 384-dimensional embeddings
 DEVICE = os.getenv("MODEL_DEVICE", "cpu")  # Use "cuda" if GPU available
 MAX_TEXT_LENGTH = 10000  # Maximum characters to process
+
+# Default scoring weights for count-based calculation
+DEFAULT_COUNT_WEIGHTS = {
+    'skills_weight': 30,
+    'experience_weight': 40,
+    'education_weight': 20,
+    'projects_weight': 10
+}
 
 # Model cache
 _model = None
@@ -466,37 +475,68 @@ def build_job_requirements_text(job_posting: Dict) -> Dict[str, str]:
     Returns:
         Dictionary with requirement texts for each component
     """
+    def parse_jsonb_field(value: Any) -> List[str]:
+        """Parse jsonb field from Supabase, handling various formats."""
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(v) for v in value if v]
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return [str(v) for v in parsed if v]
+                return [str(parsed)]
+            except json.JSONDecodeError:
+                return [value]
+        return [str(value)]
+    
     # Experience requirement
     min_years = job_posting.get('min_years_experience')
     max_years = job_posting.get('max_years_experience')
     if min_years:
-        exp_req = f"{min_years}+ years of relevant work experience"
-        if max_years:
-            exp_req = f"{min_years} to {max_years} years of relevant work experience"
+        try:
+            min_years = float(min_years)
+            exp_req = f"{int(min_years)}+ years of relevant work experience"
+            if max_years:
+                try:
+                    max_years = float(max_years)
+                    exp_req = f"{int(min_years)} to {int(max_years)} years of relevant work experience"
+                except (ValueError, TypeError):
+                    exp_req = f"{int(min_years)}+ years of relevant work experience"
+        except (ValueError, TypeError):
+            exp_req = "relevant work experience"
     else:
         exp_req = "relevant work experience"
     
     # Skills requirement (from skills array or keywords)
     skills = job_posting.get('skills', [])
     keywords = job_posting.get('keywords', [])
-    if skills:
-        skills_req = " ".join(str(s) for s in skills if s)
-    elif keywords:
-        skills_req = " ".join(str(k) for k in keywords if k)
+    
+    # Parse jsonb fields properly
+    skills_list = parse_jsonb_field(skills)
+    keywords_list = parse_jsonb_field(keywords)
+    
+    if skills_list:
+        skills_req = " ".join(skills_list)
+    elif keywords_list:
+        skills_req = " ".join(keywords_list)
     else:
         skills_req = job_posting.get('description', '')[:500] if job_posting.get('description') else ""
     
     # Education requirement
     required_edu = job_posting.get('required_education', [])
-    if required_edu:
-        edu_req = " ".join(str(e) for e in required_edu if e)
+    edu_list = parse_jsonb_field(required_edu)
+    if edu_list:
+        edu_req = " ".join(edu_list)
     else:
         edu_req = "relevant education"
     
     # Projects requirement
     expected_projects = job_posting.get('expected_projects', [])
-    if expected_projects:
-        proj_req = " ".join(str(p) for p in expected_projects if p)
+    projects_list = parse_jsonb_field(expected_projects)
+    if projects_list:
+        proj_req = " ".join(projects_list)
     else:
         proj_req = "relevant projects"
     
@@ -523,14 +563,20 @@ def calculate_component_scores(
     Returns:
         Dictionary with relevance scores (0-100) for each component
     """
+    # Build requirement texts from job
+    job_reqs = build_job_requirements_text(job_posting)
+    
+    # Debug: Print job requirements
+    print(f"[DEBUG] Job requirements: {job_reqs}")
+    
     # Extract texts from resume
     exp_text = extract_experience_text(parsed_resume_json.get('experience', []))
     skills_text = extract_skills_text(parsed_resume_json.get('skills', {}))
     edu_text = extract_education_text(parsed_resume_json.get('education', []))
     proj_text = extract_projects_text(parsed_resume_json.get('projects', []))
     
-    # Build requirement texts from job
-    job_reqs = build_job_requirements_text(job_posting)
+    # Debug: Print resume texts
+    print(f"[DEBUG] Resume exp_text length: {len(exp_text)}, skills_text length: {len(skills_text)}, edu_text length: {len(edu_text)}, proj_text length: {len(proj_text)}")
     
     # Calculate semantic relevance for each component
     results = {}
@@ -613,6 +659,123 @@ def calculate_weighted_score(
     )
     
     return round(weighted_score, 2)
+
+
+def calculate_count_based_score(
+    parsed_resume_json: Dict,
+    weights: Optional[Dict[str, float]] = None,
+    baseline_project_score: int = 2
+) -> Dict[str, Any]:
+    """
+    Calculate count-based score from parsed resume data.
+    This is similar to the frontend scoring logic.
+    
+    Args:
+        parsed_resume_json: Parsed resume data with skills, experience, education, projects
+        weights: Optional weights for scoring
+        baseline_project_score: Minimum projects for full score (default: 2)
+    
+    Returns:
+        Dictionary with count-based score and breakdown
+    """
+    if weights is None:
+        weights = DEFAULT_COUNT_WEIGHTS.copy()
+    
+    # Calculate raw scores for each category (0-100 scale)
+    # Skills: Based on number of skills (max 20 = 100 points)
+    skills_dict = parsed_resume_json.get('skills', {})
+    total_skills = len(skills_dict.get('hard_skills', [])) + len(skills_dict.get('soft_skills', []))
+    skills_score = min((total_skills / 20) * 100, 100)
+    
+    # Experience: Based on number of experiences (max 5 = 100 points)
+    experience_list = parsed_resume_json.get('experience', [])
+    experience_score = min((len(experience_list) / 5) * 100, 100)
+    
+    # Education: Based on number of education entries (max 3 = 100 points)
+    education_list = parsed_resume_json.get('education', [])
+    education_score = min((len(education_list) / 3) * 100, 100)
+    
+    # Projects: Based on number of projects relative to baseline
+    project_list = parsed_resume_json.get('projects', [])
+    project_count = len(project_list)
+    if project_count >= baseline_project_score:
+        projects_score = min((project_count / baseline_project_score) * 100, 100)
+    else:
+        projects_score = (project_count / baseline_project_score) * 50
+    
+    # Calculate weighted total using weights
+    count_score = (
+        skills_score * (weights.get('skills_weight', 30) / 100) +
+        experience_score * (weights.get('experience_weight', 40) / 100) +
+        education_score * (weights.get('education_weight', 20) / 100) +
+        projects_score * (weights.get('projects_weight', 10) / 100)
+    )
+    
+    return {
+        'count_score': round(count_score, 2),
+        'breakdown': {
+            'skills': round(skills_score, 2),
+            'experience': round(experience_score, 2),
+            'education': round(education_score, 2),
+            'projects': round(projects_score, 2)
+        }
+    }
+
+
+def calculate_combined_score(
+    parsed_resume_json: Dict,
+    job_posting: Dict,
+    weights: Optional[Dict[str, float]] = None,
+    semantic_weight: float = 0.6,
+    baseline_project_score: int = 2
+) -> Dict[str, Any]:
+    """
+    Calculate combined score using both semantic and count-based methods.
+    
+    Args:
+        parsed_resume_json: Parsed resume data
+        job_posting: Job posting data
+        weights: Optional weights for scoring
+        semantic_weight: Weight for semantic score (0-1), count weight = 1 - semantic_weight
+        baseline_project_score: Minimum projects for full count score
+    
+    Returns:
+        Dictionary with combined score and breakdown
+    """
+    if weights is None:
+        weights = DEFAULT_COUNT_WEIGHTS.copy()
+    
+    # Calculate semantic score (0-100)
+    semantic_result = calculate_hybrid_job_fit_score(
+        parsed_resume_json=parsed_resume_json,
+        job_posting=job_posting,
+        weights=weights,
+        include_breakdown=True
+    )
+    semantic_score = semantic_result.get('semantic_score', 0)
+    
+    # Calculate count-based score (0-100)
+    count_result = calculate_count_based_score(
+        parsed_resume_json=parsed_resume_json,
+        weights=weights,
+        baseline_project_score=baseline_project_score
+    )
+    count_score = count_result.get('count_score', 0)
+    
+    # Combine scores (60% semantic + 40% count)
+    count_weight = 1 - semantic_weight
+    combined_score = (semantic_score * semantic_weight) + (count_score * count_weight)
+    
+    return {
+        'semantic_score': semantic_score,
+        'count_score': count_score,
+        'combined_score': round(combined_score, 2),
+        'semantic_weight': semantic_weight,
+        'count_weight': count_weight,
+        'semantic_breakdown': semantic_result.get('component_scores', {}),
+        'count_breakdown': count_result.get('breakdown', {}),
+        'weights_used': weights
+    }
 
 
 def calculate_hybrid_job_fit_score(

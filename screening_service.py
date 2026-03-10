@@ -190,15 +190,24 @@ def process_applicant_screening(
         
         # Use parsed_resume_json and job_posting if available, otherwise fallback
         if parsed_resume_json and job_posting:
-            # Use hybrid semantic scoring with component relevance
-            fit_result = job_alignment.calculate_hybrid_job_fit_score(
+            # Calculate combined score (60% semantic + 40% count-based)
+            combined_result = job_alignment.calculate_combined_score(
                 parsed_resume_json=parsed_resume_json,
                 job_posting=job_posting,
                 weights=weights,
-                include_breakdown=True
+                semantic_weight=0.6,  # 60% semantic, 40% count
+                baseline_project_score=scoring_settings.get('baseline_project_score', 2)
             )
-            component_scores = fit_result.get("component_scores", {})
-            print(f"Component scores: {component_scores}")
+            
+            # Use combined score as the main score
+            score = combined_result.get('combined_score', 0)
+            component_scores = {
+                'semantic': combined_result.get('semantic_breakdown', {}),
+                'count': combined_result.get('count_breakdown', {})
+            }
+            print(f"Semantic score: {combined_result.get('semantic_score')}")
+            print(f"Count score: {combined_result.get('count_score')}")
+            print(f"Combined score: {score} (60% semantic + 40% count)")
         else:
             # Fallback to legacy semantic scoring
             print("Warning: Using legacy semantic scoring (no parsed resume data)")
@@ -208,13 +217,11 @@ def process_applicant_screening(
                 job_id=job_id
             )
             component_scores = {
-                "experience": 0,
-                "skills": 0,
-                "education": 0,
-                "projects": 0
+                'semantic': {},
+                'count': {}
             }
+            score = fit_result.get("semantic_score", 0)
         
-        score = fit_result.get("semantic_score", 0)
         fit_category = get_fit_category(score)
         decision = determine_decision(score, pass_threshold, review_threshold)
         
@@ -241,11 +248,11 @@ def process_applicant_screening(
             
             if access_token:
                 update_data["access_token"] = access_token
-                update_data["token_expires_at"] = token_expires.isoformat()
+                update_data["access_expires_at"] = token_expires.isoformat()
             
-            supabase_client.table("recruitment_applicants").update(
+            supabase_client.table("applicants").update(
                 update_data
-            ).eq("applicant_id", applicant_id).execute()
+            ).eq("id", applicant_id).execute()
             
             print(f"Updated applicant status in database")
             
@@ -340,8 +347,8 @@ def validate_access_token(
         Tuple of (is_valid, applicant_data)
     """
     try:
-        result = supabase_client.table("recruitment_applicants").select(
-            "applicant_id, full_name, email, status, token_expires_at, applied_job_id"
+        result = supabase_client.table("applicants").select(
+            "id, name, email, status, access_expires_at, applied_job_id"
         ).eq("access_token", token).execute()
         
         if not result.data or len(result.data) == 0:
@@ -350,8 +357,8 @@ def validate_access_token(
         applicant = result.data[0]
         
         # Check if token expired
-        if applicant.get("token_expires_at"):
-            expires_at = datetime.fromisoformat(applicant["token_expires_at"].replace("Z", "+00:00"))
+        if applicant.get("access_expires_at"):
+            expires_at = datetime.fromisoformat(applicant["access_expires_at"].replace("Z", "+00:00"))
             if datetime.now() > expires_at:
                 return False, {"error": "Token expired", "applicant": applicant}
         
@@ -387,10 +394,10 @@ def update_applicant_status(
         True if successful
     """
     try:
-        supabase_client.table("recruitment_applicants").update({
+        supabase_client.table("applicants").update({
             "status": new_status,
             "updated_at": datetime.now().isoformat()
-        }).eq("applicant_id", applicant_id).execute()
+        }).eq("id", applicant_id).execute()
         
         return True
     except Exception as e:

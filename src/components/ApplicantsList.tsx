@@ -68,8 +68,15 @@ const DEFAULT_SCORING_SETTINGS: ScoringSettings = {
   updated_at: new Date().toISOString(),
 };
 
-// Calculate resume score using HR-configurable settings
-function calculateResumeScore(resume?: Resume, settings?: ScoringSettings | null): number {
+// Calculate resume score - prefer backend combined score, fallback to count-based
+function calculateResumeScore(applicant?: ApplicantWithDetails, settings?: ScoringSettings | null): number {
+  // Use backend screening_score if available (combined semantic + count)
+  if (applicant?.screening_score !== undefined && applicant?.screening_score !== null) {
+    return applicant.screening_score;
+  }
+  
+  // Fallback to count-based calculation if no screening_score
+  const resume = applicant?.resume;
   if (!resume || !resume.parsed_data) return 0;
   const parsed = getParsedResumeData(resume);
   if (!parsed) return 0;
@@ -222,7 +229,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
   // Process applicants with scores
   const processedApplicants = useMemo(() => {
     return applicants.map(applicant => {
-      const resumeScore = calculateResumeScore(applicant.resume, scoringSettings);
+      const resumeScore = calculateResumeScore(applicant, scoringSettings);
       const videoScore = calculateVideoScore(applicant.video);
       const profileFit = calculateProfileFit(applicant.test);
       const overall = calculateOverallScore(resumeScore, videoScore, profileFit);
