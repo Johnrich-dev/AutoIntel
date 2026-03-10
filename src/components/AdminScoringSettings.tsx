@@ -20,10 +20,13 @@ interface ValidationErrors {
 }
 
 // Helper to check if error is due to table not existing
-const isTableNotExistError = (error: any): boolean => {
-  return error?.code === '42P01' || 
-         error?.message?.includes('does not exist') ||
-         error?.status === 404;
+const isTableNotExistError = (error: unknown): boolean => {
+  if (error && typeof error === 'object' && 'code' in error) {
+    return (error as { code?: string }).code === '42P01' || 
+           (error as { message?: string }).message?.includes('does not exist') ||
+           (error as { status?: number }).status === 404;
+  }
+  return false;
 };
 
 export function AdminScoringSettings() {
@@ -140,34 +143,6 @@ export function AdminScoringSettings() {
       setError(err instanceof Error ? err.message : 'Failed to load scoring settings');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const createDefaultSettings = async () => {
-    try {
-      const adminClient = getSupabaseAdminClient();
-
-      const { data, error: insertError } = await adminClient
-        .from('scoring_settings')
-        .insert(DEFAULT_SETTINGS)
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      setSettings(data);
-      setFormValues({
-        experience_weight: data.experience_weight,
-        skills_weight: data.skills_weight,
-        education_weight: data.education_weight,
-        projects_weight: data.projects_weight,
-        qualified_threshold: data.qualified_threshold,
-        review_threshold: data.review_threshold,
-        baseline_project_score: data.baseline_project_score,
-      });
-    } catch (err) {
-      console.error('Error creating default settings:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create default settings');
     }
   };
 
