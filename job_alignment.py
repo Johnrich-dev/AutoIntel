@@ -465,6 +465,31 @@ def extract_projects_text(projects_list: List[Dict]) -> str:
     return " ".join(texts)
 
 
+def parse_jsonb_field(value: Any) -> List[str]:
+    """
+    Parse jsonb field from Supabase, handling various formats.
+    
+    Args:
+        value: The value from the database (list, string, or other)
+    
+    Returns:
+        List of strings
+    """
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(v) for v in value if v]
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [str(v) for v in parsed if v]
+            return [str(parsed)]
+        except json.JSONDecodeError:
+            return [value]
+    return [str(value)]
+
+
 def build_job_requirements_text(job_posting: Dict) -> Dict[str, str]:
     """
     Build requirement texts from job posting for semantic matching.
@@ -475,22 +500,6 @@ def build_job_requirements_text(job_posting: Dict) -> Dict[str, str]:
     Returns:
         Dictionary with requirement texts for each component
     """
-    def parse_jsonb_field(value: Any) -> List[str]:
-        """Parse jsonb field from Supabase, handling various formats."""
-        if value is None:
-            return []
-        if isinstance(value, list):
-            return [str(v) for v in value if v]
-        if isinstance(value, str):
-            try:
-                parsed = json.loads(value)
-                if isinstance(parsed, list):
-                    return [str(v) for v in parsed if v]
-                return [str(parsed)]
-            except json.JSONDecodeError:
-                return [value]
-        return [str(value)]
-    
     # Experience requirement
     min_years = job_posting.get('min_years_experience')
     max_years = job_posting.get('max_years_experience')
@@ -548,13 +557,285 @@ def build_job_requirements_text(job_posting: Dict) -> Dict[str, str]:
     }
 
 
+def normalize_skill(skill: str) -> str:
+    """
+    Normalize a skill string for matching.
+    Removes common variations and normalizes to lowercase.
+    
+    Args:
+        skill: Raw skill string
+    
+    Returns:
+        Normalized skill string
+    """
+    # Convert to lowercase
+    skill = skill.lower().strip()
+    
+    # Remove common prefixes/suffixes
+    for prefix in ['senior', 'junior', 'lead', 'principal', 'staff']:
+        skill = skill.replace(prefix, '')
+    
+    # Remove special characters and normalize
+    skill = re.sub(r'[^\w#+\.]', ' ', skill)
+    skill = re.sub(r'\s+', ' ', skill).strip()
+    
+    return skill
+
+
+def calculate_skills_keyword_match(
+    resume_skills: Dict[str, List[str]],
+    job_skills: List[str]
+) -> float:
+    """
+    Calculate skills match using keyword overlap.
+    This is the FIX for the BERT string similarity problem!
+    
+    Args:
+        resume_skills: Dictionary with hard_skills and soft_skills from resume
+        job_skills: List of required skills from job posting
+    
+    Returns:
+        Match score from 0-100 (percentage of job skills matched)
+    """
+    if not job_skills:
+        return 50.0  # No requirements, give half credit
+    
+    # Extract all resume skills
+    all_resume_skills = []
+    if isinstance(resume_skills, dict):
+        all_resume_skills = resume_skills.get('hard_skills', []) + resume_skills.get('soft_skills', [])
+    elif isinstance(resume_skills, list):
+        all_resume_skills = resume_skills
+    
+    if not all_resume_skills:
+        return 0.0
+    
+    # Normalize skills for comparison
+    normalized_job_skills = {normalize_skill(s): s for s in job_skills if s}
+    normalized_resume_skills = [normalize_skill(s) for s in all_resume_skills if s]
+    
+    # Count matches
+    matched_skills = set()
+    required_skills = set(normalized_job_skills.keys())
+    
+    for resume_skill in normalized_resume_skills:
+        for req_skill in required_skills:
+            # Exact match
+            if resume_skill == req_skill:
+                matched_skills.add(req_skill)
+            # Partial match (e.g., "python" in "python developer" or vice versa)
+            elif resume_skill in req_skill or req_skill in resume_skill:
+                matched_skills.add(req_skill)
+            # Handle common variations
+            elif resume_skill.replace('#', 'sharp') == req_skill.replace('#', 'sharp'):
+                matched_skills.add(req_skill)
+            elif resume_skill.replace('++', 'pp') == req_skill.replace('++', 'pp'):
+                matched_skills.add(req_skill)
+    
+    # Calculate percentage
+    match_percentage = (len(matched_skills) / len(required_skills)) * 100 if required_skills else 0
+    
+    # Debug output
+    print(f"[DEBUG] Skills match: {len(matched_skills)}/{len(required_skills)} = {match_percentage:.1f}%")
+    print(f"[DEBUG]   Required: {list(required_skills)}")
+    print(f"[DEBUG]   Matched: {matched_skills}")
+    
+    return round(match_percentage, 2)
+
+
+def calculate_experience_keyword_match(
+    resume_experience: List[Dict],
+    min_years: Optional[float],
+    job_title_keywords: List[str]
+) -> float:
+    """
+    Calculate experience relevance using keyword matching.
+    
+    Args:
+        resume_experience: List of experience entries from resume
+        min_years: Minimum years required from job
+        job_title_keywords: Keywords from job title (e.g., ["python", "developer"])
+    
+    Returns:
+        Match score from 0-100
+    """
+    if not resume_experience:
+        return 0.0
+    
+    score = 0.0
+    best_match = 0.0
+    
+    # Parse years from experience
+    for exp in resume_experience:
+        exp_text = extract_experience_text([exp])
+        exp_lower = exp_text.lower()
+        
+        # Extract years from text
+        years_match = re.search(r'(\d+)\s*(?:years?|yrs?)', exp_lower)
+        if years_match:
+            years = int(years_match.group(1))
+        else:
+            years = 0
+        
+        # Check if years requirement is met
+        years_score = 0.0
+        if min_years:
+            if years >= min_years:
+                years_score = 100.0
+            elif years > 0:
+                years_score = (years / min_years) * 100
+        else:
+            years_score = 50.0 if years > 0 else 0.0
+        
+        # Check keyword match with job title
+        keyword_score = 0.0
+        if job_title_keywords:
+            matched_keywords = 0
+            for kw in job_title_keywords:
+                if kw.lower() in exp_lower:
+                    matched_keywords += 1
+            keyword_score = (matched_keywords / len(job_title_keywords)) * 100
+        
+        # Combine scores (50% years, 50% keyword match)
+        exp_score = (years_score * 0.5) + (keyword_score * 0.5)
+        best_match = max(best_match, exp_score)
+    
+    return round(best_match, 2)
+
+
+def calculate_projects_keyword_match(
+    resume_projects: List[Dict],
+    expected_projects: List[str]
+) -> float:
+    """
+    Calculate projects relevance using keyword matching.
+    
+    Args:
+        resume_projects: List of project entries from resume
+        expected_projects: List of expected project types from job
+    
+    Returns:
+        Match score from 0-100
+    """
+    if not expected_projects:
+        return 50.0  # No requirements, give half credit
+    
+    if not resume_projects:
+        return 0.0
+    
+    # Extract project texts - check both name AND details
+    matched_project_types = set()
+    
+    for proj in resume_projects:
+        # Combine name and details
+        name = proj.get('name', '').lower()
+        details = proj.get('details', '').lower()
+        full_text = f"{name} {details}"
+        
+        for expected in expected_projects:
+            expected_normalized = expected.lower()
+            # Split compound terms like "API Development"
+            expected_words = expected_normalized.split()
+            
+            # Check if any key word from expected matches in project text
+            for word in expected_words:
+                if len(word) > 2 and word in full_text:  # Skip short words
+                    matched_project_types.add(expected_normalized)
+                    break
+            
+            # Also try partial matching (remove spaces/hyphens)
+            if expected_normalized.replace(' ', '') in full_text.replace(' ', '').replace('-', ''):
+                matched_project_types.add(expected_normalized)
+    
+    # Calculate percentage
+    match_percentage = (len(matched_project_types) / len(expected_projects)) * 100 if expected_projects else 0
+    
+    print(f"[DEBUG] Projects match: {len(matched_project_types)}/{len(expected_projects)} = {match_percentage:.1f}%")
+    print(f"[DEBUG]   Expected: {expected_projects}")
+    print(f"[DEBUG]   Matched: {matched_project_types}")
+    print(f"[DEBUG]   Resume projects: {resume_projects}")
+    
+    return round(match_percentage, 2)
+
+
+def calculate_education_keyword_match(
+    resume_education: List[Dict],
+    required_education: List[str]
+) -> float:
+    """
+    Calculate education relevance using keyword matching.
+    
+    Args:
+        resume_education: List of education entries from resume
+        required_education: List of required education from job
+    
+    Returns:
+        Match score from 0-100
+    """
+    if not required_education:
+        return 50.0  # No requirements, give half credit
+    
+    if not resume_education:
+        return 0.0
+    
+    # Extract education texts and check each entry
+    matched_edu = set()
+    
+    for edu in resume_education:
+        # Get all fields from education entry - handle both field name variations
+        school = edu.get('school', '').lower()
+        # Handle both 'course' and 'course_or_strand' field names
+        course = edu.get('course', '') or edu.get('course_or_strand', '')
+        course = course.lower() if course else ''
+        degree = edu.get('degree', '').lower()
+        # Combine all fields for matching
+        edu_text = f"{school} {course} {degree}"
+        
+        for req in required_education:
+            req_normalized = req.lower()
+            
+            # Check if requirement is mentioned anywhere in the education text
+            # 1. Direct match (e.g., "Computer Science" appears in course)
+            if req_normalized in edu_text:
+                matched_edu.add(req_normalized)
+                continue
+            
+            # 2. Check for degree type matches
+            if 'bachelor' in req_normalized:
+                if 'bachelor' in degree or 'bs' in degree or 'ba' in degree or 'b.s' in degree or 'b.a' in degree:
+                    matched_edu.add(req_normalized)
+            elif 'master' in req_normalized:
+                if 'master' in degree or 'ms' in degree or 'ma' in degree or 'm.s' in degree or 'm.a' in degree:
+                    matched_edu.add(req_normalized)
+            # 3. Check if major field matches (e.g., "Computer Science" course matches "Computer Science" requirement)
+            elif 'computer' in req_normalized:
+                if 'computer' in course:
+                    matched_edu.add(req_normalized)
+            elif 'science' in req_normalized:
+                if 'science' in course:
+                    matched_edu.add(req_normalized)
+            elif 'engineering' in req_normalized:
+                if 'engineering' in course:
+                    matched_edu.add(req_normalized)
+    
+    # Calculate percentage
+    match_percentage = (len(matched_edu) / len(required_education)) * 100 if required_education else 0
+    
+    print(f"[DEBUG] Education match: {len(matched_edu)}/{len(required_education)} = {match_percentage:.1f}%")
+    print(f"[DEBUG]   Required: {required_education}")
+    print(f"[DEBUG]   Matched: {matched_edu}")
+    print(f"[DEBUG]   Resume edu: {resume_education}")
+    
+    return round(match_percentage, 2)
+
+
 def calculate_component_scores(
     parsed_resume_json: Dict,
     job_posting: Dict
 ) -> Dict[str, float]:
     """
-    Calculate semantic relevance scores for each resume component vs job requirements.
-    This uses BERT embeddings to measure relevance, NOT quantity!
+    Calculate relevance scores for each resume component vs job requirements.
+    NOW USES KEYWORD MATCHING instead of BERT string similarity!
     
     Args:
         parsed_resume_json: Parsed resume data dictionary
@@ -563,51 +844,54 @@ def calculate_component_scores(
     Returns:
         Dictionary with relevance scores (0-100) for each component
     """
-    # Build requirement texts from job
-    job_reqs = build_job_requirements_text(job_posting)
+    # Get job requirements properly
+    job_skills_list = parse_jsonb_field(job_posting.get('skills', []))
+    job_edu_list = parse_jsonb_field(job_posting.get('required_education', []))
+    job_projects_list = parse_jsonb_field(job_posting.get('expected_projects', []))
+    min_years = job_posting.get('min_years_experience')
     
-    # Debug: Print job requirements
-    print(f"[DEBUG] Job requirements: {job_reqs}")
+    # Try to get keywords from job title
+    job_title = job_posting.get('title', '')
+    job_title_keywords = [w for w in re.findall(r'\w+', job_title.lower()) if len(w) > 2] if job_title else []
     
-    # Extract texts from resume
-    exp_text = extract_experience_text(parsed_resume_json.get('experience', []))
-    skills_text = extract_skills_text(parsed_resume_json.get('skills', {}))
-    edu_text = extract_education_text(parsed_resume_json.get('education', []))
-    proj_text = extract_projects_text(parsed_resume_json.get('projects', []))
+    print(f"[DEBUG] Job skills: {job_skills_list}")
+    print(f"[DEBUG] Job education: {job_edu_list}")
+    print(f"[DEBUG] Job projects: {job_projects_list}")
+    print(f"[DEBUG] Min years: {min_years}")
+    print(f"[DEBUG] Job title keywords: {job_title_keywords}")
     
-    # Debug: Print resume texts
-    print(f"[DEBUG] Resume exp_text length: {len(exp_text)}, skills_text length: {len(skills_text)}, edu_text length: {len(edu_text)}, proj_text length: {len(proj_text)}")
-    
-    # Calculate semantic relevance for each component
     results = {}
     
-    # Experience relevance
-    if exp_text and job_reqs['experience']:
-        exp_result = calculate_semantic_similarity(exp_text, job_reqs['experience'])
-        results['experience_relevance'] = round(exp_result.get('similarity', 0) * 100, 2)
-    else:
-        results['experience_relevance'] = 0.0
+    # Skills relevance - NOW USES KEYWORD MATCHING
+    resume_skills = parsed_resume_json.get('skills', {})
+    results['skills_relevance'] = calculate_skills_keyword_match(
+        resume_skills=resume_skills,
+        job_skills=job_skills_list
+    )
     
-    # Skills relevance
-    if skills_text and job_reqs['skills']:
-        skills_result = calculate_semantic_similarity(skills_text, job_reqs['skills'])
-        results['skills_relevance'] = round(skills_result.get('similarity', 0) * 100, 2)
-    else:
-        results['skills_relevance'] = 0.0
+    # Experience relevance - NOW USES KEYWORD MATCHING
+    resume_experience = parsed_resume_json.get('experience', [])
+    results['experience_relevance'] = calculate_experience_keyword_match(
+        resume_experience=resume_experience,
+        min_years=float(min_years) if min_years else None,
+        job_title_keywords=job_title_keywords
+    )
     
-    # Education relevance
-    if edu_text and job_reqs['education']:
-        edu_result = calculate_semantic_similarity(edu_text, job_reqs['education'])
-        results['education_relevance'] = round(edu_result.get('similarity', 0) * 100, 2)
-    else:
-        results['education_relevance'] = 0.0
+    # Education relevance - NOW USES KEYWORD MATCHING
+    resume_education = parsed_resume_json.get('education', [])
+    results['education_relevance'] = calculate_education_keyword_match(
+        resume_education=resume_education,
+        required_education=job_edu_list
+    )
     
-    # Projects relevance
-    if proj_text and job_reqs['projects']:
-        proj_result = calculate_semantic_similarity(proj_text, job_reqs['projects'])
-        results['projects_relevance'] = round(proj_result.get('similarity', 0) * 100, 2)
-    else:
-        results['projects_relevance'] = 0.0
+    # Projects relevance - NOW USES KEYWORD MATCHING
+    resume_projects = parsed_resume_json.get('projects', [])
+    results['projects_relevance'] = calculate_projects_keyword_match(
+        resume_projects=resume_projects,
+        expected_projects=job_projects_list
+    )
+    
+    print(f"[DEBUG] Final component scores: {results}")
     
     return results
 

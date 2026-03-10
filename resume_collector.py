@@ -673,6 +673,9 @@ def process_emails():
                                         job_posting=job_posting
                                     )
                                     print(f"Screening result: {screening_result.get('decision')} - Score: {screening_result.get('score')}")
+                                    print(f"Email sent: {screening_result.get('email_sent')}")
+                                    if not screening_result.get('email_sent'):
+                                        print(f"WARNING: Email was NOT sent! Error details may be in email service.")
                                 else:
                                     print(f"No matching job found for position: {position}, skipping screening")
                             else:
