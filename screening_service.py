@@ -2,10 +2,13 @@
 """
 Screening Service for AutoIntel Recruitment System
 Orchestrates the automated screening process: score → decide → notify.
+
+Now uses company-adaptable hybrid semantic scoring with customizable weights!
 """
 
 import os
 import sys
+import json
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
@@ -27,9 +30,48 @@ load_dotenv()
 # Configuration
 TOKEN_EXPIRY_HOURS = int(os.getenv("TOKEN_EXPIRY_HOURS", "24"))
 
-# Default thresholds (can be overridden from database)
-DEFAULT_PASS_THRESHOLD = 80.0
-DEFAULT_REVIEW_THRESHOLD = 60.0
+# Default scoring settings (fallback if database not available)
+DEFAULT_SCORING_SETTINGS = {
+    "experience_weight": 40,
+    "skills_weight": 30,
+    "education_weight": 20,
+    "projects_weight": 10,
+    "qualified_threshold": 80,
+    "review_threshold": 60,
+    "baseline_project_score": 2
+}
+
+
+def load_scoring_settings(supabase_client: Any) -> Dict[str, Any]:
+    """
+    Load scoring settings from the database.
+    
+    Args:
+        supabase_client: Supabase client
+        
+    Returns:
+        Dictionary with scoring settings (weights and thresholds)
+    """
+    try:
+        result = supabase_client.table("scoring_settings").select("*").limit(1).execute()
+        
+        if result.data and len(result.data) > 0:
+            settings = result.data[0]
+            print(f"Loaded scoring settings from database: {settings}")
+            return {
+                "experience_weight": settings.get("experience_weight", 40),
+                "skills_weight": settings.get("skills_weight", 30),
+                "education_weight": settings.get("education_weight", 20),
+                "projects_weight": settings.get("projects_weight", 10),
+                "qualified_threshold": settings.get("qualified_threshold", 80),
+                "review_threshold": settings.get("review_threshold", 60),
+                "baseline_project_score": settings.get("baseline_project_score", 2)
+            }
+    except Exception as e:
+        print(f"Warning: Could not load scoring settings from database: {e}")
+        print("Using default settings")
+    
+    return DEFAULT_SCORING_SETTINGS
 
 
 def get_fit_category(score: float) -> str:
@@ -56,6 +98,33 @@ def determine_decision(score: float, pass_threshold: float, review_threshold: fl
         return "failed"
 
 
+def parse_resume_json(parsed_resume_json: Any) -> Dict[str, Any]:
+    """
+    Parse the parsed_resume_json field from the database.
+    Handles both JSON string and dict formats.
+    
+    Args:
+        parsed_resume_json: Raw parsed resume data (string or dict)
+        
+    Returns:
+        Parsed resume dictionary
+    """
+    if not parsed_resume_json:
+        return {}
+    
+    if isinstance(parsed_resume_json, dict):
+        return parsed_resume_json
+    
+    if isinstance(parsed_resume_json, str):
+        try:
+            return json.loads(parsed_resume_json)
+        except json.JSONDecodeError:
+            print(f"Warning: Could not parse resume JSON: {parsed_resume_json[:100]}...")
+            return {}
+    
+    return {}
+
+
 def process_applicant_screening(
     applicant_id: str,
     resume_text: str,
@@ -65,41 +134,92 @@ def process_applicant_screening(
     applicant_email: str,
     applicant_name: str,
     supabase_client: Any = None,
-    pass_threshold: float = DEFAULT_PASS_THRESHOLD,
-    review_threshold: float = DEFAULT_REVIEW_THRESHOLD
+    parsed_resume_json: Optional[Dict[str, Any]] = None,
+    job_posting: Optional[Dict[str, Any]] = None,
+    pass_threshold: Optional[float] = None,
+    review_threshold: Optional[float] = None
 ) -> Dict[str, Any]:
     """
-    Complete screening process for an applicant.
+    Complete screening process for an applicant using hybrid semantic scoring.
+    
+    This function now uses company-adaptable weights from the scoring_settings table!
     
     Args:
         applicant_id: UUID of the applicant
-        resume_text: Parsed resume text
+        resume_text: Raw resume text (fallback)
         job_id: Job posting ID
         job_title: Title of the position
         job_description: Full job description
         applicant_email: Applicant's email
         applicant_name: Applicant's full name
         supabase_client: Optional Supabase client for DB updates
-        pass_threshold: Score threshold to pass (default: 80)
-        review_threshold: Score threshold for review (default: 60)
+        parsed_resume_json: Parsed resume data (from GPT extractor)
+        job_posting: Job posting data with structured requirements
+        pass_threshold: Score threshold to pass (optional, loads from DB if not provided)
+        review_threshold: Score threshold for review (optional, loads from DB if not provided)
     
     Returns:
         Dictionary with screening results
     """
     try:
-        # Step 1: Calculate job fit score
-        print(f"Calculating job fit score for applicant {applicant_id}...")
-        fit_result = job_alignment.calculate_job_fit_score(
-            resume_text=resume_text,
-            job_description=job_description,
-            job_id=job_id
-        )
+        # Step 0: Load scoring settings from database (or use provided/fallback)
+        scoring_settings = DEFAULT_SCORING_SETTINGS.copy()
+        
+        if supabase_client:
+            # Try to load from database
+            db_settings = load_scoring_settings(supabase_client)
+            scoring_settings.update(db_settings)
+            print(f"Using scoring settings: weights={scoring_settings}")
+        
+        # Use provided thresholds or fall back to settings
+        if pass_threshold is None:
+            pass_threshold = scoring_settings.get("qualified_threshold", 80)
+        if review_threshold is None:
+            review_threshold = scoring_settings.get("review_threshold", 60)
+        
+        # Step 1: Calculate job fit score using hybrid semantic scoring
+        print(f"Calculating hybrid job fit score for applicant {applicant_id}...")
+        
+        # Prepare weights for hybrid scoring
+        weights = {
+            "experience_weight": scoring_settings.get("experience_weight", 40),
+            "skills_weight": scoring_settings.get("skills_weight", 30),
+            "education_weight": scoring_settings.get("education_weight", 20),
+            "projects_weight": scoring_settings.get("projects_weight", 10)
+        }
+        
+        # Use parsed_resume_json and job_posting if available, otherwise fallback
+        if parsed_resume_json and job_posting:
+            # Use hybrid semantic scoring with component relevance
+            fit_result = job_alignment.calculate_hybrid_job_fit_score(
+                parsed_resume_json=parsed_resume_json,
+                job_posting=job_posting,
+                weights=weights,
+                include_breakdown=True
+            )
+            component_scores = fit_result.get("component_scores", {})
+            print(f"Component scores: {component_scores}")
+        else:
+            # Fallback to legacy semantic scoring
+            print("Warning: Using legacy semantic scoring (no parsed resume data)")
+            fit_result = job_alignment.calculate_job_fit_score(
+                resume_text=resume_text,
+                job_description=job_description,
+                job_id=job_id
+            )
+            component_scores = {
+                "experience": 0,
+                "skills": 0,
+                "education": 0,
+                "projects": 0
+            }
         
         score = fit_result.get("semantic_score", 0)
         fit_category = get_fit_category(score)
         decision = determine_decision(score, pass_threshold, review_threshold)
         
         print(f"Score: {score:.1f} - Category: {fit_category} - Decision: {decision}")
+        print(f"Weights used: {weights}")
         
         # Step 2: Generate access token if passed
         access_token = None
@@ -128,6 +248,31 @@ def process_applicant_screening(
             ).eq("applicant_id", applicant_id).execute()
             
             print(f"Updated applicant status in database")
+            
+            # Also update resume_scores table with component breakdown if it exists
+            try:
+                # Check if resume_scores table exists and has the applicant
+                scores_data = {
+                    "applicant_id": applicant_id,
+                    "job_id": job_id,
+                    "experience_score": component_scores.get("experience", 0),
+                    "skills_score": component_scores.get("skills", 0),
+                    "education_score": component_scores.get("education", 0),
+                    "project_score": component_scores.get("projects", 0),
+                    "final_score": score,
+                    "status": "pending",
+                    "match_explain": json.dumps({
+                        "weights_used": weights,
+                        "component_breakdown": component_scores,
+                        "fit_category": fit_category
+                    })
+                }
+                
+                # Try to insert or update
+                supabase_client.table("resume_scores").upsert(scores_data).execute()
+                print(f"Updated resume_scores with component breakdown")
+            except Exception as e:
+                print(f"Warning: Could not update resume_scores: {e}")
         
         # Step 4: Send appropriate email notification
         email_sent = False
@@ -161,6 +306,8 @@ def process_applicant_screening(
             "score": score,
             "fit_category": fit_category,
             "decision": decision,
+            "weights_used": weights,
+            "component_scores": component_scores,
             "access_token": access_token,
             "token_expires": token_expires.isoformat() if token_expires else None,
             "email_sent": email_sent,
@@ -169,6 +316,8 @@ def process_applicant_screening(
         
     except Exception as e:
         print(f"Error processing screening: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {
             "success": False,
             "applicant_id": applicant_id,
@@ -252,10 +401,16 @@ def update_applicant_status(
 if __name__ == "__main__":
     print("Screening Service for AutoIntel")
     print("=" * 50)
+    print("Features:")
+    print("  - Hybrid semantic scoring with company-adaptable weights")
+    print("  - Component relevance scoring (experience, skills, education, projects)")
+    print("  - Configurable thresholds from database")
+    print("")
     print("Functions:")
     print("  - process_applicant_screening()")
     print("  - validate_access_token()")
     print("  - update_applicant_status()")
+    print("  - load_scoring_settings()")
     print("")
     print("Run with Supabase client to process applicants:")
     print("  from screening_service import process_applicant_screening")

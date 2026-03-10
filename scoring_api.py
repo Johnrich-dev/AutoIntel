@@ -159,6 +159,145 @@ def calculate_similarity():
         }), 500
 
 
+@app.route('/api/calculate-hybrid-fit', methods=['POST'])
+def calculate_hybrid_fit():
+    """
+    Calculate hybrid job fit score using semantic relevance and company weights.
+    
+    This endpoint supports company-adaptable scoring with customizable weights!
+    
+    Request Body:
+    {
+        "parsed_resume_json": {              // Required: parsed resume data
+            "experience": [...],
+            "skills": {...},
+            "education": [...],
+            "projects": [...]
+        },
+        "job_posting": {                      // Required: job posting data
+            "job_id": "string",
+            "title": "string",
+            "skills": ["Python", "Django"],
+            "required_education": ["Bachelor's CS"],
+            "expected_projects": ["API Development"],
+            "min_years_experience": 5
+        },
+        "weights": {                          // Optional: custom weights
+            "experience_weight": 40,
+            "skills_weight": 30,
+            "education_weight": 20,
+            "projects_weight": 10
+        }
+    }
+    
+    Response:
+    {
+        "semantic_score": 85.5,
+        "fit_category": "Excellent Fit",
+        "weights_used": {
+            "experience_weight": 40,
+            "skills_weight": 30,
+            "education_weight": 20,
+            "projects_weight": 10
+        },
+        "component_scores": {
+            "experience": 95.0,
+            "skills": 88.0,
+            "education": 98.0,
+            "projects": 85.0
+        },
+        "job_id": "string",
+        "status": "success"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        # Extract parameters
+        parsed_resume_json = data.get('parsed_resume_json')
+        job_posting = data.get('job_posting')
+        weights = data.get('weights')
+        
+        # Validate required fields
+        if not parsed_resume_json:
+            return jsonify({"error": "parsed_resume_json is required"}), 400
+        if not job_posting:
+            return jsonify({"error": "job_posting is required"}), 400
+        
+        # Calculate hybrid job fit score
+        result = job_alignment.calculate_hybrid_job_fit_score(
+            parsed_resume_json=parsed_resume_json,
+            job_posting=job_posting,
+            weights=weights,
+            include_breakdown=True
+        )
+        
+        result['status'] = 'success'
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+
+@app.route('/api/get-component-scores', methods=['POST'])
+def get_component_scores():
+    """
+    Get semantic relevance scores for each resume component vs job requirements.
+    
+    Request Body:
+    {
+        "parsed_resume_json": {...},
+        "job_posting": {...}
+    }
+    
+    Response:
+    {
+        "experience_relevance": 95.0,
+        "skills_relevance": 88.0,
+        "education_relevance": 98.0,
+        "projects_relevance": 85.0,
+        "status": "success"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        parsed_resume_json = data.get('parsed_resume_json')
+        job_posting = data.get('job_posting')
+        
+        if not parsed_resume_json:
+            return jsonify({"error": "parsed_resume_json is required"}), 400
+        if not job_posting:
+            return jsonify({"error": "job_posting is required"}), 400
+        
+        # Calculate component scores
+        component_scores = job_alignment.calculate_component_scores(
+            parsed_resume_json=parsed_resume_json,
+            job_posting=job_posting
+        )
+        
+        return jsonify({
+            **component_scores,
+            'status': 'success'
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors."""
@@ -179,9 +318,16 @@ if __name__ == "__main__":
     print(f"Debug mode: {DEBUG_MODE}")
     print("")
     print("Endpoints:")
-    print("  GET  /api/health                - Health check")
-    print("  POST /api/calculate-fit        - Calculate job fit score (resume vs job)")
-    print("  POST /api/calculate-similarity  - Calculate similarity between two texts")
+    print("  GET  /api/health                   - Health check")
+    print("  POST /api/calculate-fit            - Legacy job fit score")
+    print("  POST /api/calculate-similarity     - Semantic similarity")
+    print("  POST /api/calculate-hybrid-fit     - Hybrid scoring with weights")
+    print("  POST /api/get-component-scores    - Component relevance scores")
+    print("")
+    print("Hybrid Scoring Features:")
+    print("  - Company-adaptable weights (experience, skills, education, projects)")
+    print("  - Semantic relevance scoring (not quantity!)")
+    print("  - Component breakdown in response")
     print("")
     print("Press Ctrl+C to stop the server")
     print("=" * 60)

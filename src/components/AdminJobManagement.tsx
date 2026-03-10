@@ -97,8 +97,14 @@ export function AdminJobManagement() {
       const query = searchQuery.toLowerCase();
       const matchesTitle = job.title.toLowerCase().includes(query);
       const matchesRoleFamily = job.role_family?.toLowerCase().includes(query) ?? false;
-      const matchesSkills = job.skills.some(s => s.toLowerCase().includes(query));
-      const matchesKeywords = job.keywords.some(k => k.toLowerCase().includes(query));
+      
+      // Safely check skills array (might be null or undefined)
+      const matchesSkills = Array.isArray(job.skills) && 
+        job.skills.some((s: string) => typeof s === 'string' && s.toLowerCase().includes(query));
+      
+      // Safely check keywords array (might be null or undefined)
+      const matchesKeywords = Array.isArray(job.keywords) && 
+        job.keywords.some((k: string) => typeof k === 'string' && k.toLowerCase().includes(query));
       
       if (!matchesTitle && !matchesRoleFamily && !matchesSkills && !matchesKeywords) {
         return false;

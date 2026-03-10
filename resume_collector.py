@@ -621,21 +621,45 @@ def process_emails():
                             if resume_text:
                                 # Look up job from job_postings based on position
                                 job_result = supabase.table('job_postings').select(
-                                    'job_id, title, description'
+                                    'job_id, title, description, skills, required_education, expected_projects, min_years_experience, max_years_experience'
                                 ).ilike('title', f'%{position}%').execute()
 
                                 job_id = None
                                 job_title = position
                                 job_description = ""
+                                job_posting = None
 
                                 if job_result.data and len(job_result.data) > 0:
                                     job = job_result.data[0]
                                     job_id = job.get('job_id')
                                     job_title = job.get('title', position)
                                     job_description = job.get('description') or ""
+                                    job_posting = job  # Full job posting for hybrid scoring
+
+                                # Get parsed resume JSON for hybrid scoring
+                                parsed_resume_json = None
+                                try:
+                                    parsed_result = supabase.table('resumes').select(
+                                        'parsed_data'
+                                    ).eq('applicant_id', applicant_id).execute()
+                                    if parsed_result.data and len(parsed_result.data) > 0:
+                                        parsed_data = parsed_result.data[0].get('parsed_data')
+                                        if parsed_data:
+                                            if isinstance(parsed_data, dict):
+                                                parsed_resume_json = parsed_data
+                                            else:
+                                                import json
+                                                try:
+                                                    parsed_resume_json = json.loads(parsed_data)
+                                                except:
+                                                    pass
+                                except Exception as e:
+                                    print(f"Warning: Could not get parsed resume: {e}")
 
                                 if job_description:
                                     print(f"Triggering automatic screening for {sender_name}...")
+                                    
+                                    # Pass all data needed for hybrid scoring
                                     screening_result = process_applicant_screening(
                                         applicant_id=applicant_id,
                                         resume_text=resume_text,
@@ -644,7 +668,9 @@ def process_emails():
                                         job_description=job_description,
                                         applicant_email=sender_email,
                                         applicant_name=sender_name,
-                                        supabase_client=supabase
+                                        supabase_client=supabase,
+                                        parsed_resume_json=parsed_resume_json,
+                                        job_posting=job_posting
                                     )
                                     print(f"Screening result: {screening_result.get('decision')} - Score: {screening_result.get('score')}")
                                 else:

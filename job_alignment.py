@@ -345,6 +345,366 @@ def calculate_job_fit_score(
     }
 
 
+def extract_experience_text(experience_list: List[Dict]) -> str:
+    """
+    Combine experience entries into searchable text for semantic matching.
+    
+    Args:
+        experience_list: List of experience dictionaries from parsed resume
+    
+    Returns:
+        Combined text representation of experience
+    """
+    if not experience_list:
+        return ""
+    
+    texts = []
+    for exp in experience_list:
+        parts = []
+        if exp.get('role'):
+            parts.append(str(exp['role']))
+        if exp.get('company'):
+            parts.append(str(exp['company']))
+        if exp.get('years'):
+            parts.append(str(exp['years']) + " years")
+        if exp.get('summary'):
+            parts.append(str(exp['summary']))
+        if parts:
+            texts.append(" ".join(parts))
+    
+    return " ".join(texts)
+
+
+def extract_skills_text(skills_dict: Dict) -> str:
+    """
+    Combine all skills into searchable text for semantic matching.
+    
+    Args:
+        skills_dict: Dictionary with hard_skills, soft_skills, all
+    
+    Returns:
+        Combined text representation of skills
+    """
+    if not skills_dict:
+        return ""
+    
+    all_skills = []
+    if isinstance(skills_dict, dict):
+        all_skills = skills_dict.get('hard_skills', []) + skills_dict.get('soft_skills', [])
+        if skills_dict.get('all'):
+            all_skills = skills_dict['all']
+    elif isinstance(skills_dict, list):
+        all_skills = skills_dict
+    
+    # Convert to string
+    return " ".join(str(s) for s in all_skills if s)
+
+
+def extract_education_text(education_list: List[Dict]) -> str:
+    """
+    Combine education entries into searchable text for semantic matching.
+    
+    Args:
+        education_list: List of education dictionaries from parsed resume
+    
+    Returns:
+        Combined text representation of education
+    """
+    if not education_list:
+        return ""
+    
+    texts = []
+    for edu in education_list:
+        parts = []
+        if edu.get('school'):
+            parts.append(str(edu['school']))
+        if edu.get('course_or_strand'):
+            parts.append(str(edu['course_or_strand']))
+        if edu.get('education_type'):
+            parts.append(str(edu['education_type']))
+        if edu.get('year_range'):
+            parts.append(str(edu['year_range']))
+        if parts:
+            texts.append(" ".join(parts))
+    
+    return " ".join(texts)
+
+
+def extract_projects_text(projects_list: List[Dict]) -> str:
+    """
+    Combine project entries into searchable text for semantic matching.
+    
+    Args:
+        projects_list: List of project dictionaries from parsed resume
+    
+    Returns:
+        Combined text representation of projects
+    """
+    if not projects_list:
+        return ""
+    
+    texts = []
+    for proj in projects_list:
+        parts = []
+        if proj.get('name'):
+            parts.append(str(proj['name']))
+        if proj.get('details'):
+            parts.append(str(proj['details']))
+        if parts:
+            texts.append(" ".join(parts))
+    
+    return " ".join(texts)
+
+
+def build_job_requirements_text(job_posting: Dict) -> Dict[str, str]:
+    """
+    Build requirement texts from job posting for semantic matching.
+    
+    Args:
+        job_posting: Job posting dictionary
+    
+    Returns:
+        Dictionary with requirement texts for each component
+    """
+    # Experience requirement
+    min_years = job_posting.get('min_years_experience')
+    max_years = job_posting.get('max_years_experience')
+    if min_years:
+        exp_req = f"{min_years}+ years of relevant work experience"
+        if max_years:
+            exp_req = f"{min_years} to {max_years} years of relevant work experience"
+    else:
+        exp_req = "relevant work experience"
+    
+    # Skills requirement (from skills array or keywords)
+    skills = job_posting.get('skills', [])
+    keywords = job_posting.get('keywords', [])
+    if skills:
+        skills_req = " ".join(str(s) for s in skills if s)
+    elif keywords:
+        skills_req = " ".join(str(k) for k in keywords if k)
+    else:
+        skills_req = job_posting.get('description', '')[:500] if job_posting.get('description') else ""
+    
+    # Education requirement
+    required_edu = job_posting.get('required_education', [])
+    if required_edu:
+        edu_req = " ".join(str(e) for e in required_edu if e)
+    else:
+        edu_req = "relevant education"
+    
+    # Projects requirement
+    expected_projects = job_posting.get('expected_projects', [])
+    if expected_projects:
+        proj_req = " ".join(str(p) for p in expected_projects if p)
+    else:
+        proj_req = "relevant projects"
+    
+    return {
+        "experience": exp_req,
+        "skills": skills_req,
+        "education": edu_req,
+        "projects": proj_req
+    }
+
+
+def calculate_component_scores(
+    parsed_resume_json: Dict,
+    job_posting: Dict
+) -> Dict[str, float]:
+    """
+    Calculate semantic relevance scores for each resume component vs job requirements.
+    This uses BERT embeddings to measure relevance, NOT quantity!
+    
+    Args:
+        parsed_resume_json: Parsed resume data dictionary
+        job_posting: Job posting data dictionary
+    
+    Returns:
+        Dictionary with relevance scores (0-100) for each component
+    """
+    # Extract texts from resume
+    exp_text = extract_experience_text(parsed_resume_json.get('experience', []))
+    skills_text = extract_skills_text(parsed_resume_json.get('skills', {}))
+    edu_text = extract_education_text(parsed_resume_json.get('education', []))
+    proj_text = extract_projects_text(parsed_resume_json.get('projects', []))
+    
+    # Build requirement texts from job
+    job_reqs = build_job_requirements_text(job_posting)
+    
+    # Calculate semantic relevance for each component
+    results = {}
+    
+    # Experience relevance
+    if exp_text and job_reqs['experience']:
+        exp_result = calculate_semantic_similarity(exp_text, job_reqs['experience'])
+        results['experience_relevance'] = round(exp_result.get('similarity', 0) * 100, 2)
+    else:
+        results['experience_relevance'] = 0.0
+    
+    # Skills relevance
+    if skills_text and job_reqs['skills']:
+        skills_result = calculate_semantic_similarity(skills_text, job_reqs['skills'])
+        results['skills_relevance'] = round(skills_result.get('similarity', 0) * 100, 2)
+    else:
+        results['skills_relevance'] = 0.0
+    
+    # Education relevance
+    if edu_text and job_reqs['education']:
+        edu_result = calculate_semantic_similarity(edu_text, job_reqs['education'])
+        results['education_relevance'] = round(edu_result.get('similarity', 0) * 100, 2)
+    else:
+        results['education_relevance'] = 0.0
+    
+    # Projects relevance
+    if proj_text and job_reqs['projects']:
+        proj_result = calculate_semantic_similarity(proj_text, job_reqs['projects'])
+        results['projects_relevance'] = round(proj_result.get('similarity', 0) * 100, 2)
+    else:
+        results['projects_relevance'] = 0.0
+    
+    return results
+
+
+def calculate_weighted_score(
+    component_scores: Dict[str, float],
+    weights: Dict[str, float]
+) -> float:
+    """
+    Calculate weighted score using company-configurable weights.
+    
+    Args:
+        component_scores: Dictionary with relevance scores for each component
+            {
+                'experience_relevance': 95.0,
+                'skills_relevance': 88.0,
+                'education_relevance': 98.0,
+                'projects_relevance': 85.0
+            }
+        weights: Dictionary with weights (0-100) for each component
+            {
+                'experience_weight': 40,
+                'skills_weight': 30,
+                'education_weight': 20,
+                'projects_weight': 10
+            }
+    
+    Returns:
+        Weighted score (0-100)
+    """
+    # Convert weights from percentage to decimal
+    exp_w = weights.get('experience_weight', 40) / 100
+    skills_w = weights.get('skills_weight', 30) / 100
+    edu_w = weights.get('education_weight', 20) / 100
+    proj_w = weights.get('projects_weight', 10) / 100
+    
+    # Get scores (default to 0 if not present)
+    exp_score = component_scores.get('experience_relevance', 0)
+    skills_score = component_scores.get('skills_relevance', 0)
+    edu_score = component_scores.get('education_relevance', 0)
+    proj_score = component_scores.get('projects_relevance', 0)
+    
+    # Calculate weighted score
+    weighted_score = (
+        exp_score * exp_w +
+        skills_score * skills_w +
+        edu_score * edu_w +
+        proj_score * proj_w
+    )
+    
+    return round(weighted_score, 2)
+
+
+def calculate_hybrid_job_fit_score(
+    parsed_resume_json: Dict,
+    job_posting: Dict,
+    weights: Optional[Dict[str, float]] = None,
+    include_breakdown: bool = True
+) -> Dict[str, Any]:
+    """
+    Calculate hybrid job fit score using semantic relevance and company weights.
+    This is the main function for company-adaptable scoring!
+    
+    Args:
+        parsed_resume_json: Parsed resume data from GPT extractor
+            {
+                "experience": [...],
+                "skills": {...},
+                "education": [...],
+                "projects": [...]
+            }
+        job_posting: Job posting data
+            {
+                "job_id": "...",
+                "title": "...",
+                "description": "...",
+                "skills": [...],
+                "required_education": [...],
+                "expected_projects": [...],
+                "min_years_experience": 5
+            }
+        weights: Optional weights for scoring (from scoring_settings)
+            {
+                "experience_weight": 40,
+                "skills_weight": 30,
+                "education_weight": 20,
+                "projects_weight": 10
+            }
+        include_breakdown: Whether to include component breakdown in result
+    
+    Returns:
+        Dictionary with:
+            - semantic_score: Overall weighted score (0-100)
+            - component_scores: Individual relevance scores
+            - weights_used: The weights applied
+            - fit_category: Category based on score
+    """
+    # Default weights if not provided
+    if weights is None:
+        weights = {
+            'experience_weight': 40,
+            'skills_weight': 30,
+            'education_weight': 20,
+            'projects_weight': 10
+        }
+    
+    # Calculate component relevance scores using semantic matching
+    component_scores = calculate_component_scores(parsed_resume_json, job_posting)
+    
+    # Calculate weighted score
+    weighted_score = calculate_weighted_score(component_scores, weights)
+    
+    # Determine fit category
+    if weighted_score >= 80:
+        fit_category = "Excellent Fit"
+    elif weighted_score >= 60:
+        fit_category = "Good Fit"
+    elif weighted_score >= 40:
+        fit_category = "Moderate Fit"
+    else:
+        fit_category = "Low Fit"
+    
+    # Build result
+    result = {
+        "job_id": job_posting.get('job_id'),
+        "semantic_score": weighted_score,
+        "fit_category": fit_category,
+        "weights_used": weights,
+        "status": "success"
+    }
+    
+    # Include breakdown if requested
+    if include_breakdown:
+        result["component_scores"] = {
+            "experience": component_scores.get('experience_relevance', 0),
+            "skills": component_scores.get('skills_relevance', 0),
+            "education": component_scores.get('education_relevance', 0),
+            "projects": component_scores.get('projects_relevance', 0)
+        }
+    
+    return result
+
+
 def get_supabase_client():
     """
     Get Supabase client for database operations.

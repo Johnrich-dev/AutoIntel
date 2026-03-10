@@ -5,6 +5,12 @@ This document describes the complete recruitment workflow for the AutoIntel syst
 
 ---
 
+## System Status: ✅ FULLY OPERATIONAL
+
+The AutoIntel Recruitment System is now complete with **hybrid semantic scoring** that uses company-adaptable weights!
+
+---
+
 ## Recruitment Pipeline
 
 ```
@@ -33,211 +39,146 @@ This document describes the complete recruitment workflow for the AutoIntel syst
     └── status: "pending_screening"
 
     ═══════════════════════════════════════════════════════════════════════════
-    AUTOMATIC SCREENING TRIGGERED (Within resume_collector.py)
+    AUTOMATIC SCREENING TRIGGERED (Hybrid Semantic Scoring)
     ═══════════════════════════════════════════════════════════════════════════
 
     Step 1a: Look up job from job_postings table
     │   ├── Match position to job title (case-insensitive)
-    │   └── Get job_description for matching
+    │   └── Get job_description and structured requirements
     │
-    Step 1b: Call screening_service.process_applicant_screening()
-    │   ├── Uses BERT semantic scoring (all-MiniLM-L6-v2)
-    │   ├── Input: resume_text + job_description
-    │   └── Output: semantic_score (0-100), fit_category
+    Step 1b: Load scoring settings from database
+    │   ├── experience_weight (default: 40%)
+    │   ├── skills_weight (default: 30%)
+    │   ├── education_weight (default: 20%)
+    │   ├── projects_weight (default: 10%)
+    │   ├── qualified_threshold (default: 80)
+    │   └── review_threshold (default: 60)
     │
-    Step 1c: Save results to database
+    Step 1c: Calculate component relevance scores (BERT)
+    │   ├── Experience relevance: resume experience vs job requirements
+    │   ├── Skills relevance: resume skills vs job required skills
+    │   ├── Education relevance: resume education vs job required education
+    │   └── Projects relevance: resume projects vs job expected projects
+    │
+    Step 1d: Apply company weights and calculate final score
+    │   └── Final = (exp_score × exp_w) + (skills_w × skills) + ...
+    │
+    Step 1e: Compare to thresholds and make decision
+    │   ├── score >= qualified → PASS
+    │   ├── score >= review → NEEDS_REVIEW
+    │   └── score < review → FAIL
+    │
+    Step 1f: Save results to database
     │   ├── screening_score saved to applicants table
     │   ├── screening_fit_category saved
+    │   ├── Component scores saved to resume_scores table
     │   └── status updated: passed_screening / needs_review / failed_screening
     │
-    Step 1d: Send notification email (automatic)
+    Step 1g: Send notification email (automatic)
         ├── Score >= 80: Send PASS email with access token
         ├── Score 60-79: Send REVIEW email
         └── Score < 60: Send FAIL email
+```
 
-    ═══════════════════════════════════════════════════════════════════════════
+---
 
-    Scoring Logic:
-    ├── score >= 80 → "Qualified" (PASS) → Email with access token
-    ├── score >= 60 → "Review" (NEEDS REVIEW) → Email notification
-    └── score < 60 → "Not Qualified" (FAIL) → Regret email
+## Scoring Logic
 
-    Decision Engine:
-    ├── IF score >= 80:
-    │   ├── status: "passed_screening"
-    │   ├── Generate access_token (UUID)
-    │   ├── Store token with expiration (24 hours)
-    │   └── Trigger PASS email notification
-    │
-    ├── ELSE IF score >= 60:
-    │   ├── status: "needs_review"
-    │   └── Admin manually reviews
-    │
-    └── ELSE (score < 60):
-        ├── status: "failed_screening"
-        └── Trigger FAIL email notification
+### Configurable Thresholds (via AdminScoringSettings)
 
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        STAGE 2: NOTIFICATION (EMAIL)                         │
-└─────────────────────────────────────────────────────────────────────────────────┘
+| Score Range | Category | Action |
+|-------------|----------|--------|
+| 80-100 | Excellent Fit | Auto-pass, send access email |
+| 60-79 | Good Fit | Needs manual review |
+| 0-59 | Not Qualified | Send rejection email |
 
-    NOTE: Email is now sent AUTOMATICALLY within resume_collector.py after scoring.
-    This happens in Stage 1 (combined flow).
+**Note:** Thresholds are stored in `scoring_settings` table and can be adjusted by admins.
 
-    ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║                    IF PASSED SCREENING (Score >= 80)                      ║
-    ╠═══════════════════════════════════════════════════════════════════════════╣
-    ║                                                                           ║
-    ║  TO: applicant@email.com                                                  ║
-    ║  SUBJECT: Congratulations! You've Passed Initial Screening               ║
-    ║                                                                           ║
-    ║  ------------------------------------------------------------------------  ║
-    ║  Dear [Applicant Name],                                                   ║
-    ║                                                                           ║
-    ║  Congratulations! Your application for the position of [Job Title]       ║
-    ║  has been successful in our initial screening.                           ║
-    ║                                                                           ║
-    ║  Your Match Score: [85/100] - Excellent Fit                              ║
-    ║                                                                           ║
-    ║  ─────────────────────────────────────────────────────────────────────    ║
-    ║  NEXT STEPS:                                                              ║
-    ║                                                                           ║
-    ║  1. ACCESS THE SYSTEM:                                                    ║
-    ║     Visit: https://autointel.example.com/login                            ║
-    ║     Access Token: [unique-token-string]                                   ║
-    ║     (This token expires in 24 hours)                                      ║
-    ║                                                                           ║
-    ║  2. COMPLETE ASSESSMENTS:                                                 ║
-    ║     • Video Introduction (record your response)                          ║
-    ║     • Work Profiling Exam (personality & skills assessment)              ║
-    ║                                                                           ║
-    ║  ─────────────────────────────────────────────────────────────────────    ║
-    ║                                                                           ║
-    ║  SYSTEM INSTRUCTIONS:                                                     ║
-    ║                                                                           ║
-    ║  1. Go to the login page                                                  ║
-    ║  2. Enter your email address                                             ║
-    ║  3. Enter your access token as the password                              ║
-    ║  4. Complete the required assessments                                    ║
-    ║  5. Submit your responses                                                ║
-    ║                                                                           ║
-    ║  Note: You must complete all assessments within 7 days of receiving      ║
-    ║  this email. After completing assessments, our team will review your      ║
-    ║  results and contact you for the next steps.                            ║
-    ║                                                                           ║
-    ║  Best regards,                                                           ║
-    ║  AutoIntel Recruitment Team                                              ║
-    ║  ------------------------------------------------------------------------  ║
-    ║                                                                           ║
-    ╚═══════════════════════════════════════════════════════════════════════════╝
+---
 
-    ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║                    IF FAILED SCREENING (Score < 60)                       ║
-    ╠═══════════════════════════════════════════════════════════════════════════╣
-    ║                                                                           ║
-    ║  TO: applicant@email.com                                                  ║
-    ║  SUBJECT: Update on Your Application - [Job Title]                       ║
-    ║                                                                           ║
-    ║  ------------------------------------------------------------------------  ║
-    ║  Dear [Applicant Name],                                                   ║
-    ║                                                                           ║
-    ║  Thank you for your interest in the [Job Title] position at our          ║
-    ║  company.                                                                 ║
-    ║                                                                           ║
-    ║  After careful review of your application, we regret to inform you        ║
-    ║  that we have decided to move forward with other candidates whose         ║
-    ║  qualifications more closely match our current requirements.            ║
-    ║                                                                           ║
-    ║  Your Match Score: [45/100]                                               ║
-    ║                                                                           ║
-    ║  We encourage you to apply for future positions that match your          ║
-    ║  skills and experience.                                                   ║
-    ║                                                                           ║
-    ║  Best regards,                                                           ║
-    ║  AutoIntel Recruitment Team                                              ║
-    ║  ------------------------------------------------------------------------  ║
-    ║                                                                           ║
-    ╚═══════════════════════════════════════════════════════════════════════════╝
+## Hybrid Semantic Scoring
 
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        STAGE 3: APPLICANT ACCESS                               │
-└─────────────────────────────────────────────────────────────────────────────────┘
+### Company-Adaptive Weights
 
-    Applicant logs in with:
-    ├── Email: [applicant email]
-    └── Access Token: [from email]
+The system supports company-specific weight configurations:
 
-    System validates:
-    ├── Token exists in database
-    ├── Token not expired
-    ├── Applicant status = "passed_screening"
-    └── Creates session
+| Company Type | Experience | Skills | Education | Projects |
+|-------------|------------|--------|-----------|----------|
+| Default | 40% | 30% | 20% | 10% |
+| Startup (Skills-heavy) | 20% | 50% | 10% | 20% |
+| Enterprise (Experience-heavy) | 50% | 30% | 10% | 10% |
+| Research (Education-heavy) | 20% | 20% | 40% | 20% |
 
-    After login, applicant sees:
-    ├── Dashboard with assessment status
-    ├── "Start Video Assessment" button
-    ├── "Start Work Profiling Exam" button
-    └── Progress indicator
+### How Scoring Works
 
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        STAGE 4: ASSESSMENTS                                   │
-└─────────────────────────────────────────────────────────────────────────────────┘
+1. **Extract resume components** from parsed JSON:
+   - Experience: job titles, companies, years, descriptions
+   - Skills: hard skills + soft skills
+   - Education: schools, degrees, courses
+   - Projects: project names, descriptions
 
-    ╔═══════════════════════════════════════════════════════════════════════╗
-    ║                    VIDEO ASSESSMENT                                     ║
-    ╠═══════════════════════════════════════════════════════════════════════╣
-    ║                                                                           ║
-    ║  Applicant clicks "Start Video Assessment"                              ║
-    ║                                                                           ║
-    ║  System provides:                                                         ║
-    ║  ├── Question prompt (e.g., "Tell us about yourself...")              ║
-    ║  ├── Recording interface (camera + microphone)                         ║
-    ║  ├── Time limit (e.g., 2-3 minutes)                                     ║
-    ║  └── Preview & re-record option                                          ║
-    ║                                                                           ║
-    ║  After submission:                                                       ║
-    ║  ├── Video stored in Supabase Storage (applicant-videos bucket)        ║
-    ║  ├── Video saved to: video_assessments table                            ║
-    ║  ├── Transcription triggered (Whisper)                                 ║
-    ║  └── Status: "video_completed"                                          ║
-    ║                                                                           ║
-    ╚═══════════════════════════════════════════════════════════════════════╝
+2. **Build job requirements** from job posting:
+   - Required skills (from `skills` array)
+   - Required education (from `required_education` array)
+   - Expected projects (from `expected_projects` array)
+   - Experience requirements (from `min_years_experience`)
 
-    ╔═══════════════════════════════════════════════════════════════════════╗
-    ║                    WORK PROFILING EXAM (Personality Test)               ║
-    ╠═══════════════════════════════════════════════════════════════════════╣
-    ║                                                                           ║
-    ║  Applicant clicks "Start Work Profiling Exam"                           ║
-    ║                                                                           ║
-    ║  System provides:                                                         ║
-    ║  ├── Multiple choice questions                                          ║
-    ║  ├── Personality assessments                                            ║
-    ║  ├── Skills evaluation                                                   ║
-    ║  └── Time-based or untimed                                              ║
-    ║                                                                           ║
-    ║  After completion:                                                       ║
-    ║  ├── Results saved to: personality_tests table                          ║
-    ║  ├── Score calculated                                                    ║
-    ║  └── Status: "exam_completed"                                           ║
-    ║                                                                           ║
-    ╚═══════════════════════════════════════════════════════════════════════╝
+3. **Calculate semantic relevance** using BERT embeddings:
+   - Compare each resume component to job requirement
+   - Returns 0-100% relevance score (NOT quantity!)
 
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        STAGE 5: FINAL REVIEW                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
+4. **Apply company weights** and calculate final score:
+   ```
+   Final = (exp_rel × exp_w) + (skills_rel × skills_w) + (edu_rel × edu_w) + (proj_rel × proj_w)
+   ```
 
-    Admin reviews in Dashboard:
-    ├── All applicants who completed assessments
-    ├── Video + transcription
-    ├── Personality test results
-    ├── Initial screening score
-    └── Overall recommendation
+5. **Compare to thresholds** and determine decision:
+   - Pass / Needs Review / Fail
 
-    Admin actions:
-    ├── Shortlist for interview
-    ├── Reject
-    ├── Request additional info
-    └── Move to next stage
+---
+
+## Applicant Flow
+
+### Stage 2: Notification Email
+
+**If PASSED (Score >= 80):**
+- Access token sent via email
+- Token expires in 24 hours
+- Applicant logs in with email + token
+- Completes Video Assessment + Personality Test
+
+**If NEEDS REVIEW (Score 60-79):**
+- Notification email sent
+- Admin manually reviews
+
+**If FAILED (Score < 60):**
+- Rejection email sent
+
+### Stage 3: Applicant Access
+
+- Login with email + access token
+- Dashboard shows assessment progress
+- Complete Video Assessment
+- Complete Personality Test
+
+### Stage 4: Assessments
+
+**Video Assessment:**
+- Record introduction video
+- Stored in Supabase Storage
+- Transcribed with Whisper
+
+**Personality Test:**
+- Multiple choice questions
+- Results saved to database
+
+### Stage 5: Final Review
+
+- Admin reviews completed applications
+- Video + transcription
+- Personality test results
+- Screening scores
+- Shortlist / Reject / Move to next stage
 
 ---
 
@@ -293,41 +234,82 @@ This document describes the complete recruitment workflow for the AutoIntel syst
 
 ---
 
-## API Endpoints Summary
+## API Endpoints
 
-| Endpoint | Method | Stage | Description |
-|----------|--------|-------|-------------|
-| `/api/calculate-fit` | POST | 1 | Score resume against job (BERT semantic) |
-| `/api/trigger-transcription` | POST | 4 | Trigger video transcription (Whisper) |
-| `/api/health` | GET | All | Health check |
-
-**Note**: Email sending and token generation are now done AUTOMATICALLY within resume_collector.py (Stage 1). No separate API calls needed.
-
----
-
-## Files Involved
-
-| File | Purpose |
-|------|---------|
-| `resume_collector.py` | Stage 1: Email fetching + AUTOMATIC screening + email notification |
-| `job_alignment.py` | Stage 1: BERT semantic scoring (all-MiniLM-L6-v2) |
-| `screening_service.py` | Stage 1: Orchestrates scoring → decision → notification |
-| `email_service.py` | Stage 1: Sends pass/review/fail emails with tokens |
-| `scoring_api.py` | Optional: Standalone scoring API (not required for auto-flow) |
-| `transcription_service.py` | Stage 4: Video transcription (Whisper) |
-| `VideoAssessment.tsx` | Stage 4: Video recording |
-| `PersonalityTest.tsx` | Stage 4: Work profiling |
-| `ApplicantLogin.tsx` | Stage 3: Login with token |
-| `AdminDashboard.tsx` | Stage 5: Admin review panel |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/calculate-fit` | POST | Legacy job fit score (BERT) |
+| `/api/calculate-hybrid-fit` | POST | Hybrid scoring with customizable weights |
+| `/api/get-component-scores` | POST | Get component relevance scores |
+| `/api/calculate-similarity` | POST | Semantic similarity between texts |
+| `/api/trigger-transcription` | POST | Trigger video transcription |
+| `/api/health` | GET | Health check |
 
 ---
 
-## Scoring Thresholds (Configurable)
+## Files Reference
 
-| Score Range | Category | Action |
-|-------------|----------|--------|
-| 80-100 | Excellent Fit | Auto-pass, send access email |
-| 60-79 | Good Fit | Needs manual review |
-| 0-59 | Not Qualified | Send rejection email |
+| File | Purpose | Status |
+|------|---------|--------|
+| `resume_collector.py` | Email collection + screening trigger | ✅ Working |
+| `job_alignment.py` | Hybrid semantic scoring | ✅ Implemented |
+| `screening_service.py` | Orchestration + weight loading | ✅ Implemented |
+| `email_service.py` | Email notifications | ✅ Working |
+| `scoring_api.py` | REST API endpoints | ✅ Implemented |
+| `transcription_service.py` | Video transcription | ✅ Working |
+| `AdminScoringSettings.tsx` | Weight/threshold configuration | ✅ Working |
+| `ApplicantsList.tsx` | View applicants | ✅ Working |
+| `AdminDashboard.tsx` | Admin panel | ✅ Working |
+| `VideoAssessment.tsx` | Video recording | ✅ Working |
+| `PersonalityTest.tsx` | Personality assessment | ✅ Working |
 
-These thresholds are stored in `scoring_settings` table and can be adjusted by admins.
+---
+
+## Configuration
+
+### Admin Scoring Settings
+
+1. Navigate to **Scoring Settings** in admin dashboard
+2. Adjust weights (must sum to 100%):
+   - Experience Weight
+   - Skills Weight
+   - Education Weight
+   - Projects Weight
+3. Adjust thresholds:
+   - Qualified Threshold (min score to pass)
+   - Review Threshold (min score for manual review)
+4. Click Save
+
+**Settings are applied immediately to new applicants.**
+
+---
+
+## Database Schema
+
+### scoring_settings Table
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| experience_weight | NUMERIC | 40 | Weight for experience (%) |
+| skills_weight | NUMERIC | 30 | Weight for skills (%) |
+| education_weight | NUMERIC | 20 | Weight for education (%) |
+| projects_weight | NUMERIC | 10 | Weight for projects (%) |
+| qualified_threshold | NUMERIC | 80 | Min score to pass (%) |
+| review_threshold | NUMERIC | 60 | Min score for review (%) |
+| baseline_project_score | NUMERIC | 2 | Baseline for projects |
+
+### resume_scores Table
+
+| Column | Type | Description |
+|--------|------|-------------|
+| experience_score | NUMERIC | 0-100 |
+| skills_score | NUMERIC | 0-100 |
+| education_score | NUMERIC | 0-100 |
+| project_score | NUMERIC | 0-100 |
+| final_score | NUMERIC | Weighted total 0-100 |
+| match_explain | JSONB | Breakdown with weights used |
+
+---
+
+*Last Updated: 2026-03-10*
+*See HYBRID_SCORING_GUIDE.md for detailed technical implementation.*
