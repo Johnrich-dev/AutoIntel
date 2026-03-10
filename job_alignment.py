@@ -982,10 +982,14 @@ def calculate_count_based_score(
     # Projects: Based on number of projects relative to baseline
     project_list = parsed_resume_json.get('projects', [])
     project_count = len(project_list)
-    if project_count >= baseline_project_score:
-        projects_score = min((project_count / baseline_project_score) * 100, 100)
+    if baseline_project_score and baseline_project_score > 0:
+        if project_count >= baseline_project_score:
+            projects_score = min((project_count / baseline_project_score) * 100, 100)
+        else:
+            projects_score = (project_count / baseline_project_score) * 50
     else:
-        projects_score = (project_count / baseline_project_score) * 50
+        # No baseline - give full score if they have any projects
+        projects_score = 100 if project_count > 0 else 0
     
     # Calculate weighted total using weights
     count_score = (
