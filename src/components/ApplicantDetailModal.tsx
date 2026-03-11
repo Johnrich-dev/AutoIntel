@@ -489,9 +489,12 @@ export function ApplicantDetailModal({
                   <div className="space-y-3">
                     {parsedResume.experience.map((exp, idx) => (
                       <div key={idx} className="border-l-2 border-blue-200 pl-4">
-                        <p className="font-medium text-gray-900">{exp.role}</p>
-                        <p className="text-sm text-gray-600">{exp.company}</p>
-                        <p className="text-xs text-gray-400">{exp.years}</p>
+                        <p className="font-medium text-gray-900">{exp.role || 'Professional Experience'}</p>
+                        {exp.company && <p className="text-sm text-gray-600">{exp.company}</p>}
+                        {exp.years && <p className="text-xs text-gray-400">{exp.years}</p>}
+                        {exp.summary && (
+                          <p className="text-sm text-gray-500 mt-2">{exp.summary}</p>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -507,8 +510,26 @@ export function ApplicantDetailModal({
                       <div key={idx} className="border-l-2 border-purple-200 pl-4">
                         <p className="font-medium text-gray-900">{project.name}</p>
                         {project.details && (
-                          <p className="text-sm text-gray-600 mt-1">{project.details}</p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {Array.isArray(project.details) 
+                              ? project.details.join(' ') 
+                              : project.details}
+                          </p>
                         )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Certifications & Trainings */}
+              {parsedResume.trainings && parsedResume.trainings.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <h3 className="font-semibold text-gray-900 mb-3">Certifications & Trainings</h3>
+                  <div className="space-y-2">
+                    {parsedResume.trainings.map((training, idx) => (
+                      <div key={idx} className="border-l-2 border-green-200 pl-4">
+                        <p className="text-sm text-gray-700">{training}</p>
                       </div>
                     ))}
                   </div>

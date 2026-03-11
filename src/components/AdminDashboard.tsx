@@ -539,7 +539,11 @@ export function AdminDashboard() {
                                 <div key={idx} className="text-sm bg-white p-2 rounded border border-gray-200">
                                   <p className="font-medium text-gray-900">{proj.name}</p>
                                   {proj.details && (
-                                    <p className="text-gray-600 text-xs mt-1">{proj.details}</p>
+                                    <p className="text-gray-600 text-xs mt-1">
+                                      {Array.isArray(proj.details) 
+                                        ? proj.details.join(' ') 
+                                        : proj.details}
+                                    </p>
                                   )}
                                 </div>
                               ))}
