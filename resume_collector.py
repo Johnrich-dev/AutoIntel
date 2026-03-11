@@ -619,22 +619,50 @@ def process_emails():
                             resume_text = resume_result.data[0].get('raw_extracted_content')
 
                             if resume_text:
-                                # Look up job from job_postings based on position
-                                job_result = supabase.table('job_postings').select(
-                                    'job_id, title, description, skills, required_education, expected_projects, min_years_experience, max_years_experience'
-                                ).ilike('title', f'%{position}%').execute()
-
+                                # Improved job matching: Try multiple strategies
                                 job_id = None
                                 job_title = position
                                 job_description = ""
                                 job_posting = None
-
+                                
+                                # Strategy 1: Exact/partial title match (existing)
+                                job_result = supabase.table('job_postings').select(
+                                    'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, role_family'
+                                ).ilike('title', f'%{position}%').execute()
+                                
+                                # Strategy 2: If no title match, try role_family match
+                                if not job_result.data or len(job_result.data) == 0:
+                                    # Extract role family hint from position (e.g., "Python Developer" -> "Developer")
+                                    position_lower = position.lower()
+                                    role_hints = ['developer', 'engineer', 'manager', 'analyst', 'designer', 'specialist', 'coordinator', 'administrator']
+                                    role_family = None
+                                    for hint in role_hints:
+                                        if hint in position_lower:
+                                            role_family = hint
+                                            break
+                                    
+                                    if role_family:
+                                        job_result = supabase.table('job_postings').select(
+                                            'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, role_family'
+                                        ).ilike('role_family', f'%{role_family}%').execute()
+                                
+                                # Strategy 3: If still no match, try any active job (fallback)
+                                if not job_result.data or len(job_result.data) == 0:
+                                    job_result = supabase.table('job_postings').select(
+                                        'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, role_family'
+                                    ).eq('is_active', True).limit(1).execute()
+                                    if job_result.data and len(job_result.data) > 0:
+                                        print(f"[WARNING] No exact job match for '{position}', using fallback: {job_result.data[0].get('title')}")
+                                
                                 if job_result.data and len(job_result.data) > 0:
                                     job = job_result.data[0]
                                     job_id = job.get('job_id')
                                     job_title = job.get('title', position)
                                     job_description = job.get('description') or ""
                                     job_posting = job  # Full job posting for hybrid scoring
+                                    print(f"[INFO] Matched job: {job_title} (ID: {job_id})")
+                                else:
+                                    print(f"[WARNING] No job found for position: {position}, using position as title")
 
                                 # Get parsed resume JSON for hybrid scoring
                                 parsed_resume_json = None
@@ -656,7 +684,8 @@ def process_emails():
                                 except Exception as e:
                                     print(f"Warning: Could not get parsed resume: {e}")
 
-                                if job_description:
+                                # Trigger screening if we have a job (even without description, we have structured fields)
+                                if job_posting or job_description:
                                     print(f"Triggering automatic screening for {sender_name}...")
                                     
                                     # Pass all data needed for hybrid scoring
