@@ -399,11 +399,9 @@ def extract_skills_text(skills_dict: Dict) -> str:
     
     all_skills = []
     if isinstance(skills_dict, dict):
-        # Start with hard and soft skills
         all_skills = skills_dict.get('hard_skills', []) + skills_dict.get('soft_skills', [])
-        # If 'all' exists, merge with existing skills (don't overwrite)
         if skills_dict.get('all'):
-            all_skills = list(set(all_skills + skills_dict['all']))  # Combine and deduplicate
+            all_skills = skills_dict['all']
     elif isinstance(skills_dict, list):
         all_skills = skills_dict
     
@@ -502,67 +500,6 @@ def build_job_requirements_text(job_posting: Dict) -> Dict[str, str]:
     Returns:
         Dictionary with requirement texts for each component
     """
-<<<<<<< HEAD
-    def parse_jsonb_field(value: Any) -> List[str]:
-        """Parse jsonb field from Supabase, handling various formats."""
-        if value is None:
-            return []
-        if isinstance(value, list):
-            return [str(v) for v in value if v]
-        if isinstance(value, str):
-            try:
-                parsed = json.loads(value)
-                if isinstance(parsed, list):
-                    return [str(v) for v in parsed if v]
-                return [str(parsed)]
-            except json.JSONDecodeError:
-                return [value]
-        return [str(value)]
-    
-    def extract_skills_from_description(description: str) -> str:
-        """
-        Extract potential skills from job description using common patterns.
-        This improves matching when structured skills/keywords are not provided.
-        """
-        if not description:
-            return ""
-        
-        # Common technical skills to look for
-        common_skills = [
-            # Programming languages
-            "python", "java", "javascript", "typescript", "c++", "c#", "ruby", "go", "rust",
-            "php", "swift", "kotlin", "scala", "r", "matlab", "sql", "html", "css",
-            # Frameworks
-            "django", "flask", "react", "angular", "vue", "nodejs", "express", "spring",
-            "rails", "laravel", "asp.net", "nextjs", "tailwind", "bootstrap",
-            # Databases
-            "postgresql", "mysql", "mongodb", "redis", "elasticsearch", "oracle",
-            "sqlserver", "firebase", "dynamodb", "cassandra",
-            # Cloud/DevOps
-            "aws", "azure", "gcp", "docker", "kubernetes", "terraform", "jenkins",
-            "ci/cd", "devops", "linux", "git", "github", "gitlab",
-            # Data/ML
-            "machine learning", "deep learning", "data science", "tensorflow", "pytorch",
-            "pandas", "numpy", "scikit-learn", "nlp", "computer vision",
-            # Other tech
-            "api", "rest", "graphql", "microservices", "agile", "scrum", "jira",
-            "testing", "unit testing", "debugging", "problem solving",
-            # Soft skills
-            "communication", "leadership", "teamwork", "problem solving", "analytical",
-            "presentation", "project management", "time management"
-        ]
-        
-        description_lower = description.lower()
-        found_skills = []
-        
-        for skill in common_skills:
-            if skill in description_lower:
-                found_skills.append(skill)
-        
-        return " ".join(found_skills)
-    
-=======
->>>>>>> 024290d117978a919f81ae873dc224f6edae59c6
     # Experience requirement
     min_years = job_posting.get('min_years_experience')
     max_years = job_posting.get('max_years_experience')
@@ -594,13 +531,7 @@ def build_job_requirements_text(job_posting: Dict) -> Dict[str, str]:
     elif keywords_list:
         skills_req = " ".join(keywords_list)
     else:
-        # Improved fallback: Try to extract skills from description
-        description = job_posting.get('description', '') or ""
-        extracted_skills = extract_skills_from_description(description)
-        if extracted_skills:
-            skills_req = extracted_skills
-        else:
-            skills_req = description[:500] if description else ""
+        skills_req = job_posting.get('description', '')[:500] if job_posting.get('description') else ""
     
     # Education requirement
     required_edu = job_posting.get('required_education', [])
@@ -608,12 +539,7 @@ def build_job_requirements_text(job_posting: Dict) -> Dict[str, str]:
     if edu_list:
         edu_req = " ".join(edu_list)
     else:
-        # Check title for education hints
-        title = job_posting.get('title', '').lower()
-        if 'bachelor' in title or 'master' in title or 'phd' in title or 'degree' in title:
-            edu_req = title  # Use title as hint
-        else:
-            edu_req = "relevant education"
+        edu_req = "relevant education"
     
     # Projects requirement
     expected_projects = job_posting.get('expected_projects', [])
@@ -621,17 +547,7 @@ def build_job_requirements_text(job_posting: Dict) -> Dict[str, str]:
     if projects_list:
         proj_req = " ".join(projects_list)
     else:
-        # Improved fallback: Extract from description
-        description = job_posting.get('description', '') or ""
-        # Look for project-related keywords
-        project_keywords = ["project", "built", "developed", "created", "designed", "implemented"]
-        proj_req = "project development implementation"
-        
-        # Try to extract project-related content
-        for kw in project_keywords:
-            if kw in description.lower():
-                proj_req = "project development implementation design"
-                break
+        proj_req = "relevant projects"
     
     return {
         "experience": exp_req,
@@ -641,142 +557,6 @@ def build_job_requirements_text(job_posting: Dict) -> Dict[str, str]:
     }
 
 
-<<<<<<< HEAD
-def calculate_keyword_match_score(resume_skills: List[str], job_skills: List[str]) -> float:
-    """
-    Calculate keyword-based skill matching score.
-    This provides exact matching complement to semantic similarity.
-    
-    Args:
-        resume_skills: List of skills from resume
-        job_skills: List of required skills from job posting
-    
-    Returns:
-        Score from 0-100 representing percentage of job skills found in resume
-    """
-    if not job_skills or not resume_skills:
-        return 0.0
-    
-    # Normalize to lowercase for comparison
-    resume_skills_lower = [str(s).lower().strip() for s in resume_skills if s]
-    job_skills_lower = [str(s).lower().strip() for s in job_skills if s]
-    
-    if not job_skills_lower:
-        return 0.0
-    
-    # Count matches (partial matching allowed)
-    matches = 0
-    for job_skill in job_skills_lower:
-        for resume_skill in resume_skills_lower:
-            # Exact match
-            if job_skill == resume_skill:
-                matches += 1
-                break
-            # Partial match (job skill is substring of resume skill or vice versa)
-            elif job_skill in resume_skill or resume_skill in job_skill:
-                matches += 1
-                break
-    
-    return round((matches / len(job_skills_lower)) * 100, 2)
-
-
-def get_job_skills_list(job_posting: Dict) -> List[str]:
-    """
-    Extract structured skills list from job posting.
-    
-    Args:
-        job_posting: Job posting dictionary
-    
-    Returns:
-        List of skill strings
-    """
-    def parse_jsonb_field(value: Any) -> List[str]:
-        if value is None:
-            return []
-        if isinstance(value, list):
-            return [str(v) for v in value if v]
-        if isinstance(value, str):
-            try:
-                parsed = json.loads(value)
-                if isinstance(parsed, list):
-                    return [str(v) for v in parsed if v]
-                return [str(parsed)]
-            except json.JSONDecodeError:
-                return [value]
-        return [str(value)]
-    
-    skills = job_posting.get('skills', [])
-    keywords = job_posting.get('keywords', [])
-    
-    skills_list = parse_jsonb_field(skills)
-    keywords_list = parse_jsonb_field(keywords)
-    
-    # Combine and deduplicate
-    all_job_skills = list(set(skills_list + keywords_list))
-    return all_job_skills
-
-
-def is_fresh_grad_detected(parsed_resume_json: Dict) -> bool:
-    """
-    Auto-detect if applicant is a fresh graduate based on resume content.
-    
-    Detection criteria:
-    - Currently studying (e.g., "2022 - Present" in education)
-    - Only internship experience (no full-time employment)
-    - Recent graduate (within 1 year)
-    
-    Args:
-        parsed_resume_json: Parsed resume data dictionary
-    
-    Returns:
-        True if detected as fresh graduate
-    """
-    if not parsed_resume_json:
-        return False
-    
-    # Check education - look for "present" or recent graduation
-    education_list = parsed_resume_json.get('education', [])
-    for edu in education_list:
-        year_range = edu.get('year_range', '')
-        if year_range and 'present' in year_range.lower():
-            return True
-        # Check for recent grad (current year or last year)
-        import re
-        years = re.findall(r'\d{4}', year_range)
-        if years:
-            try:
-                end_year = int(years[-1])
-                import datetime
-                current_year = datetime.datetime.now().year
-                if end_year >= current_year - 1:  # Graduated last year or this year
-                    return True
-            except:
-                pass
-    
-    # Check experience - look for internship or no experience
-    experience_list = parsed_resume_json.get('experience', [])
-    if not experience_list:
-        return True  # No experience = likely fresh grad
-    
-    # Check if all experience is internship
-    for exp in experience_list:
-        role = exp.get('role', '').lower()
-        # If there's full-time employment (not intern), not a fresh grad
-        if 'intern' not in role and 'trainee' not in role and 'student' not in role:
-            # Check for years of experience - if more than 1 year, not fresh grad
-            years_str = exp.get('years', '')
-            if years_str:
-                years = re.findall(r'\d+', years_str)
-                if years:
-                    try:
-                        if int(years[0]) >= 1:
-                            return False
-                    except:
-                        pass
-    
-    # If all experience is internship/trainee, likely fresh grad
-    return True
-=======
 def normalize_skill(skill: str) -> str:
     """
     Normalize a skill string for matching.
@@ -863,6 +643,66 @@ def calculate_skills_keyword_match(
     return round(match_percentage, 2)
 
 
+def is_fresh_grad_detected(parsed_resume_json: Dict) -> bool:
+    """
+    Auto-detect if applicant is a fresh graduate based on resume content.
+    
+    Fresh graduate indicators:
+    - No work experience, OR
+    - Only internship/trainee experience
+    - Current education shows "present" or current year
+    
+    Args:
+        parsed_resume_json: Parsed resume data
+    
+    Returns:
+        True if detected as fresh graduate
+    """
+    if not parsed_resume_json:
+        return False
+    
+    # Check experience entries
+    experience_list = parsed_resume_json.get('experience', [])
+    
+    # If no experience at all, likely fresh grad
+    if not experience_list:
+        return True
+    
+    # Check if all experience is internship/trainee
+    has_intern_only = True
+    for exp in experience_list:
+        role = str(exp.get('role', '')).lower()
+        # If there's full-time employment (not intern), not a fresh grad
+        if 'intern' not in role and 'trainee' not in role and 'student' not in role:
+            # Check for years of experience - if more than 1 year, not fresh grad
+            years_str = str(exp.get('years', ''))
+            if years_str:
+                try:
+                    years = float(years_str)
+                    if years > 1:
+                        has_intern_only = False
+                        break
+                except ValueError:
+                    pass
+            # If has a real job title, not fresh grad
+            has_intern_only = False
+            break
+    
+    if has_intern_only:
+        return True
+    
+    # Check education - if current year is present, likely fresh grad
+    education_list = parsed_resume_json.get('education', [])
+    for edu in education_list:
+        year_range = str(edu.get('year_range', '')).lower()
+        # If education shows "present" or current year 2026, likely fresh grad
+        if 'present' in year_range or '2026' in year_range:
+            return True
+    
+    # If all experience is internship/trainee, likely fresh grad
+    return True
+
+
 def calculate_experience_keyword_match(
     resume_experience: List[Dict],
     min_years: Optional[float],
@@ -947,9 +787,9 @@ def calculate_projects_keyword_match(
     matched_project_types = set()
     
     for proj in resume_projects:
-        # Combine name and details
-        name = proj.get('name', '').lower()
-        details = proj.get('details', '').lower()
+        # Combine name and details - handle None values
+        name = str(proj.get('name') or '').lower()
+        details = str(proj.get('details') or '').lower()
         full_text = f"{name} {details}"
         
         for expected in expected_projects:
@@ -1002,12 +842,12 @@ def calculate_education_keyword_match(
     matched_edu = set()
     
     for edu in resume_education:
-        # Get all fields from education entry - handle both field name variations
-        school = edu.get('school', '').lower()
+        # Get all fields from education entry - handle both field name variations and None values
+        school = str(edu.get('school') or '').lower()
         # Handle both 'course' and 'course_or_strand' field names
-        course = edu.get('course', '') or edu.get('course_or_strand', '')
+        course = edu.get('course') or edu.get('course_or_strand') or ''
         course = course.lower() if course else ''
-        degree = edu.get('degree', '').lower()
+        degree = str(edu.get('degree') or '').lower()
         # Combine all fields for matching
         edu_text = f"{school} {course} {degree}"
         
@@ -1047,7 +887,6 @@ def calculate_education_keyword_match(
     print(f"[DEBUG]   Resume edu: {resume_education}")
     
     return round(match_percentage, 2)
->>>>>>> 024290d117978a919f81ae873dc224f6edae59c6
 
 
 def calculate_component_scores(
@@ -1055,14 +894,8 @@ def calculate_component_scores(
     job_posting: Dict
 ) -> Dict[str, float]:
     """
-<<<<<<< HEAD
-    Calculate semantic relevance scores for each resume component vs job requirements.
-    This uses BERT embeddings to measure relevance, NOT quantity!
-    Now includes keyword-based matching for skills.
-=======
     Calculate relevance scores for each resume component vs job requirements.
     NOW USES KEYWORD MATCHING instead of BERT string similarity!
->>>>>>> 024290d117978a919f81ae873dc224f6edae59c6
     
     Args:
         parsed_resume_json: Parsed resume data dictionary
@@ -1081,20 +914,11 @@ def calculate_component_scores(
     job_title = job_posting.get('title', '')
     job_title_keywords = [w for w in re.findall(r'\w+', job_title.lower()) if len(w) > 2] if job_title else []
     
-<<<<<<< HEAD
-    # Extract texts from resume
-    exp_text = extract_experience_text(parsed_resume_json.get('experience', []))
-    skills_dict = parsed_resume_json.get('skills', {})
-    skills_text = extract_skills_text(skills_dict)
-    edu_text = extract_education_text(parsed_resume_json.get('education', []))
-    proj_text = extract_projects_text(parsed_resume_json.get('projects', []))
-=======
     print(f"[DEBUG] Job skills: {job_skills_list}")
     print(f"[DEBUG] Job education: {job_edu_list}")
     print(f"[DEBUG] Job projects: {job_projects_list}")
     print(f"[DEBUG] Min years: {min_years}")
     print(f"[DEBUG] Job title keywords: {job_title_keywords}")
->>>>>>> 024290d117978a919f81ae873dc224f6edae59c6
     
     results = {}
     
@@ -1105,35 +929,6 @@ def calculate_component_scores(
         job_skills=job_skills_list
     )
     
-<<<<<<< HEAD
-    # Skills relevance - now combines semantic + keyword matching
-    job_skills_list = get_job_skills_list(job_posting)
-    
-    if skills_text and job_reqs['skills']:
-        # Get semantic similarity score
-        skills_result = calculate_semantic_similarity(skills_text, job_reqs['skills'])
-        semantic_score = round(skills_result.get('similarity', 0) * 100, 2)
-        
-        # Get keyword matching score (for exact skill matches)
-        resume_skills_list = []
-        if isinstance(skills_dict, dict):
-            resume_skills_list = skills_dict.get('hard_skills', []) + skills_dict.get('soft_skills', [])
-            if skills_dict.get('all'):
-                resume_skills_list = list(set(resume_skills_list + skills_dict['all']))
-        elif isinstance(skills_dict, list):
-            resume_skills_list = skills_dict
-        
-        keyword_score = calculate_keyword_match_score(resume_skills_list, job_skills_list)
-        
-        # Combine scores: 50% semantic + 50% keyword
-        # Keyword matching rewards exact skill matches
-        results['skills_relevance'] = round((semantic_score * 0.5) + (keyword_score * 0.5), 2)
-        
-        # Debug: Print individual scores
-        print(f"[DEBUG] Skills - Semantic: {semantic_score}, Keyword: {keyword_score}, Combined: {results['skills_relevance']}")
-    else:
-        results['skills_relevance'] = 0.0
-=======
     # Experience relevance - NOW USES KEYWORD MATCHING
     resume_experience = parsed_resume_json.get('experience', [])
     results['experience_relevance'] = calculate_experience_keyword_match(
@@ -1141,7 +936,6 @@ def calculate_component_scores(
         min_years=float(min_years) if min_years else None,
         job_title_keywords=job_title_keywords
     )
->>>>>>> 024290d117978a919f81ae873dc224f6edae59c6
     
     # Education relevance - NOW USES KEYWORD MATCHING
     resume_education = parsed_resume_json.get('education', [])
@@ -1240,16 +1034,13 @@ def calculate_count_based_score(
     # Lower baselines for fresh graduates
     if is_fresh_grad:
         # Fresh grad baselines - more lenient
-        baseline_skills = 5   # 5 skills = 100% (vs 20 for experienced)
+        baseline_skills = 10  # 10 skills = 100% (vs 20 for experienced)
         baseline_experience = 1  # 1 experience = 100% (vs 5 for experienced)
-        baseline_education = 1  # 1 education = 100% (vs 3 for experienced)
-        baseline_projects = baseline_project_score if baseline_project_score else 1
+        baseline_projects = 1  # 1 project = 100% (vs 2 for experienced)
     else:
-        # Experienced candidate baselines
         baseline_skills = 20
         baseline_experience = 5
-        baseline_education = 3
-        baseline_projects = baseline_project_score if baseline_project_score else 2
+        baseline_projects = baseline_project_score
     
     # Calculate raw scores for each category (0-100 scale)
     # Skills: Based on number of skills
@@ -1261,21 +1052,22 @@ def calculate_count_based_score(
     experience_list = parsed_resume_json.get('experience', [])
     experience_score = min((len(experience_list) / baseline_experience) * 100, 100)
     
-    # Education: Based on number of education entries
+    # Education: Based on number of education entries (max 3 = 100 points)
     education_list = parsed_resume_json.get('education', [])
-    education_score = min((len(education_list) / baseline_education) * 100, 100)
+    education_score = min((len(education_list) / 3) * 100, 100)
     
     # Projects: Based on number of projects relative to baseline
     project_list = parsed_resume_json.get('projects', [])
     project_count = len(project_list)
-    if baseline_projects and baseline_projects > 0:
-        if project_count >= baseline_projects:
-            projects_score = min((project_count / baseline_projects) * 100, 100)
+    if project_count >= baseline_projects:
+        projects_score = min((project_count / baseline_projects) * 100, 100)
+    else:
+        # For fresh grads: no harsh penalty, just proportional
+        # For experienced: 50% penalty below baseline
+        if is_fresh_grad:
+            projects_score = (project_count / baseline_projects) * 100  # No penalty
         else:
             projects_score = (project_count / baseline_projects) * 50
-    else:
-        # No baseline - give full score if they have any projects
-        projects_score = 100 if project_count > 0 else 0
     
     # Calculate weighted total using weights
     count_score = (
@@ -1291,7 +1083,6 @@ def calculate_count_based_score(
         'baselines_used': {
             'skills': baseline_skills,
             'experience': baseline_experience,
-            'education': baseline_education,
             'projects': baseline_projects
         },
         'breakdown': {
@@ -1327,12 +1118,6 @@ def calculate_combined_score(
     if weights is None:
         weights = DEFAULT_COUNT_WEIGHTS.copy()
     
-    # Auto-detect fresh grad
-    fresh_grad_detected = is_fresh_grad_detected(parsed_resume_json)
-    
-    if fresh_grad_detected:
-        print(f"[INFO] Fresh graduate detected - using adjusted baselines")
-    
     # Calculate semantic score (0-100)
     semantic_result = calculate_hybrid_job_fit_score(
         parsed_resume_json=parsed_resume_json,
@@ -1341,6 +1126,12 @@ def calculate_combined_score(
         include_breakdown=True
     )
     semantic_score = semantic_result.get('semantic_score', 0)
+    
+    # Auto-detect fresh grad
+    fresh_grad_detected = is_fresh_grad_detected(parsed_resume_json)
+    
+    if fresh_grad_detected:
+        print(f"[INFO] Fresh graduate detected - using adjusted baselines")
     
     # Calculate count-based score (0-100) with fresh grad detection
     count_result = calculate_count_based_score(
