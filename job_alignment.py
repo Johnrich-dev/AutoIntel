@@ -833,6 +833,9 @@ def detect_job_level_from_resume(parsed_resume_json: Dict) -> str:
     traincert_list = parsed_resume_json.get('trainings', []) or parsed_resume_json.get('certifications', [])
     achievements_list = parsed_resume_json.get('achievements', [])
     
+    print(f"[DEBUG] detect_job_level - experience_list: {experience_list}")
+    print(f"[DEBUG] detect_job_level - education_list: {education_list}")
+    
     logger.info(f"[detect_job_level] Experience list: {experience_list}")
     logger.info(f"[detect_job_level] Education list: {education_list}")
     
@@ -913,7 +916,7 @@ def detect_job_level_from_resume(parsed_resume_json: Dict) -> str:
     # ============================================
     # Define internship-like roles
     internship_keywords = ['intern', 'ojt', 'practicum', 'trainee', 'student assistant', 'volunteer']
-    # Define real professional roles
+    # Define real professional roles (but NOT if it has internship keyword)
     professional_keywords = ['junior', 'developer', 'engineer', 'analyst', 'specialist', 'qa', 
                             'support', 'staff', 'it ', 'technician', 'programmer']
     
@@ -925,7 +928,7 @@ def detect_job_level_from_resume(parsed_resume_json: Dict) -> str:
         title = str(exp.get('title', '')).lower()
         combined = role + ' ' + title
         
-        # Check if internship-like
+        # Check if internship-like FIRST
         is_internship = any(kw in combined for kw in internship_keywords)
         
         if is_internship:
@@ -950,11 +953,11 @@ def detect_job_level_from_resume(parsed_resume_json: Dict) -> str:
     # ============================================
     # FACTOR 4: Role Title Indicators
     # ============================================
-    # Fresh Graduate signals
+    # Fresh Graduate signals (check FIRST to prioritize)
     fresh_grad_titles = ['intern', 'ojt', 'trainee', 'student']
     # Entry-Level signals
     entry_level_titles = ['junior', 'associate', 'assistant', 'staff', 'support']
-    # Mid-Level signals
+    # Mid-Level signals (but NOT if it contains intern)
     mid_level_titles = ['developer', 'engineer', 'analyst', 'specialist']
     # Strong Mid-Level signals
     senior_titles = ['senior', 'lead', 'supervisor', 'manager', 'director']
@@ -964,18 +967,24 @@ def detect_job_level_from_resume(parsed_resume_json: Dict) -> str:
         title = str(exp.get('title', '')).lower()
         combined = role + ' ' + title
         
-        # Check senior/lead titles first (strongest signal)
-        if any(t in combined for t in senior_titles):
-            mid_level_score += 3
-        # Check mid-level titles
-        elif any(t in combined for t in mid_level_titles):
-            mid_level_score += 2
-        # Check entry-level titles
-        elif any(t in combined for t in entry_level_titles):
-            entry_level_score += 3
-        # Check fresh grad titles
-        elif any(t in combined for t in fresh_grad_titles):
+        # Check for internship FIRST - if found, don't count as mid-level
+        has_intern = any(t in combined for t in fresh_grad_titles)
+        
+        if has_intern:
+            # It's an internship - count as fresh grad signal
             fresh_grad_score += 3
+        else:
+            # Check senior/lead titles first (strongest signal)
+            if any(t in combined for t in senior_titles):
+                mid_level_score += 3
+            # Check mid-level titles (only if not intern)
+            elif any(t in combined for t in mid_level_titles):
+                mid_level_score += 2
+            # Check entry-level titles
+            elif any(t in combined for t in entry_level_titles):
+                entry_level_score += 3
+    
+    logger.info(f"[detect_job_level] Role title scores: Fresh +{fresh_grad_score}, Entry +{entry_level_score}, Mid +{mid_level_score}")
     
     logger.info(f"[detect_job_level] Role title scores: Fresh +{fresh_grad_score}, Entry +{entry_level_score}, Mid +{mid_level_score}")
     
@@ -1038,8 +1047,10 @@ def detect_job_level_from_resume(parsed_resume_json: Dict) -> str:
         'mid_level': mid_level_score
     }
     
+    print(f"[DEBUG] detect_job_level - FINAL scores: {scores}")
+    
     detected_level = max(scores, key=scores.get)
-    logger.info(f"[detect_job_level] Detected job level: {detected_level} (scores: {scores})")
+    print(f"[DEBUG] detect_job_level - Detected job level: {detected_level}")
     
     return detected_level
 
@@ -2291,7 +2302,32 @@ def calculate_category_count_score(
     
     # Get category counts from resume
     experience_list = parsed_resume_json.get('experience', [])
-    skills_dict = parsed_resume_json.get('skills', {})
+    skills_raw = parsed_resume_json.get('skills', {})
+    
+    # Handle skills - can be dict or list
+    if isinstance(skills_raw, dict):
+        # NER returns skills as dict with categories: {'Languages': 'PHP, C++', ...}
+        # Try to extract hard/soft skills from dict structure
+        if 'hard_skills' in skills_raw and 'soft_skills' in skills_raw:
+            skills_dict = skills_raw
+            skills_count = len(skills_dict.get('hard_skills', [])) + len(skills_dict.get('soft_skills', []))
+        else:
+            # Convert category-based dict to list
+            all_skills = []
+            for key, value in skills_raw.items():
+                if isinstance(value, str):
+                    # Split comma-separated values
+                    skills_list = [s.strip() for s in value.split(',')]
+                    all_skills.extend(skills_list)
+                elif isinstance(value, list):
+                    all_skills.extend(value)
+            skills_count = len(all_skills)
+    elif isinstance(skills_raw, list):
+        # Skills is already a list
+        skills_count = len(skills_raw)
+    else:
+        skills_count = 0
+    
     education_list = parsed_resume_json.get('education', [])
     project_list = parsed_resume_json.get('projects', [])
     traincert_list = parsed_resume_json.get('trainings', []) + parsed_resume_json.get('certifications', [])
@@ -2299,7 +2335,6 @@ def calculate_category_count_score(
     
     # Count items in each category
     experience_count = len(experience_list)
-    skills_count = len(skills_dict.get('hard_skills', [])) + len(skills_dict.get('soft_skills', []))
     education_count = len(education_list)
     projects_count = len(project_list)
     traincert_count = len(traincert_list)

@@ -438,9 +438,9 @@ export function ApplicantDetailModal({
                   <div className="space-y-3">
                     {parsedResume.education.map((edu, idx) => (
                       <div key={idx} className="border-l-2 border-emerald-200 pl-4">
-                        <p className="font-medium text-gray-900">{edu.course_or_strand}</p>
-                        <p className="text-sm text-gray-600">{edu.school}</p>
-                        <p className="text-xs text-gray-400">{edu.year_range}</p>
+                        <p className="font-medium text-gray-900">{(edu as any).course_or_strand || (edu as any).degree || (edu as any).field || 'Education'}</p>
+                        <p className="text-sm text-gray-600">{(edu as any).school || (edu as any).institution || 'Unknown School'}</p>
+                        <p className="text-xs text-gray-400">{(edu as any).year_range || (edu as any).years || ''}</p>
                       </div>
                     ))}
                   </div>
@@ -452,31 +452,55 @@ export function ApplicantDetailModal({
                 <div className="bg-white rounded-xl border border-gray-200 p-4">
                   <h3 className="font-semibold text-gray-900 mb-3">Skills</h3>
                   
-                  {/* Hard Skills */}
-                  {parsedResume.skills.hard_skills && parsedResume.skills.hard_skills.length > 0 && (
-                    <div className="mb-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">Hard Skills</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {parsedResume.skills.hard_skills.map((skill, idx) => (
-                          <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Soft Skills */}
-                  {parsedResume.skills.soft_skills && parsedResume.skills.soft_skills.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">Soft Skills</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {parsedResume.skills.soft_skills.map((skill, idx) => (
-                          <span key={idx} className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
+                  {/* Handle both old format (hard_skills/soft_skills) and new NER format (category-based dict) */}
+                  {((parsedResume.skills as any).hard_skills || (parsedResume.skills as any).soft_skills) ? (
+                    <>
+                      {/* Hard Skills */}
+                      {(parsedResume.skills as any).hard_skills && (parsedResume.skills as any).hard_skills.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">Hard Skills</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {(parsedResume.skills as any).hard_skills.map((skill: string, idx: number) => (
+                              <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Soft Skills */}
+                      {(parsedResume.skills as any).soft_skills && (parsedResume.skills as any).soft_skills.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">Soft Skills</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {(parsedResume.skills as any).soft_skills.map((skill: string, idx: number) => (
+                              <span key={idx} className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* NER format: skills is a dict with categories */
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(parsedResume.skills as any).map(([category, skills]) => (
+                        typeof skills === 'string' 
+                          ? skills.split(',').map((skill: string, idx: number) => (
+                              <span key={`${category}-${idx}`} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                                {skill.trim()}
+                              </span>
+                            ))
+                          : Array.isArray(skills)
+                            ? skills.map((skill: string, idx: number) => (
+                                <span key={`${category}-${idx}`} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                                  {skill}
+                                </span>
+                              ))
+                            : null
+                      ))}
                     </div>
                   )}
                 </div>
@@ -489,12 +513,12 @@ export function ApplicantDetailModal({
                   <div className="space-y-3">
                     {parsedResume.experience.map((exp, idx) => (
                       <div key={idx} className="border-l-2 border-blue-200 pl-4">
-                        <p className="font-medium text-gray-900">{exp.role || 'Professional Experience'}</p>
-                        {exp.company && <p className="text-sm text-gray-600">{exp.company}</p>}
-                        {exp.years && <p className="text-xs text-gray-400">{exp.years}</p>}
-                        {exp.summary && (
-                          <p className="text-sm text-gray-500 mt-2">{exp.summary}</p>
-                        )}
+                        <p className="font-medium text-gray-900">{(exp as any).role || (exp as any).title || 'Professional Experience'}</p>
+                        <p className="text-sm text-gray-600">{(exp as any).company || (exp as any).organization || ''}</p>
+                        <p className="text-xs text-gray-400">{(exp as any).years || (exp as any).duration || (exp as any).year_range || ''}</p>
+                        {(exp as any).summary || (exp as any).description ? (
+                          <p className="text-sm text-gray-500 mt-2">{(exp as any).summary || (exp as any).description}</p>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -508,12 +532,14 @@ export function ApplicantDetailModal({
                   <div className="space-y-4">
                     {parsedResume.projects.map((project, idx) => (
                       <div key={idx} className="border-l-2 border-purple-200 pl-4">
-                        <p className="font-medium text-gray-900">{project.name}</p>
-                        {project.details && (
+                        <p className="font-medium text-gray-900">{(project as any).name || (project as any).title || 'Untitled Project'}</p>
+                        {(project as any).details && (
                           <p className="text-sm text-gray-600 mt-1">
-                            {Array.isArray(project.details) 
-                              ? project.details.join(' ') 
-                              : project.details}
+                            {typeof (project as any).details === 'string' 
+                              ? (project as any).details 
+                              : Array.isArray((project as any).details) 
+                                ? (project as any).details.join(' ') 
+                                : JSON.stringify((project as any).details)}
                           </p>
                         )}
                       </div>
@@ -529,7 +555,11 @@ export function ApplicantDetailModal({
                   <div className="space-y-2">
                     {parsedResume.trainings.map((training, idx) => (
                       <div key={idx} className="border-l-2 border-green-200 pl-4">
-                        <p className="text-sm text-gray-700">{training}</p>
+                        <p className="text-sm text-gray-700">
+                          {typeof training === 'string' 
+                            ? training 
+                            : training.name || training.title || JSON.stringify(training)}
+                        </p>
                       </div>
                     ))}
                   </div>
