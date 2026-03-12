@@ -30,7 +30,9 @@ import {
   calculateAlignmentScore,
   calculateDimensionScores,
   DIMENSION_LABELS,
-  WorkStyleAnswer
+  WorkStyleAnswer,
+  detectRoleFamily,
+  ROLE_FAMILY_PROFILES
 } from '../config/workStyleConfig';
 
 interface ApplicantWithDetails extends Applicant {
@@ -639,8 +641,9 @@ export function ApplicantDetailModal({
                         answer: a.answer,
                       })) || [];
                       const dimensionScores = calculateDimensionScores(answers);
-                      const { score: alignmentScore, breakdown } = calculateAlignmentScore(dimensionScores, 'Backend Developer');
-                      const result = getWorkStyleResult(answers, 'Backend Developer');
+                      const targetPosition = applicant.position || 'Default';
+                      const { score: alignmentScore, breakdown, matchedFamily } = calculateAlignmentScore(dimensionScores, targetPosition);
+                      const result = getWorkStyleResult(answers, targetPosition);
                       
                       return (
                         <>
@@ -653,7 +656,7 @@ export function ApplicantDetailModal({
                               </div>
                               <div className="text-right">
                                 <p className="text-sm text-gray-600">Target Role</p>
-                                <p className="font-semibold text-gray-900">Backend Developer</p>
+                                <p className="font-semibold text-gray-900">{result.matchedRoleDisplayName}</p>
                               </div>
                             </div>
                             <p className="text-xs text-gray-500 mt-2">

@@ -861,7 +861,7 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
     return applicants.map((applicant) => {
       const resumeScore = calculateResumeScore(applicant, scoringSettings);
       const videoScore = calculateVideoScore(applicant.video);
-      const profileFit = calculateProfileFit(applicant.test);
+      const profileFit = calculateProfileFit(applicant.test, applicant.position);
       const overall = calculateOverallScore(resumeScore, videoScore, profileFit);
       const recommendation = getRecommendation(overall, resumeScore);
       

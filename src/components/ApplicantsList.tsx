@@ -37,10 +37,9 @@ import {
   calculateDimensionScores,
   WorkStyleAnswer,
   DIMENSION_LABELS,
-  AVAILABLE_JOB_ROLES,
-  JobRoleProfile,
   WEIGHT_VALUES,
-  WeightLevel
+  WeightLevel,
+  detectRoleFamily
 } from '../config/workStyleConfig';
 
 interface ApplicantWithDetails extends Applicant {
@@ -266,7 +265,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
     return applicants.map(applicant => {
       const resumeScore = calculateResumeScore(applicant, scoringSettings);
       const videoScore = calculateVideoScore(applicant.video);
-      const profileFit = calculateProfileFit(applicant.test);
+      const profileFit = calculateProfileFit(applicant.test, applicant.position);
       const overall = calculateOverallScore(resumeScore, videoScore, profileFit);
       
       // Determine current status

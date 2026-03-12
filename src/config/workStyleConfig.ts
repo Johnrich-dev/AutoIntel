@@ -4,8 +4,11 @@
  * This module contains all configurations for the Work Style Assessment:
  * - Question definitions with updated work-behavior wording
  * - Dimension mapping for each question
- * - Job role profiles with dimension weights
- * - Scoring utilities
+ * - Role family profiles with dimension weights
+ * - Auto-detection of role family from job title
+ * 
+ * The system uses keyword matching to automatically detect which role family
+ * a job title belongs to, making it easy to extend without code changes.
  */
 
 // Dimension types based on the 15 work-style dimensions
@@ -152,60 +155,78 @@ export const SCALE_LABELS = [
   'Strongly Agree',
 ];
 
-// Job role profiles with dimension weights
-export interface JobRoleProfile {
+// Role family type
+export type RoleFamily = 
+  | 'development'
+  | 'data'
+  | 'design'
+  | 'security'
+  | 'network'
+  | 'cloud'
+  | 'marketing'
+  | 'business'
+  | 'qa'
+  | 'default';
+
+// Role family profiles with dimension weights
+export interface RoleFamilyProfile {
   name: string;
+  displayName: string;
   description: string;
   weights: Record<WorkStyleDimension, WeightLevel>;
 }
 
-// Pre-defined job role profiles
-export const JOB_ROLE_PROFILES: Record<string, JobRoleProfile> = {
-  'Backend Developer': {
-    name: 'Backend Developer',
-    description: 'Software development focused on server-side logic and APIs',
-    weights: {
-      collaboration: 'medium',
-      independence: 'medium_high',
-      leadership_readiness: 'medium',
-      adaptability: 'medium',
-      attention_to_detail: 'high',
-      problem_solving: 'high',
-      communication: 'medium',
-      stress_tolerance: 'medium',
-      feedback_receptiveness: 'medium',
-      ambiguity_tolerance: 'medium',
-      initiative: 'medium_high',
-      relationship_building: 'low',
-      learning_orientation: 'high',
-      conflict_management: 'low_medium',
-      work_preference_balance: 'medium',
-    },
-  },
-  'Frontend Developer': {
-    name: 'Frontend Developer',
-    description: 'UI/UX implementation and client-side development',
-    weights: {
-      collaboration: 'medium_high',
-      independence: 'medium',
-      leadership_readiness: 'medium',
-      adaptability: 'high',
-      attention_to_detail: 'high',
-      problem_solving: 'medium_high',
-      communication: 'medium_high',
-      stress_tolerance: 'medium',
-      feedback_receptiveness: 'high',
-      ambiguity_tolerance: 'medium',
-      initiative: 'medium',
-      relationship_building: 'medium',
-      learning_orientation: 'high',
-      conflict_management: 'medium',
-      work_preference_balance: 'medium',
-    },
-  },
-  'Full Stack Developer': {
-    name: 'Full Stack Developer',
-    description: 'Both frontend and backend development',
+// Role family keyword mapping - EASY TO EXTEND
+// Add new keywords here to automatically match new job titles
+export const ROLE_FAMILY_KEYWORDS: Record<RoleFamily, string[]> = {
+  development: [
+    'developer', 'engineer', 'programmer', 'software', 
+    '.net', 'python', 'java', 'javascript', 'web', 
+    'ios', 'android', 'mobile', 'full stack', 'frontend', 'backend',
+    'robotic', 'game', 'ar', 'vr', '.net'
+  ],
+  data: [
+    'data analyst', 'data scientist', 'data engineer', 'ml', 
+    'machine learning', 'ai', 'artificial intelligence', 
+    'big data', 'analytics'
+  ],
+  design: [
+    'ui', 'ux', 'designer', 'graphic', 'interaction', 
+    'visual', 'product designer'
+  ],
+  security: [
+    'security', 'cybersecurity', 'ethical hacker', 'infosec',
+    'penetration', 'vulnerability'
+  ],
+  network: [
+    'network', 'noc', 'cisco', 'ccna', 'network analyst',
+    'network engineer', 'support engineer'
+  ],
+  cloud: [
+    'cloud', 'aws', 'azure', 'gcp', 'devops', 'sre',
+    'site reliability', 'solutions architect'
+  ],
+  marketing: [
+    'marketing', 'seo', 'content', 'copywriter', 'digital',
+    'social media', 'brand'
+  ],
+  business: [
+    'business analyst', 'product', 'market research', 
+    'consultant', 'management'
+  ],
+  qa: [
+    'qa', 'tester', 'testing', 'sdet', 'quality', 
+    'test automation', 'automation test'
+  ],
+  default: ['default']
+};
+
+// Role family profiles
+export const ROLE_FAMILY_PROFILES: Record<RoleFamily, RoleFamilyProfile> = {
+  development: {
+    name: 'development',
+    displayName: 'Software Development',
+    description: 'Software development and engineering roles',
     weights: {
       collaboration: 'medium',
       independence: 'medium_high',
@@ -224,136 +245,233 @@ export const JOB_ROLE_PROFILES: Record<string, JobRoleProfile> = {
       work_preference_balance: 'medium',
     },
   },
-  'HR Assistant': {
-    name: 'HR Assistant',
-    description: 'Human resources support and employee relations',
+  data: {
+    name: 'data',
+    displayName: 'Data & AI',
+    description: 'Data analysis, science and AI/ML roles',
+    weights: {
+      collaboration: 'medium',
+      independence: 'medium_high',
+      leadership_readiness: 'low_medium',
+      adaptability: 'high',
+      attention_to_detail: 'high',
+      problem_solving: 'high',
+      communication: 'medium_high',
+      stress_tolerance: 'medium',
+      feedback_receptiveness: 'high',
+      ambiguity_tolerance: 'medium',
+      initiative: 'medium',
+      relationship_building: 'low_medium',
+      learning_orientation: 'high',
+      conflict_management: 'low_medium',
+      work_preference_balance: 'medium',
+    },
+  },
+  design: {
+    name: 'design',
+    displayName: 'Design',
+    description: 'UI/UX and graphic design roles',
+    weights: {
+      collaboration: 'high',
+      independence: 'medium',
+      leadership_readiness: 'low_medium',
+      adaptability: 'high',
+      attention_to_detail: 'high',
+      problem_solving: 'medium_high',
+      communication: 'high',
+      stress_tolerance: 'medium',
+      feedback_receptiveness: 'high',
+      ambiguity_tolerance: 'high',
+      initiative: 'medium_high',
+      relationship_building: 'medium',
+      learning_orientation: 'high',
+      conflict_management: 'medium',
+      work_preference_balance: 'medium',
+    },
+  },
+  security: {
+    name: 'security',
+    displayName: 'Cybersecurity',
+    description: 'Security and information assurance roles',
+    weights: {
+      collaboration: 'medium',
+      independence: 'medium_high',
+      leadership_readiness: 'medium',
+      adaptability: 'high',
+      attention_to_detail: 'high',
+      problem_solving: 'high',
+      communication: 'medium',
+      stress_tolerance: 'high',
+      feedback_receptiveness: 'medium_high',
+      ambiguity_tolerance: 'medium_high',
+      initiative: 'high',
+      relationship_building: 'low_medium',
+      learning_orientation: 'high',
+      conflict_management: 'medium',
+      work_preference_balance: 'medium',
+    },
+  },
+  network: {
+    name: 'network',
+    displayName: 'Network & Infrastructure',
+    description: 'Network and IT infrastructure roles',
+    weights: {
+      collaboration: 'medium',
+      independence: 'medium',
+      leadership_readiness: 'low_medium',
+      adaptability: 'medium',
+      attention_to_detail: 'high',
+      problem_solving: 'medium_high',
+      communication: 'medium_high',
+      stress_tolerance: 'high',
+      feedback_receptiveness: 'medium',
+      ambiguity_tolerance: 'low_medium',
+      initiative: 'medium',
+      relationship_building: 'low_medium',
+      learning_orientation: 'medium_high',
+      conflict_management: 'medium',
+      work_preference_balance: 'medium',
+    },
+  },
+  cloud: {
+    name: 'cloud',
+    displayName: 'Cloud & DevOps',
+    description: 'Cloud engineering and DevOps roles',
+    weights: {
+      collaboration: 'medium_high',
+      independence: 'medium_high',
+      leadership_readiness: 'medium',
+      adaptability: 'high',
+      attention_to_detail: 'high',
+      problem_solving: 'high',
+      communication: 'medium_high',
+      stress_tolerance: 'medium_high',
+      feedback_receptiveness: 'medium_high',
+      ambiguity_tolerance: 'medium',
+      initiative: 'high',
+      relationship_building: 'low_medium',
+      learning_orientation: 'high',
+      conflict_management: 'low_medium',
+      work_preference_balance: 'medium',
+    },
+  },
+  marketing: {
+    name: 'marketing',
+    displayName: 'Marketing & Content',
+    description: 'Marketing, content and digital media roles',
     weights: {
       collaboration: 'high',
       independence: 'low_medium',
       leadership_readiness: 'low_medium',
-      adaptability: 'medium',
-      attention_to_detail: 'high',
-      problem_solving: 'medium',
-      communication: 'high',
-      stress_tolerance: 'medium_high',
-      feedback_receptiveness: 'medium_high',
-      ambiguity_tolerance: 'medium',
-      initiative: 'medium',
-      relationship_building: 'high',
-      learning_orientation: 'medium_high',
-      conflict_management: 'high',
-      work_preference_balance: 'medium',
-    },
-  },
-  'Administrative Assistant': {
-    name: 'Administrative Assistant',
-    description: 'Office administration and clerical support',
-    weights: {
-      collaboration: 'high',
-      independence: 'low_medium',
-      leadership_readiness: 'low',
-      adaptability: 'medium',
-      attention_to_detail: 'high',
-      problem_solving: 'low_medium',
-      communication: 'high',
-      stress_tolerance: 'medium_high',
-      feedback_receptiveness: 'medium_high',
-      ambiguity_tolerance: 'low_medium',
-      initiative: 'medium',
-      relationship_building: 'medium',
-      learning_orientation: 'medium',
-      conflict_management: 'medium',
-      work_preference_balance: 'medium_high',
-    },
-  },
-  'Project Coordinator': {
-    name: 'Project Coordinator',
-    description: 'Project management support and coordination',
-    weights: {
-      collaboration: 'high',
-      independence: 'low_medium',
-      leadership_readiness: 'medium_high',
       adaptability: 'high',
       attention_to_detail: 'medium_high',
       problem_solving: 'medium',
       communication: 'high',
-      stress_tolerance: 'medium_high',
-      feedback_receptiveness: 'medium_high',
-      ambiguity_tolerance: 'medium_high',
-      initiative: 'high',
-      relationship_building: 'medium_high',
+      stress_tolerance: 'medium',
+      feedback_receptiveness: 'high',
+      ambiguity_tolerance: 'medium',
+      initiative: 'medium_high',
+      relationship_building: 'high',
+      learning_orientation: 'medium_high',
+      conflict_management: 'medium',
+      work_preference_balance: 'medium',
+    },
+  },
+  business: {
+    name: 'business',
+    displayName: 'Business & Product',
+    description: 'Business analysis and product roles',
+    weights: {
+      collaboration: 'high',
+      independence: 'medium',
+      leadership_readiness: 'medium',
+      adaptability: 'high',
+      attention_to_detail: 'medium_high',
+      problem_solving: 'medium_high',
+      communication: 'high',
+      stress_tolerance: 'medium',
+      feedback_receptiveness: 'high',
+      ambiguity_tolerance: 'high',
+      initiative: 'medium_high',
+      relationship_building: 'high',
       learning_orientation: 'medium_high',
       conflict_management: 'medium_high',
       work_preference_balance: 'medium',
     },
   },
-  'Data Analyst': {
-    name: 'Data Analyst',
-    description: 'Data analysis and business intelligence',
+  qa: {
+    name: 'qa',
+    displayName: 'Quality Assurance',
+    description: 'QA, testing and quality roles',
     weights: {
       collaboration: 'medium',
-      independence: 'medium_high',
+      independence: 'medium',
       leadership_readiness: 'low_medium',
       adaptability: 'medium',
       attention_to_detail: 'high',
-      problem_solving: 'high',
+      problem_solving: 'medium_high',
       communication: 'medium_high',
-      stress_tolerance: 'medium',
+      stress_tolerance: 'medium_high',
       feedback_receptiveness: 'high',
-      ambiguity_tolerance: 'medium',
+      ambiguity_tolerance: 'low_medium',
       initiative: 'medium',
       relationship_building: 'low_medium',
-      learning_orientation: 'high',
-      conflict_management: 'low_medium',
+      learning_orientation: 'medium_high',
+      conflict_management: 'medium',
       work_preference_balance: 'medium',
     },
   },
-  'Marketing Coordinator': {
-    name: 'Marketing Coordinator',
-    description: 'Marketing campaigns and content creation',
+  default: {
+    name: 'default',
+    displayName: 'General',
+    description: 'Default profile for unmatched roles',
     weights: {
-      collaboration: 'medium_high',
-      independence: 'low_medium',
-      leadership_readiness: 'low_medium',
-      adaptability: 'high',
-      attention_to_detail: 'medium_high',
+      collaboration: 'medium',
+      independence: 'medium',
+      leadership_readiness: 'medium',
+      adaptability: 'medium',
+      attention_to_detail: 'medium',
       problem_solving: 'medium',
-      communication: 'high',
+      communication: 'medium',
       stress_tolerance: 'medium',
-      feedback_receptiveness: 'high',
+      feedback_receptiveness: 'medium',
       ambiguity_tolerance: 'medium',
-      initiative: 'medium_high',
-      relationship_building: 'medium_high',
-      learning_orientation: 'high',
-      conflict_management: 'low_medium',
-      work_preference_balance: 'medium',
-    },
-  },
-  'Customer Support': {
-    name: 'Customer Support',
-    description: 'Customer service and issue resolution',
-    weights: {
-      collaboration: 'high',
-      independence: 'low',
-      leadership_readiness: 'low',
-      adaptability: 'high',
-      attention_to_detail: 'medium_high',
-      problem_solving: 'medium_high',
-      communication: 'high',
-      stress_tolerance: 'high',
-      feedback_receptiveness: 'medium_high',
-      ambiguity_tolerance: 'medium',
-      initiative: 'low_medium',
-      relationship_building: 'high',
+      initiative: 'medium',
+      relationship_building: 'medium',
       learning_orientation: 'medium',
-      conflict_management: 'high',
+      conflict_management: 'medium',
       work_preference_balance: 'medium',
     },
   },
 };
 
-// Get all available job role names
-export const AVAILABLE_JOB_ROLES = Object.keys(JOB_ROLE_PROFILES);
+// Auto-detect role family from job title
+export function detectRoleFamily(jobTitle: string): RoleFamily {
+  const titleLower = jobTitle.toLowerCase();
+  
+  // Check each role family's keywords
+  for (const [family, keywords] of Object.entries(ROLE_FAMILY_KEYWORDS)) {
+    // Skip the default family in this check
+    if (family === 'default') continue;
+    
+    for (const keyword of keywords) {
+      if (titleLower.includes(keyword.toLowerCase())) {
+        return family as RoleFamily;
+      }
+    }
+  }
+  
+  // Return default if no match
+  return 'default';
+}
+
+// Get available role families for display
+export const AVAILABLE_ROLE_FAMILIES = Object.keys(ROLE_FAMILY_PROFILES)
+  .filter(key => key !== 'default')
+  .map(key => ({
+    key: key as RoleFamily,
+    ...ROLE_FAMILY_PROFILES[key as RoleFamily]
+  }));
 
 // Answer structure from database
 export interface WorkStyleAnswer {
@@ -372,7 +490,8 @@ export interface DimensionScores {
 export interface WorkStyleResult {
   dimensionScores: DimensionScores[];
   overallAlignmentScore: number;
-  matchedRole: string;
+  matchedRoleFamily: RoleFamily;
+  matchedRoleDisplayName: string;
   strongAreas: WorkStyleDimension[];
   moderateAreas: WorkStyleDimension[];
   developmentAreas: WorkStyleDimension[];
@@ -411,29 +530,22 @@ export function calculateDimensionScores(answers: WorkStyleAnswer[]): DimensionS
 }
 
 /**
- * Calculate Work Style Alignment Score for a specific job role
+ * Calculate Work Style Alignment Score for a specific role family
  */
 export function calculateAlignmentScore(
   dimensionScores: DimensionScores[],
-  jobRole: string
-): { score: number; breakdown: Record<string, number> } {
-  const roleProfile = JOB_ROLE_PROFILES[jobRole];
-  
-  if (!roleProfile) {
-    // If role not found, return simple average
-    const avgScore = dimensionScores.reduce((sum, d) => sum + d.score, 0) / dimensionScores.length;
-    return { 
-      score: Math.round((avgScore / 5) * 100), 
-      breakdown: {} 
-    };
-  }
+  jobTitle: string
+): { score: number; breakdown: Record<string, number>; matchedFamily: RoleFamily } {
+  // Auto-detect role family from job title
+  const roleFamily = detectRoleFamily(jobTitle);
+  const profile = ROLE_FAMILY_PROFILES[roleFamily];
   
   let weightedSum = 0;
   let totalWeight = 0;
   const breakdown: Record<string, number> = {};
   
   dimensionScores.forEach(ds => {
-    const weightLevel = roleProfile.weights[ds.dimension];
+    const weightLevel = profile.weights[ds.dimension];
     const weight = WEIGHT_VALUES[weightLevel];
     
     // Normalize score to 0-100 (since answers are 1-5)
@@ -447,7 +559,7 @@ export function calculateAlignmentScore(
   
   const finalScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
   
-  return { score: finalScore, breakdown };
+  return { score: finalScore, breakdown, matchedFamily: roleFamily };
 }
 
 /**
@@ -479,20 +591,22 @@ export function categorizeDimensions(dimensionScores: DimensionScores[]): {
 }
 
 /**
- * Get full work style result for a job role
+ * Get full work style result for a job title
  */
 export function getWorkStyleResult(
   answers: WorkStyleAnswer[],
-  jobRole: string
+  jobTitle: string
 ): WorkStyleResult {
   const dimensionScores = calculateDimensionScores(answers);
-  const { score } = calculateAlignmentScore(dimensionScores, jobRole);
+  const { score, matchedFamily } = calculateAlignmentScore(dimensionScores, jobTitle);
   const categories = categorizeDimensions(dimensionScores);
+  const profile = ROLE_FAMILY_PROFILES[matchedFamily];
   
   return {
     dimensionScores,
     overallAlignmentScore: score,
-    matchedRole: jobRole,
+    matchedRoleFamily: matchedFamily,
+    matchedRoleDisplayName: profile.displayName,
     strongAreas: categories.strong,
     moderateAreas: categories.moderate,
     developmentAreas: categories.development,

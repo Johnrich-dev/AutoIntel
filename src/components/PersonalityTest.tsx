@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase';
+import { getSupabaseAdminClient } from '../lib/supabase';
 import {
   WORK_STYLE_QUESTIONS,
   SCALE_LABELS,
