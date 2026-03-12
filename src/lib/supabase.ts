@@ -113,7 +113,7 @@ export interface ResumeParsedData {
   education: Array<{ year_range: string | null; school: string | null; course_or_strand: string | null; education_type: string | null; raw_text: string }>;
   experience: Array<{ company: string | null; role: string | null; years: string | null; summary: string | null; raw_text: string }>;
   projects?: Array<{ name: string | null; details: string | null }>;
-  trainings?: string[];
+  trainings?: Array<{ title: string | null; date: string | null }>;
   skills: {
     hard_skills: string[];
     soft_skills: string[];
