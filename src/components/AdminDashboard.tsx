@@ -558,7 +558,14 @@ export function AdminDashboard() {
                             <div className="space-y-2">
                               {parsedData.trainings.slice(0, 5).map((training: any, idx: number) => (
                                 <div key={idx} className="text-sm bg-white p-2 rounded border border-gray-200">
-                                  <p className="font-medium text-gray-900">{training}</p>
+                                  <p className="font-medium text-gray-900">
+                                    {typeof training === 'string' 
+                                      ? training 
+                                      : training.title || JSON.stringify(training)}
+                                  </p>
+                                  {training.date && (
+                                    <p className="text-xs text-gray-500">{training.date}</p>
+                                  )}
                                 </div>
                               ))}
                             </div>

@@ -555,11 +555,14 @@ export function ApplicantDetailModal({
                   <div className="space-y-2">
                     {parsedResume.trainings.map((training, idx) => (
                       <div key={idx} className="border-l-2 border-green-200 pl-4">
-                        <p className="text-sm text-gray-700">
+                        <p className="text-sm text-gray-700 font-medium">
                           {typeof training === 'string' 
                             ? training 
-                            : training.name || training.title || JSON.stringify(training)}
+                            : training.title || JSON.stringify(training)}
                         </p>
+                        {typeof training !== 'string' && training.date && (
+                          <p className="text-xs text-gray-500 mt-1">{training.date}</p>
+                        )}
                       </div>
                     ))}
                   </div>
