@@ -85,7 +85,7 @@ export function AdminDashboard() {
             const [resumeResult, videoResult, testResult] = await Promise.all([
               adminClient.from('resumes').select('*').eq('applicant_id', applicant.id).maybeSingle(),
               adminClient.from('video_assessments').select('*').eq('applicant_id', applicant.id).maybeSingle(),
-              adminClient.from('personality_tests').select('*').eq('applicant_id', applicant.id).maybeSingle(),
+              adminClient.from('work_style_assessments').select('*').eq('applicant_id', applicant.id).maybeSingle(),
             ]);
 
             return {

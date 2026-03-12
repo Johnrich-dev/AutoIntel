@@ -31,6 +31,16 @@ import {
 import { Applicant, Resume, VideoAssessment, PersonalityTest, ResumeParsedData, ScoringSettings } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import { ApplicantDetailModal } from './ApplicantDetailModal';
+import { 
+  getWorkStyleResult, 
+  calculateAlignmentScore,
+  calculateDimensionScores,
+  WorkStyleAnswer,
+  DIMENSION_LABELS,
+  WEIGHT_VALUES,
+  WeightLevel,
+  detectRoleFamily
+} from '../config/workStyleConfig';
 
 interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
@@ -134,17 +144,32 @@ function calculateVideoScore(video?: VideoAssessment): number {
   return 0;
 }
 
-// Calculate profile fit score from personality test
-function calculateProfileFit(test?: PersonalityTest): number {
-  if (!test || test.status !== 'completed') return 0;
-  // Mock calculation based on answers
-  const avgAnswer = test.answers.reduce((sum, a) => sum + a.answer, 0) / (test.answers.length || 1);
-  return Math.min(Math.round((avgAnswer / 5) * 100), 100);
+// Calculate Work Style Alignment Score from work style assessment
+function calculateProfileFit(test?: PersonalityTest, jobRole?: string): number {
+  if (!test || test.status !== 'submitted') return 0;
+  if (!test.answers || !Array.isArray(test.answers) || test.answers.length === 0) return 0;
+  
+  // Convert answers to WorkStyleAnswer format
+  const answers: WorkStyleAnswer[] = test.answers.map((a: any) => ({
+    question: a.question,
+    answer: a.answer,
+  }));
+  
+  // Default to 'Backend Developer' if no job role specified
+  const targetRole = jobRole || 'Backend Developer';
+  
+  // Calculate alignment score using the new config
+  const { score } = calculateAlignmentScore(
+    calculateDimensionScores(answers),
+    targetRole
+  );
+  
+  return score;
 }
 
 // Calculate overall score
 function calculateOverallScore(resumeScore: number, videoScore: number, profileFit: number): number {
-  const weights = { resume: 0.4, video: 0.35, profile: 0.25 };
+  const weights = { resume: 0.4, video: 0.4, profile: 0.2 };
   const score = (resumeScore * weights.resume) + (videoScore * weights.video) + (profileFit * weights.profile);
   return Math.round(score);
 }
@@ -240,7 +265,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
     return applicants.map(applicant => {
       const resumeScore = calculateResumeScore(applicant, scoringSettings);
       const videoScore = calculateVideoScore(applicant.video);
-      const profileFit = calculateProfileFit(applicant.test);
+      const profileFit = calculateProfileFit(applicant.test, applicant.position);
       const overall = calculateOverallScore(resumeScore, videoScore, profileFit);
       
       // Determine current status
