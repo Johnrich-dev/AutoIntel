@@ -795,12 +795,17 @@ def is_fresh_grad_detected(parsed_resume_json: Dict) -> bool:
 
 def detect_job_level_from_resume(parsed_resume_json: Dict) -> str:
     """
-    Auto-detect job level from resume content.
+    Auto-detect job level from resume content using 5-factor scoring.
     
-    Detection logic:
-    - fresh_grad: No experience, only internship/trainee, or current student
-    - entry_level: 1-3 years of full-time experience
-    - mid_level: 4+ years of full-time experience
+    Detection uses a multi-factor rule-based classification based on:
+    1. Education recency
+    2. Relevant work experience
+    3. Type of work experience
+    4. Role title indicators
+    5. Resume evidence dominance
+    
+    Each factor adds points to fresh_grad_score, entry_level_score, and mid_level_score.
+    The applicant is assigned to the level with the highest score.
     
     Args:
         parsed_resume_json: Parsed resume data
@@ -809,95 +814,234 @@ def detect_job_level_from_resume(parsed_resume_json: Dict) -> str:
         Job level: 'fresh_grad', 'entry_level', or 'mid_level'
     """
     import logging
+    import re
     logger = logging.getLogger(__name__)
     
     if not parsed_resume_json:
         logger.warning("[detect_job_level] No parsed resume JSON, defaulting to entry_level")
         return 'entry_level'  # Default
     
-    # Check experience entries
+    # Initialize scores
+    fresh_grad_score = 0
+    entry_level_score = 0
+    mid_level_score = 0
+    
+    # Get resume sections
     experience_list = parsed_resume_json.get('experience', [])
     education_list = parsed_resume_json.get('education', [])
+    projects_list = parsed_resume_json.get('projects', [])
+    traincert_list = parsed_resume_json.get('trainings', []) or parsed_resume_json.get('certifications', [])
+    achievements_list = parsed_resume_json.get('achievements', [])
     
     logger.info(f"[detect_job_level] Experience list: {experience_list}")
     logger.info(f"[detect_job_level] Education list: {education_list}")
     
-    # If no experience at all, likely fresh grad
-    if not experience_list:
-        # Check education for current student status
-        for edu in education_list:
-            raw_text = str(edu.get('raw_text', '')).lower()
-            year_range = str(edu.get('year_range', '')).lower()
-            logger.info(f"[detect_job_level] Checking education: year_range={year_range}, raw_text={raw_text[:50]}...")
-            if 'present' in year_range or 'present' in raw_text:
-                return 'fresh_grad'
-            # Check for recent grad (2025 or 2026)
-            if '2026' in year_range or '2025' in year_range:
-                return 'fresh_grad'
-        return 'fresh_grad'
+    # ============================================
+    # FACTOR 1: Education Recency
+    # ============================================
+    education_recency_fresh = 0
+    current_year = 2026    
+    for edu in education_list:
+        raw_text = str(edu.get('raw_text', '')).lower()
+        year_range = str(edu.get('year_range', '')).lower()
+        
+        # Current/ongoing study → Fresh +4
+        if 'present' in year_range or 'present' in raw_text or 'ongoing' in year_range or 'ongoing' in raw_text:
+            education_recency_fresh = 4
+            break
+        # Graduated within last 1 year → Fresh +3
+        # Look for recent graduation years
+        year_matches = re.findall(r'(20\d{2})', year_range)
+        for year_str in year_matches:
+            try:
+                grad_year = int(year_str)
+                if grad_year >= current_year - 1:
+                    education_recency_fresh = max(education_recency_fresh, 3)
+                    break
+            except ValueError:
+                pass
+        # Graduated within last 2 years → Fresh +2
+        for year_str in year_matches:
+            try:
+                grad_year = int(year_str)
+                if grad_year >= current_year - 2 and education_recency_fresh < 3:
+                    education_recency_fresh = max(education_recency_fresh, 2)
+                    break
+            except ValueError:
+                pass
     
-    # Analyze experience entries
-    has_full_time_experience = False
-    has_intern_only = True
-    total_years = 0
+    fresh_grad_score += education_recency_fresh
+    logger.info(f"[detect_job_level] Education recency score: Fresh +{education_recency_fresh}")
+    
+    # ============================================
+    # FACTOR 2: Relevant Work Experience (Years)
+    # ============================================
+    total_relevant_years = 0
     
     for exp in experience_list:
         role = str(exp.get('role', '')).lower()
         title = str(exp.get('title', '')).lower()
-        combined_text = role + ' ' + title
         years = exp.get('years', '')
         
-        logger.info(f"[detect_job_level] Experience entry: role='{role}', title='{title}', years='{years}'")
-        
-        # Check if this is a full-time job (not intern/trainee/student)
-        is_intern = ('intern' in combined_text or 
-                     'trainee' in combined_text or 
-                     'student' in combined_text or
-                     'volunteer' in combined_text)
-        
-        logger.info(f"[detect_job_level] is_intern={is_intern}, combined_text='{combined_text}'")
-        
-        if not is_intern:
-            has_full_time_experience = True
-            has_intern_only = False
-        
-        # Extract years of experience
+        # Extract years
         years_str = str(years)
         if years_str:
             try:
                 years_val = float(years_str)
-                total_years += years_val
+                total_relevant_years += years_val
             except ValueError:
                 pass
     
-    logger.info(f"[detect_job_level] has_intern_only={has_intern_only}, has_full_time={has_full_time_experience}, total_years={total_years}")
+    # 0 years → Fresh +4
+    if total_relevant_years == 0:
+        fresh_grad_score += 4
+    # 0 to <1 year → Fresh +2, Entry +2
+    elif total_relevant_years < 1:
+        fresh_grad_score += 2
+        entry_level_score += 2
+    # 1 to <2 years → Entry +5
+    elif total_relevant_years < 2:
+        entry_level_score += 5
+    # 2+ years → Mid +6
+    else:
+        mid_level_score += 6
     
-    # KEY FIX: If only internship experience (no full-time), always fresh_grad
-    if has_intern_only:
-        logger.info("[detect_job_level] Returning fresh_grad (intern only)")
-        return 'fresh_grad'
+    logger.info(f"[detect_job_level] Experience years: {total_relevant_years}, scores: Fresh +{fresh_grad_score}, Entry +{entry_level_score}, Mid +{mid_level_score}")
     
-    # Check education for current student status
+    # ============================================
+    # FACTOR 3: Type of Work Experience
+    # ============================================
+    # Define internship-like roles
+    internship_keywords = ['intern', 'ojt', 'practicum', 'trainee', 'student assistant', 'volunteer']
+    # Define real professional roles
+    professional_keywords = ['junior', 'developer', 'engineer', 'analyst', 'specialist', 'qa', 
+                            'support', 'staff', 'it ', 'technician', 'programmer']
+    
+    internship_count = 0
+    professional_count = 0
+    
+    for exp in experience_list:
+        role = str(exp.get('role', '')).lower()
+        title = str(exp.get('title', '')).lower()
+        combined = role + ' ' + title
+        
+        # Check if internship-like
+        is_internship = any(kw in combined for kw in internship_keywords)
+        
+        if is_internship:
+            internship_count += 1
+        else:
+            # Check if it has a real job title (not just empty)
+            if role or title:
+                professional_count += 1
+    
+    # Only internship/OJT/trainee roles → Fresh +4
+    if internship_count > 0 and professional_count == 0:
+        fresh_grad_score += 4
+    # At least 1 real relevant job → Entry +3
+    elif professional_count >= 1:
+        entry_level_score += 3
+    # 2 or more real relevant jobs → Mid +3
+    if professional_count >= 2:
+        mid_level_score += 3
+    
+    logger.info(f"[detect_job_level] Experience type: internships={internship_count}, professional={professional_count}")
+    
+    # ============================================
+    # FACTOR 4: Role Title Indicators
+    # ============================================
+    # Fresh Graduate signals
+    fresh_grad_titles = ['intern', 'ojt', 'trainee', 'student']
+    # Entry-Level signals
+    entry_level_titles = ['junior', 'associate', 'assistant', 'staff', 'support']
+    # Mid-Level signals
+    mid_level_titles = ['developer', 'engineer', 'analyst', 'specialist']
+    # Strong Mid-Level signals
+    senior_titles = ['senior', 'lead', 'supervisor', 'manager', 'director']
+    
+    for exp in experience_list:
+        role = str(exp.get('role', '')).lower()
+        title = str(exp.get('title', '')).lower()
+        combined = role + ' ' + title
+        
+        # Check senior/lead titles first (strongest signal)
+        if any(t in combined for t in senior_titles):
+            mid_level_score += 3
+        # Check mid-level titles
+        elif any(t in combined for t in mid_level_titles):
+            mid_level_score += 2
+        # Check entry-level titles
+        elif any(t in combined for t in entry_level_titles):
+            entry_level_score += 3
+        # Check fresh grad titles
+        elif any(t in combined for t in fresh_grad_titles):
+            fresh_grad_score += 3
+    
+    logger.info(f"[detect_job_level] Role title scores: Fresh +{fresh_grad_score}, Entry +{entry_level_score}, Mid +{mid_level_score}")
+    
+    # ============================================
+    # FACTOR 5: Resume Evidence Dominance
+    # ============================================
+    # Academic indicators
+    academic_keywords = ['education', 'capstone', 'thesis', 'school project', 'seminars', 
+                        'certifications', 'academic award', 'deans list', 'honors']
+    # Professional work indicators
+    work_keywords = ['responsibilities', 'implemented', 'deployed', 'managed', 'led', 
+                     'client', 'production', 'team lead', 'project management']
+    
+    academic_count = 0
+    work_count = 0
+    
+    # Check education section
     for edu in education_list:
         raw_text = str(edu.get('raw_text', '')).lower()
-        year_range = str(edu.get('year_range', '')).lower()
-        if 'present' in raw_text or 'present' in year_range:
-            # Has full-time experience but also current student
-            if total_years >= 4:
-                return 'mid_level'
-            elif total_years >= 1:
-                return 'entry_level'
-            else:
-                return 'entry_level'
+        if any(kw in raw_text for kw in ['university', 'college', 'bachelor', 'degree']):
+            academic_count += 1
     
-    # Determine level based on years of full-time experience
-    if total_years >= 4:
-        return 'mid_level'
-    elif total_years >= 1:
-        return 'entry_level'
-    else:
-        # Has some experience but less than 1 year
-        return 'entry_level'
+    # Check projects for academic vs work
+    for proj in projects_list:
+        proj_text = str(proj.get('title', '')).lower() + ' ' + str(proj.get('description', '')).lower()
+        if any(kw in proj_text for kw in ['capstone', 'thesis', 'school', 'academic']):
+            academic_count += 1
+        elif any(kw in proj_text for kw in work_keywords):
+            work_count += 1
+    
+    # Check experience for professional evidence
+    for exp in experience_list:
+        desc = str(exp.get('description', '')).lower()
+        if any(kw in desc for kw in work_keywords):
+            work_count += 1
+    
+    # Check achievements for academic
+    for ach in achievements_list:
+        ach_text = str(ach.get('title', '')).lower()
+        if any(kw in ach_text for kw in ['award', 'honor', 'dean', 'latin']):
+            academic_count += 1
+    
+    # Determine dominance
+    if academic_count > work_count * 2:  # Significantly more academic
+        fresh_grad_score += 2
+    elif work_count > academic_count * 2:  # Significantly more work
+        mid_level_score += 3
+    elif academic_count > 0 and work_count > 0:  # Mixed
+        entry_level_score += 2
+    
+    logger.info(f"[detect_job_level] Resume dominance: academic={academic_count}, work={work_count}")
+    logger.info(f"[detect_job_level] FINAL scores: Fresh={fresh_grad_score}, Entry={entry_level_score}, Mid={mid_level_score}")
+    
+    # ============================================
+    # Determine Winner
+    # ============================================
+    scores = {
+        'fresh_grad': fresh_grad_score,
+        'entry_level': entry_level_score,
+        'mid_level': mid_level_score
+    }
+    
+    detected_level = max(scores, key=scores.get)
+    logger.info(f"[detect_job_level] Detected job level: {detected_level} (scores: {scores})")
+    
+    return detected_level
 
 
 def detect_job_level_from_raw_text(resume_text: str) -> str:
@@ -905,10 +1049,7 @@ def detect_job_level_from_raw_text(resume_text: str) -> str:
     Detect job level from raw resume text (before NER processing).
     This is used when parsed_resume_json is not yet available.
     
-    Detection logic:
-    - fresh_grad: No experience, only internship/trainee, or current student (2026/2025 Present)
-    - entry_level: 1-3 years of experience  
-    - mid_level: 4+ years of experience
+    Uses a simplified 5-factor scoring based on raw text patterns.
     
     Args:
         resume_text: Raw resume text
@@ -926,37 +1067,30 @@ def detect_job_level_from_raw_text(resume_text: str) -> str:
     
     text_lower = resume_text.lower()
     
-    # Check for current student indicators
-    if 'present' in text_lower and ('202' in text_lower or 'college' in text_lower or 'university' in text_lower):
-        # Check if only internship experience (no full-time jobs)
-        # Count occurrences of job-related terms
-        intern_count = text_lower.count('intern')
-        internship_count = text_lower.count('internship')
-        trainee_count = text_lower.count('trainee')
-        
-        # Check for full-time job indicators
-        fulltime_patterns = [
-            r'\bsoftware engineer\b',
-            r'\bdeveloper\b', 
-            r'\bmanager\b',
-            r'\bdirector\b',
-            r'\blead\b',
-            r'\bsenior\b',
-            r'\bjunior\b',
-            r'\bassociate\b',
-            r'\bfull.?time\b',
-            r'\bemployee\b',
-        ]
-        
-        fulltime_count = sum(len(re.findall(pattern, text_lower)) for pattern in fulltime_patterns)
-        
-        # If more internships than full-time jobs, likely fresh grad
-        if (intern_count + internship_count + trainee_count) > fulltime_count:
-            logger.info("[detect_job_level_from_raw_text] Detected fresh_grad (student with internship only)")
-            return 'fresh_grad'
+    # Initialize scores
+    fresh_grad_score = 0
+    entry_level_score = 0
+    mid_level_score = 0
     
-    # Look for years of experience patterns
-    # Pattern: "X years" or "X-Y years" or "X+ years"
+    current_year = 2026
+    
+    # ============================================
+    # FACTOR 1: Education Recency (from raw text)
+    # ============================================
+    # Current/ongoing study → Fresh +4
+    if 'present' in text_lower or 'ongoing' in text_lower or 'currently studying' in text_lower:
+        fresh_grad_score += 4
+    # Check for recent graduation (within 1 year)
+    elif re.search(r'(20(25|26))\s*(graduated|graduate)', text_lower):
+        fresh_grad_score += 3
+    # Check for graduation within 2 years
+    elif re.search(r'(20(24|25|26))\s*(graduated|graduate)', text_lower):
+        fresh_grad_score += 2
+    
+    # ============================================
+    # FACTOR 2: Relevant Work Experience (Years)
+    # ============================================
+    # Pattern: "X years" or "X+ years"
     year_patterns = [
         r'(\d+)\+?\s*(?:years?|yrs?)\s*(?:of)?\s*(?:experience|exp)',
         r'(?:experience|exp):?\s*(\d+)\+?\s*(?:years?|yrs?)',
@@ -983,30 +1117,117 @@ def detect_job_level_from_raw_text(resume_text: str) -> str:
         for match in matches:
             if len(match) == 2:
                 start_year = int(match[0]) if match[0].isdigit() else 0
-                end_year = 2026 if match[1] == 'present' else (int(match[1]) if match[1].isdigit() else 0)
+                end_year = current_year if match[1] == 'present' else (int(match[1]) if match[1].isdigit() else 0)
                 if start_year and end_year:
                     duration = end_year - start_year
                     if duration > total_years:
                         total_years = duration
     
+    # Score based on years
+    if total_years == 0:
+        fresh_grad_score += 4
+    elif total_years < 1:
+        fresh_grad_score += 2
+        entry_level_score += 2
+    elif total_years < 2:
+        entry_level_score += 5
+    else:
+        mid_level_score += 6
+    
     logger.info(f"[detect_job_level_from_raw_text] Detected total_years: {total_years}")
     
-    # Determine job level based on years
-    if total_years >= 4:
-        logger.info("[detect_job_level_from_raw_text] Detected mid_level (4+ years)")
-        return 'mid_level'
-    elif total_years >= 1:
-        logger.info("[detect_job_level_from_raw_text] Detected entry_level (1-3 years)")
-        return 'entry_level'
-    else:
-        # No clear experience, check for internship vs full-time
-        intern_count = text_lower.count('intern') + text_lower.count('internship') + text_lower.count('trainee')
-        if intern_count > 0:
-            logger.info("[detect_job_level_from_raw_text] Detected fresh_grad (internship only)")
-            return 'fresh_grad'
-        
-        logger.info("[detect_job_level_from_raw_text] Defaulting to entry_level")
-        return 'entry_level'
+    # ============================================
+    # FACTOR 3: Type of Work Experience
+    # ============================================
+    internship_count = len(re.findall(r'\bintern\b', text_lower))
+    internship_count += len(re.findall(r'\binternship\b', text_lower))
+    internship_count += len(re.findall(r'\bojt\b', text_lower))
+    internship_count += len(re.findall(r'\btrainee\b', text_lower))
+    
+    professional_patterns = [
+        r'\bjunior\b', r'\bdeveloper\b', r'\bengineer\b', r'\banalist\b',
+        r'\bspecialist\b', r'\bqa\b', r'\bsupport\b', r'\bstaff\b'
+    ]
+    professional_count = sum(len(re.findall(p, text_lower)) for p in professional_patterns)
+    
+    if internship_count > 0 and professional_count == 0:
+        fresh_grad_score += 4
+    elif professional_count >= 1:
+        entry_level_score += 3
+    if professional_count >= 2:
+        mid_level_score += 3
+    
+    # ============================================
+    # FACTOR 4: Role Title Indicators
+    # ============================================
+    senior_count = len(re.findall(r'\bsenior\b', text_lower))
+    senior_count += len(re.findall(r'\blead\b', text_lower))
+    senior_count += len(re.findall(r'\bsupervisor\b', text_lower))
+    senior_count += len(re.findall(r'\bmanager\b', text_lower))
+    
+    mid_count = len(re.findall(r'\bdeveloper\b', text_lower))
+    mid_count += len(re.findall(r'\bengineer\b', text_lower))
+    mid_count += len(re.findall(r'\banalist\b', text_lower))
+    mid_count += len(re.findall(r'\bspecialist\b', text_lower))
+    
+    entry_count = len(re.findall(r'\bjunior\b', text_lower))
+    entry_count += len(re.findall(r'\bassociate\b', text_lower))
+    entry_count += len(re.findall(r'\bassistant\b', text_lower))
+    entry_count += len(re.findall(r'\bstaff\b', text_lower))
+    
+    fresh_count = len(re.findall(r'\bintern\b', text_lower))
+    fresh_count += len(re.findall(r'\bojt\b', text_lower))
+    fresh_count += len(re.findall(r'\btrainee\b', text_lower))
+    
+    if senior_count > 0:
+        mid_level_score += 3
+    elif mid_count > 0:
+        mid_level_score += 2
+    elif entry_count > 0:
+        entry_level_score += 3
+    elif fresh_count > 0:
+        fresh_grad_score += 3
+    
+    # ============================================
+    # FACTOR 5: Resume Evidence Dominance
+    # ============================================
+    academic_count = text_lower.count('university')
+    academic_count += text_lower.count('college')
+    academic_count += text_lower.count('bachelor')
+    academic_count += text_lower.count('degree')
+    academic_count += text_lower.count('capstone')
+    academic_count += text_lower.count('thesis')
+    academic_count += text_lower.count('dean')
+    
+    work_count = text_lower.count('responsibilities')
+    work_count += text_lower.count('implemented')
+    work_count += text_lower.count('deployed')
+    work_count += text_lower.count('managed')
+    work_count += text_lower.count('production')
+    work_count += text_lower.count('client')
+    
+    if academic_count > work_count * 2:
+        fresh_grad_score += 2
+    elif work_count > academic_count * 2:
+        mid_level_score += 3
+    elif academic_count > 0 and work_count > 0:
+        entry_level_score += 2
+    
+    logger.info(f"[detect_job_level_from_raw_text] FINAL scores: Fresh={fresh_grad_score}, Entry={entry_level_score}, Mid={mid_level_score}")
+    
+    # ============================================
+    # Determine Winner
+    # ============================================
+    scores = {
+        'fresh_grad': fresh_grad_score,
+        'entry_level': entry_level_score,
+        'mid_level': mid_level_score
+    }
+    
+    detected_level = max(scores, key=scores.get)
+    logger.info(f"[detect_job_level_from_raw_text] Detected job level: {detected_level} (scores: {scores})")
+    
+    return detected_level
 
 
 def calculate_experience_keyword_match(

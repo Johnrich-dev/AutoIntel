@@ -262,37 +262,24 @@ def process_applicant_screening(
             "baseline_achievements": scoring_settings.get("baseline_achievements", 1)
         }
         
-        # Use parsed_resume_json and job_posting if available, otherwise fallback
-        # But respect HR-configured job level from scoring settings first
-        # Only auto-detect if explicitly needed
-        detected_job_level = job_level  # Start with HR-configured job level from scoring settings
+        # Always auto-detect applicant level from resume
+        # This is independent of HR's job level selection (which defines job requirements)
+        # The applicant level determines which scoring profile to apply
+        detected_job_level = 'entry_level'  # Default
         
-        # Always log the starting job level
-        print(f"[INFO] Starting job level from settings: {detected_job_level}")
-        
-        # Only use auto-detection as fallback if job_level is not set or is generic default
-        if not detected_job_level or detected_job_level == 'entry_level':
-            # Try to auto-detect from resume
-            if parsed_resume_json:
-                # Use parsed resume to detect job level
-                detected_level = job_alignment.detect_job_level_from_resume(parsed_resume_json)
-                print(f"[INFO] Auto-detected job level from parsed resume: {detected_level}")
-                # Only use detected level if it's more specific (e.g., fresh_grad vs entry_level)
-                if detected_level == 'fresh_grad':
-                    detected_job_level = detected_level
-                elif detected_level == 'mid_level':
-                    detected_job_level = detected_level
-                # If detected is entry_level but we started with nothing, use detected
-                elif not job_level:
-                    detected_job_level = detected_level
-            elif resume_text and not detected_job_level:
-                # Use raw resume text to detect job level (when NER not complete)
-                detected_level = job_alignment.detect_job_level_from_raw_text(resume_text)
-                print(f"[INFO] Auto-detected job level from raw text: {detected_level}")
-                detected_job_level = detected_level
+        # Try to auto-detect from parsed resume first
+        if parsed_resume_json:
+            # Use parsed resume to detect job level
+            detected_level = job_alignment.detect_job_level_from_resume(parsed_resume_json)
+            print(f"[INFO] Auto-detected applicant level from parsed resume: {detected_level}")
+            detected_job_level = detected_level
+        elif resume_text:
+            # Use raw resume text to detect job level (when NER not complete)
+            detected_level = job_alignment.detect_job_level_from_raw_text(resume_text)
+            print(f"[INFO] Auto-detected applicant level from raw text: {detected_level}")
+            detected_job_level = detected_level
         else:
-            print(f"[INFO] Using HR-configured job level: {detected_job_level}")
-            print(f"[INFO] Using HR-configured job level: {job_level}")
+            print(f"[WARNING] No resume data available, using default entry_level")
         
         # Load the appropriate weights and thresholds based on detected job level
         print(f"[DEBUG] Before job-level override - weights_by_level: {scoring_settings.get('weights_by_level')}")
