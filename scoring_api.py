@@ -298,6 +298,161 @@ def get_component_scores():
         }), 500
 
 
+@app.route('/api/calculate-final-hybrid', methods=['POST'])
+def calculate_final_hybrid():
+    """
+    Calculate the final hybrid score using the formula from SCORING_DOCUMENTATION.md:
+    
+    FINAL SCORE = (Requirement Match Score × 0.6) + (Count Score × 0.4)
+    
+    This is the main endpoint for 6-category hybrid scoring with job level support.
+    
+    Request Body:
+    {
+        "parsed_resume_json": {              // Required: parsed resume data
+            "experience": [...],
+            "skills": {...},
+            "education": [...],
+            "projects": [...],
+            "trainings": [...],
+            "certifications": [...],
+            "achievements": [...]
+        },
+        "job_posting": {                      // Required: job posting data
+            "job_id": "string",
+            "title": "string",
+            "skills": ["Python", "Django"],
+            "required_education": ["Bachelor's CS"],
+            "expected_projects": ["API Development"],
+            "preferred_certifications": ["AWS"],
+            "preferred_achievements": ["Dean\'s List"],
+            "min_years_experience": 5
+        },
+        "job_level": "entry_level",           // Optional: fresh_grad, entry_level, mid_level
+        "weights": {                          // Optional: custom weights (overrides job_level)
+            "experience_weight": 28,
+            "skills_weight": 30,
+            "education_weight": 18,
+            "projects_weight": 14,
+            "traincert_weight": 6,
+            "achievements_weight": 4
+        },
+        "baselines": {                        // Optional: custom baselines
+            "baseline_experience": 2,
+            "baseline_skills": 10,
+            "baseline_education": 2,
+            "baseline_projects": 2,
+            "baseline_traincert": 2,
+            "baseline_achievements": 1
+        },
+        "requirement_weight": 0.6,           // Optional: default 0.6
+        "count_weight": 0.4                   // Optional: default 0.4
+    }
+    
+    Response:
+    {
+        "final_score": 72.0,
+        "requirement_match_score": 55.67,
+        "count_score": 96.50,
+        "requirement_weight": 0.6,
+        "count_weight": 0.4,
+        "decision": "needs_review",
+        "thresholds": {
+            "qualified_threshold": 78,
+            "review_threshold": 65
+        },
+        "job_level": "entry_level",
+        "requirement_breakdown": {
+            "experience": 50.0,
+            "skills": 66.7,
+            "education": 66.7,
+            "projects": 33.3,
+            "traincert": 50.0,
+            "achievements": 50.0
+        },
+        "count_breakdown": {
+            "experience": {"count": 1, "score": 50.0},
+            "skills": {"count": 12, "score": 100.0},
+            "education": {"count": 2, "score": 100.0},
+            "projects": {"count": 4, "score": 100.0},
+            "traincert": {"count": 1, "score": 50.0},
+            "achievements": {"count": 1, "score": 100.0}
+        },
+        "status": "success"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        # Extract parameters
+        parsed_resume_json = data.get('parsed_resume_json')
+        job_posting = data.get('job_posting')
+        job_level = data.get('job_level', 'entry_level')
+        auto_detect_job_level = data.get('auto_detect_job_level', True)  # Default to True
+        weights = data.get('weights')
+        baselines = data.get('baselines')
+        requirement_weight = data.get('requirement_weight', 0.6)
+        count_weight = data.get('count_weight', 0.4)
+        
+        # Validate required fields
+        if not parsed_resume_json:
+            return jsonify({"error": "parsed_resume_json is required"}), 400
+        if not job_posting:
+            return jsonify({"error": "job_posting is required"}), 400
+        
+        # Calculate final hybrid score
+        result = job_alignment.calculate_final_hybrid_score(
+            parsed_resume_json=parsed_resume_json,
+            job_posting=job_posting,
+            job_level=job_level,
+            weights=weights,
+            baselines=baselines,
+            requirement_weight=requirement_weight,
+            count_weight=count_weight,
+            auto_detect_job_level=auto_detect_job_level
+        )
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+
+@app.route('/api/get-job-level-presets', methods=['GET'])
+def get_job_level_presets():
+    """
+    Get the preset weights, baselines, and thresholds for all job levels.
+    
+    Response:
+    {
+        "fresh_grad": {
+            "weights": {...},
+            "baselines": {...},
+            "thresholds": {...}
+        },
+        "entry_level": {...},
+        "mid_level": {...},
+        "status": "success"
+    }
+    """
+    try:
+        return jsonify({
+            "presets": job_alignment.JOB_LEVEL_PRESETS,
+            "status": "success"
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors."""

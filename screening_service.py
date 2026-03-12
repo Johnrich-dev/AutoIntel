@@ -36,9 +36,18 @@ DEFAULT_SCORING_SETTINGS = {
     "skills_weight": 30,
     "education_weight": 20,
     "projects_weight": 10,
-    "qualified_threshold": 80,
-    "review_threshold": 60,
-    "baseline_project_score": 2
+    "traincert_weight": 6,
+    "achievements_weight": 4,
+    "qualified_threshold": 78,
+    "review_threshold": 65,
+    "baseline_experience": 2,
+    "baseline_skills": 10,
+    "baseline_education": 2,
+    "baseline_projects": 2,
+    "baseline_traincert": 2,
+    "baseline_achievements": 1,
+    "job_level": "entry_level",
+    "scoring_type": "hybrid"
 }
 
 
@@ -53,19 +62,69 @@ def load_scoring_settings(supabase_client: Any) -> Dict[str, Any]:
         Dictionary with scoring settings (weights and thresholds)
     """
     try:
+        # Simply get the first row (no ordering to avoid syntax issues)
         result = supabase_client.table("scoring_settings").select("*").limit(1).execute()
         
         if result.data and len(result.data) > 0:
             settings = result.data[0]
             print(f"Loaded scoring settings from database: {settings}")
+            
+            # Get the job_level from settings to determine which thresholds to use
+            job_level = settings.get("job_level", "entry_level")
+            
+            # Get thresholds from the appropriate job level columns
+            if job_level == "fresh_grad":
+                qualified_threshold = settings.get("fresh_grad_qualified_threshold")
+                review_threshold = settings.get("fresh_grad_review_threshold")
+            elif job_level == "mid_level":
+                qualified_threshold = settings.get("mid_level_qualified_threshold")
+                review_threshold = settings.get("mid_level_review_threshold")
+            else:  # entry_level (default)
+                qualified_threshold = settings.get("entry_level_qualified_threshold")
+                review_threshold = settings.get("entry_level_review_threshold")
+            
+            # Get weights from the appropriate job level JSONB column
+            if job_level == "fresh_grad":
+                weights_json = settings.get("fresh_grad_weights") or {}
+            elif job_level == "mid_level":
+                weights_json = settings.get("mid_level_weights") or {}
+            else:
+                weights_json = settings.get("entry_level_weights") or {}
+            
+            print(f"[DEBUG] Using job_level: {job_level}, qualified_threshold: {qualified_threshold}, review_threshold: {review_threshold}")
+            print(f"[DEBUG] Using weights: {weights_json}")
+            
+            # Use values from the new columns, fall back to old columns or defaults
+            # Also include all job-level specific keys for auto-detection later
             return {
-                "experience_weight": settings.get("experience_weight", 40),
-                "skills_weight": settings.get("skills_weight", 30),
-                "education_weight": settings.get("education_weight", 20),
-                "projects_weight": settings.get("projects_weight", 10),
-                "qualified_threshold": settings.get("qualified_threshold", 80),
-                "review_threshold": settings.get("review_threshold", 60),
-                "baseline_project_score": settings.get("baseline_project_score", 2)
+                "experience_weight": weights_json.get("experience_weight") or settings.get("experience_weight", 28),
+                "skills_weight": weights_json.get("skills_weight") or settings.get("skills_weight", 30),
+                "education_weight": weights_json.get("education_weight") or settings.get("education_weight", 18),
+                "projects_weight": weights_json.get("projects_weight") or settings.get("projects_weight", 14),
+                "traincert_weight": weights_json.get("traincert_weight") or settings.get("traincert_weight", 6),
+                "achievements_weight": weights_json.get("achievements_weight") or settings.get("achievements_weight", 4),
+                "qualified_threshold": qualified_threshold if qualified_threshold is not None else 78,
+                "review_threshold": review_threshold if review_threshold is not None else 65,
+                "baseline_experience": weights_json.get("baseline_experience") or settings.get("baseline_experience", 2),
+                "baseline_skills": weights_json.get("baseline_skills") or settings.get("baseline_skills", 10),
+                "baseline_education": weights_json.get("baseline_education") or settings.get("baseline_education", 2),
+                "baseline_projects": weights_json.get("baseline_projects") or settings.get("baseline_projects", 2),
+                "baseline_traincert": weights_json.get("baseline_traincert") or settings.get("baseline_traincert", 2),
+                "baseline_achievements": weights_json.get("baseline_achievements") or settings.get("baseline_achievements", 1),
+                "job_level": job_level,
+                "scoring_type": settings.get("scoring_type", "hybrid"),
+                # Include all job-level specific thresholds for auto-detection
+                "weights_by_level": settings.get("weights_by_level"),
+                "baselines_by_level": settings.get("baselines_by_level"),
+                "fresh_grad_qualified_threshold": settings.get("fresh_grad_qualified_threshold"),
+                "fresh_grad_review_threshold": settings.get("fresh_grad_review_threshold"),
+                "mid_level_qualified_threshold": settings.get("mid_level_qualified_threshold"),
+                "mid_level_review_threshold": settings.get("mid_level_review_threshold"),
+                "entry_level_qualified_threshold": settings.get("entry_level_qualified_threshold"),
+                "entry_level_review_threshold": settings.get("entry_level_review_threshold"),
+                "fresh_grad_weights": settings.get("fresh_grad_weights"),
+                "mid_level_weights": settings.get("mid_level_weights"),
+                "entry_level_weights": settings.get("entry_level_weights"),
             }
     except Exception as e:
         print(f"Warning: Could not load scoring settings from database: {e}")
@@ -171,43 +230,168 @@ def process_applicant_screening(
             scoring_settings.update(db_settings)
             print(f"Using scoring settings: weights={scoring_settings}")
         
+        # Get job level
+        job_level = scoring_settings.get("job_level", "entry_level")
+        
         # Use provided thresholds or fall back to settings
         if pass_threshold is None:
-            pass_threshold = scoring_settings.get("qualified_threshold", 80)
+            pass_threshold = scoring_settings.get("qualified_threshold", 78)
         if review_threshold is None:
-            review_threshold = scoring_settings.get("review_threshold", 60)
+            review_threshold = scoring_settings.get("review_threshold", 65)
         
-        # Step 1: Calculate job fit score using hybrid semantic scoring
-        print(f"Calculating hybrid job fit score for applicant {applicant_id}...")
+        # Step 1: Calculate job fit score using 6-category hybrid scoring
+        print(f"Calculating 6-category hybrid job fit score for applicant {applicant_id}...")
         
-        # Prepare weights for hybrid scoring
+        # Prepare weights for 6-category hybrid scoring
         weights = {
-            "experience_weight": scoring_settings.get("experience_weight", 40),
+            "experience_weight": scoring_settings.get("experience_weight", 28),
             "skills_weight": scoring_settings.get("skills_weight", 30),
-            "education_weight": scoring_settings.get("education_weight", 20),
-            "projects_weight": scoring_settings.get("projects_weight", 10)
+            "education_weight": scoring_settings.get("education_weight", 18),
+            "projects_weight": scoring_settings.get("projects_weight", 14),
+            "traincert_weight": scoring_settings.get("traincert_weight", 6),
+            "achievements_weight": scoring_settings.get("achievements_weight", 4)
+        }
+        
+        # Prepare baselines
+        baselines = {
+            "baseline_experience": scoring_settings.get("baseline_experience", 2),
+            "baseline_skills": scoring_settings.get("baseline_skills", 10),
+            "baseline_education": scoring_settings.get("baseline_education", 2),
+            "baseline_projects": scoring_settings.get("baseline_projects", 2),
+            "baseline_traincert": scoring_settings.get("baseline_traincert", 2),
+            "baseline_achievements": scoring_settings.get("baseline_achievements", 1)
         }
         
         # Use parsed_resume_json and job_posting if available, otherwise fallback
+        # First, detect job level from resume (either parsed or raw text)
+        detected_job_level = job_level  # Start with HR-configured job level
+        
+        if parsed_resume_json:
+            # Use parsed resume to detect job level
+            detected_level = job_alignment.detect_job_level_from_resume(parsed_resume_json)
+            print(f"[INFO] Auto-detected job level from parsed resume: {detected_level}")
+            detected_job_level = detected_level
+        elif resume_text:
+            # Use raw resume text to detect job level (when NER not complete)
+            detected_level = job_alignment.detect_job_level_from_raw_text(resume_text)
+            print(f"[INFO] Auto-detected job level from raw text: {detected_level}")
+            detected_job_level = detected_level
+        else:
+            print(f"[INFO] Using HR-configured job level: {job_level}")
+        
+        # Load the appropriate weights and thresholds based on detected job level
+        print(f"[DEBUG] Before job-level override - weights_by_level: {scoring_settings.get('weights_by_level')}")
+        print(f"[DEBUG] fresh_grad_qualified_threshold top-level: {scoring_settings.get('fresh_grad_qualified_threshold')}")
+        print(f"[DEBUG] weights_by_level.fresh_grad.qualified_threshold: {scoring_settings.get('weights_by_level', {}).get('fresh_grad', {}).get('qualified_threshold') if scoring_settings.get('weights_by_level') else None}")
+        if detected_job_level == 'fresh_grad':
+            # Check top-level columns FIRST (new format), then fall back to weights_by_level (old format)
+            weights_by_level = scoring_settings.get('weights_by_level') or {}
+            fresh_grad_data = weights_by_level.get('fresh_grad', {}) if weights_by_level else {}
+            qualified_threshold = scoring_settings.get('fresh_grad_qualified_threshold') or fresh_grad_data.get('qualified_threshold') or 75
+            review_threshold = scoring_settings.get('fresh_grad_review_threshold') or fresh_grad_data.get('review_threshold') or 60
+            fresh_grad_weights = scoring_settings.get('fresh_grad_weights') or {}
+            weights = {
+                'experience_weight': fresh_grad_weights.get('experience_weight', 18),
+                'skills_weight': fresh_grad_weights.get('skills_weight', 30),
+                'education_weight': fresh_grad_weights.get('education_weight', 22),
+                'projects_weight': fresh_grad_weights.get('projects_weight', 18),
+                'traincert_weight': fresh_grad_weights.get('traincert_weight', 7),
+                'achievements_weight': fresh_grad_weights.get('achievements_weight', 5),
+                'qualified_threshold': qualified_threshold,
+                'review_threshold': review_threshold,
+            }
+            baselines = {
+                'baseline_experience': fresh_grad_weights.get('baseline_experience', 1),
+                'baseline_skills': fresh_grad_weights.get('baseline_skills', 8),
+                'baseline_education': fresh_grad_weights.get('baseline_education', 2),
+                'baseline_projects': fresh_grad_weights.get('baseline_projects', 2),
+                'baseline_traincert': fresh_grad_weights.get('baseline_traincert', 2),
+                'baseline_achievements': fresh_grad_weights.get('baseline_achievements', 1)
+            }
+        elif detected_job_level == 'mid_level':
+            # Check top-level columns FIRST (new format), then fall back to weights_by_level (old format)
+            weights_by_level = scoring_settings.get('weights_by_level') or {}
+            mid_level_data = weights_by_level.get('mid_level', {}) if weights_by_level else {}
+            qualified_threshold = scoring_settings.get('mid_level_qualified_threshold') or mid_level_data.get('qualified_threshold') or 80
+            review_threshold = scoring_settings.get('mid_level_review_threshold') or mid_level_data.get('review_threshold') or 68
+            mid_level_weights = scoring_settings.get('mid_level_weights') or {}
+            weights = {
+                'experience_weight': mid_level_weights.get('experience_weight', 42),
+                'skills_weight': mid_level_weights.get('skills_weight', 28),
+                'education_weight': mid_level_weights.get('education_weight', 14),
+                'projects_weight': mid_level_weights.get('projects_weight', 8),
+                'traincert_weight': mid_level_weights.get('traincert_weight', 5),
+                'achievements_weight': mid_level_weights.get('achievements_weight', 3),
+                'qualified_threshold': qualified_threshold,
+                'review_threshold': review_threshold,
+            }
+            baselines = {
+                'baseline_experience': mid_level_weights.get('baseline_experience', 4),
+                'baseline_skills': mid_level_weights.get('baseline_skills', 12),
+                'baseline_education': mid_level_weights.get('baseline_education', 2),
+                'baseline_projects': mid_level_weights.get('baseline_projects', 2),
+                'baseline_traincert': mid_level_weights.get('baseline_traincert', 2),
+                'baseline_achievements': mid_level_weights.get('baseline_achievements', 1)
+            }
+        else:  # entry_level (default)
+            # Check top-level columns FIRST (new format), then fall back to weights_by_level (old format)
+            weights_by_level = scoring_settings.get('weights_by_level') or {}
+            entry_level_data = weights_by_level.get('entry_level', {}) if weights_by_level else {}
+            qualified_threshold = scoring_settings.get('entry_level_qualified_threshold') or entry_level_data.get('qualified_threshold') or 78
+            review_threshold = scoring_settings.get('entry_level_review_threshold') or entry_level_data.get('review_threshold') or 65
+            entry_level_weights = scoring_settings.get('entry_level_weights') or {}
+            weights = {
+                'experience_weight': entry_level_weights.get('experience_weight', 28),
+                'skills_weight': entry_level_weights.get('skills_weight', 30),
+                'education_weight': entry_level_weights.get('education_weight', 18),
+                'projects_weight': entry_level_weights.get('projects_weight', 14),
+                'traincert_weight': entry_level_weights.get('traincert_weight', 6),
+                'achievements_weight': entry_level_weights.get('achievements_weight', 4),
+                'qualified_threshold': qualified_threshold,
+                'review_threshold': review_threshold,
+            }
+            baselines = {
+                'baseline_experience': entry_level_weights.get('baseline_experience', 2),
+                'baseline_skills': entry_level_weights.get('baseline_skills', 10),
+                'baseline_education': entry_level_weights.get('baseline_education', 2),
+                'baseline_projects': entry_level_weights.get('baseline_projects', 2),
+                'baseline_traincert': entry_level_weights.get('baseline_traincert', 2),
+                'baseline_achievements': entry_level_weights.get('baseline_achievements', 1)
+            }
+        
+        print(f"[DEBUG] Using detected job level: {detected_job_level}, qualified_threshold: {qualified_threshold}, review_threshold: {review_threshold}")
+        
         if parsed_resume_json and job_posting:
-            # Calculate combined score (60% semantic + 40% count-based)
-            combined_result = job_alignment.calculate_combined_score(
+            # Calculate final hybrid score using the new 6-category scoring
+            # Formula: FINAL SCORE = (Requirement Match Score × 0.6) + (Count Score × 0.4)
+            # Use the detected job level
+            hybrid_result = job_alignment.calculate_final_hybrid_score(
                 parsed_resume_json=parsed_resume_json,
                 job_posting=job_posting,
+                job_level=detected_job_level,
                 weights=weights,
-                semantic_weight=0.6,  # 60% semantic, 40% count
-                baseline_project_score=scoring_settings.get('baseline_project_score', 2)
+                baselines=baselines,
+                requirement_weight=0.6,
+                count_weight=0.4,
+                auto_detect_job_level=False  # Already detected above
             )
             
-            # Use combined score as the main score
-            score = combined_result.get('combined_score', 0)
+            # Use final_score as the main score
+            score = hybrid_result.get('final_score', 0)
+            requirement_match_score = hybrid_result.get('requirement_match_score', 0)
+            count_score = hybrid_result.get('count_score', 0)
+            decision = hybrid_result.get('decision', 'not_recommended')
+            
             component_scores = {
-                'semantic': combined_result.get('semantic_breakdown', {}),
-                'count': combined_result.get('count_breakdown', {})
+                'requirement_match': hybrid_result.get('requirement_breakdown', {}),
+                'count': hybrid_result.get('count_breakdown', {})
             }
-            print(f"Semantic score: {combined_result.get('semantic_score')}")
-            print(f"Count score: {combined_result.get('count_score')}")
-            print(f"Combined score: {score} (60% semantic + 40% count)")
+            
+            print(f"Job Level Used: {hybrid_result.get('job_level', 'N/A')}")
+            print(f"Requirement Match Score: {requirement_match_score}")
+            print(f"Count Score: {count_score}")
+            print(f"Final Score: {score} (60% requirement + 40% count)")
+            print(f"Decision: {decision}")
         else:
             # Fallback to legacy semantic scoring
             print("Warning: Using legacy semantic scoring (no parsed resume data)")
@@ -217,22 +401,24 @@ def process_applicant_screening(
                 job_id=job_id
             )
             component_scores = {
-                'semantic': {},
+                'requirement_match': {},
                 'count': {}
             }
             score = fit_result.get("semantic_score", 0)
+            # Use the detected job level's thresholds for decision
+            decision = determine_decision(score, qualified_threshold, review_threshold)
         
         fit_category = get_fit_category(score)
-        decision = determine_decision(score, pass_threshold, review_threshold)
         
         print(f"Score: {score:.1f} - Category: {fit_category} - Decision: {decision}")
         print(f"Weights used: {weights}")
+        print(f"Baselines used: {baselines}")
         
-        # Step 2: Generate access token if passed
+        # Step 2: Generate access token if passed or qualified
         access_token = None
         token_expires = None
         
-        if decision == "passed":
+        if decision in ("passed", "qualified"):
             access_token = email_service.generate_access_token()
             token_expires = datetime.now() + timedelta(hours=TOKEN_EXPIRY_HOURS)
             print(f"Generated access token: {access_token}")
@@ -283,7 +469,8 @@ def process_applicant_screening(
         
         # Step 4: Send appropriate email notification
         email_sent = False
-        if decision == "passed" and access_token:
+        # Handle both "passed" (old) and "qualified" (new hybrid scoring) decisions
+        if decision in ("passed", "qualified") and access_token:
             email_sent = email_service.send_pass_notification(
                 applicant_name=applicant_name,
                 applicant_email=applicant_email,

@@ -1,22 +1,105 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Settings, Save, RotateCcw, AlertCircle, CheckCircle, Sliders, Target, GraduationCap, Briefcase, FolderGit2 } from 'lucide-react';
+import { Settings, Save, RotateCcw, AlertCircle, CheckCircle, Sliders, Target, GraduationCap, Briefcase, FolderGit2, Award, BookOpen } from 'lucide-react';
 import { getSupabaseAdminClient, ScoringSettings } from '../lib/supabase';
 
-const DEFAULT_SETTINGS = {
-  experience_weight: 40,
+// Default 6-category hybrid scoring settings for entry_level
+const DEFAULT_SETTINGS: {
+  job_level: 'fresh_grad' | 'entry_level' | 'mid_level';
+  experience_weight: number;
+  skills_weight: number;
+  education_weight: number;
+  projects_weight: number;
+  traincert_weight: number;
+  achievements_weight: number;
+  qualified_threshold: number;
+  review_threshold: number;
+  baseline_experience: number;
+  baseline_skills: number;
+  baseline_education: number;
+  baseline_projects: number;
+  baseline_traincert: number;
+  baseline_achievements: number;
+  scoring_type: 'semantic' | 'hybrid';
+} = {
+  job_level: 'entry_level',
+  // Weights for 6 categories
+  experience_weight: 28,
   skills_weight: 30,
-  education_weight: 20,
-  projects_weight: 10,
-  qualified_threshold: 80,
-  review_threshold: 60,
-  baseline_project_score: 2,
+  education_weight: 18,
+  projects_weight: 14,
+  traincert_weight: 6,
+  achievements_weight: 4,
+  // Thresholds
+  qualified_threshold: 78,
+  review_threshold: 65,
+  // Baselines for count scoring
+  baseline_experience: 2,
+  baseline_skills: 10,
+  baseline_education: 2,
+  baseline_projects: 2,
+  baseline_traincert: 2,
+  baseline_achievements: 1,
+  // Scoring type
+  scoring_type: 'hybrid',
+};
+
+// Job level presets from documentation
+const JOB_LEVEL_PRESETS = {
+  fresh_grad: {
+    experience_weight: 18,
+    skills_weight: 30,
+    education_weight: 22,
+    projects_weight: 18,
+    traincert_weight: 7,
+    achievements_weight: 5,
+    qualified_threshold: 75,
+    review_threshold: 60,
+    baseline_experience: 1,
+    baseline_skills: 8,
+    baseline_education: 2,
+    baseline_projects: 2,
+    baseline_traincert: 2,
+    baseline_achievements: 1,
+  },
+  entry_level: {
+    experience_weight: 28,
+    skills_weight: 30,
+    education_weight: 18,
+    projects_weight: 14,
+    traincert_weight: 6,
+    achievements_weight: 4,
+    qualified_threshold: 78,
+    review_threshold: 65,
+    baseline_experience: 2,
+    baseline_skills: 10,
+    baseline_education: 2,
+    baseline_projects: 2,
+    baseline_traincert: 2,
+    baseline_achievements: 1,
+  },
+  mid_level: {
+    experience_weight: 42,
+    skills_weight: 28,
+    education_weight: 14,
+    projects_weight: 8,
+    traincert_weight: 5,
+    achievements_weight: 3,
+    qualified_threshold: 80,
+    review_threshold: 68,
+    baseline_experience: 4,
+    baseline_skills: 12,
+    baseline_education: 2,
+    baseline_projects: 2,
+    baseline_traincert: 2,
+    baseline_achievements: 1,
+  },
 };
 
 interface ValidationErrors {
   weights?: string;
   qualified_threshold?: string;
   review_threshold?: string;
-  baseline_project_score?: string;
+  baseline?: string;
 }
 
 // Helper to check if error is due to table not existing
@@ -38,26 +121,42 @@ export function AdminScoringSettings() {
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Calculate total weight
-  const totalWeight = formValues.experience_weight + formValues.skills_weight + 
-                      formValues.education_weight + formValues.projects_weight;
+  // Calculate total weight - handle undefined values
+  const totalWeight = 
+    (formValues.experience_weight || 0) + 
+    (formValues.skills_weight || 0) + 
+    (formValues.education_weight || 0) + 
+    (formValues.projects_weight || 0) +
+    (formValues.traincert_weight || 0) + 
+    (formValues.achievements_weight || 0);
 
   const validateForm = useCallback((): boolean => {
     const errors: ValidationErrors = {};
 
+    // Get values with fallback to 0 for undefined
+    const expWeight = formValues.experience_weight || 0;
+    const skillWeight = formValues.skills_weight || 0;
+    const eduWeight = formValues.education_weight || 0;
+    const projWeight = formValues.projects_weight || 0;
+    const tcWeight = formValues.traincert_weight || 0;
+    const achWeight = formValues.achievements_weight || 0;
+    const qualThresh = formValues.qualified_threshold || 0;
+    const revThresh = formValues.review_threshold || 0;
+
     // Validate weights sum to 100
-    const weightsSum = formValues.experience_weight + formValues.skills_weight + 
-                       formValues.education_weight + formValues.projects_weight;
+    const weightsSum = expWeight + skillWeight + eduWeight + projWeight + tcWeight + achWeight;
     if (weightsSum !== 100) {
       errors.weights = `Weights must sum to 100 (currently: ${weightsSum})`;
     }
 
     // Validate individual weight ranges (0-100)
     const weights = [
-      { name: 'Experience', value: formValues.experience_weight },
-      { name: 'Skills', value: formValues.skills_weight },
-      { name: 'Education', value: formValues.education_weight },
-      { name: 'Projects', value: formValues.projects_weight },
+      { name: 'Experience', value: expWeight },
+      { name: 'Skills', value: skillWeight },
+      { name: 'Education', value: eduWeight },
+      { name: 'Projects', value: projWeight },
+      { name: 'Trainings & Certs', value: tcWeight },
+      { name: 'Achievements', value: achWeight },
     ];
 
     for (const weight of weights) {
@@ -68,24 +167,32 @@ export function AdminScoringSettings() {
     }
 
     // Validate qualified_threshold
-    if (formValues.qualified_threshold < 0 || formValues.qualified_threshold > 100) {
+    if (qualThresh < 0 || qualThresh > 100) {
       errors.qualified_threshold = 'Qualified threshold must be between 0 and 100';
     }
 
     // Validate review_threshold
-    if (formValues.review_threshold < 0 || formValues.review_threshold > 100) {
+    if (revThresh < 0 || revThresh > 100) {
       errors.review_threshold = 'Review threshold must be between 0 and 100';
     }
 
     // Validate qualified > review
-    if (formValues.qualified_threshold <= formValues.review_threshold) {
+    if (qualThresh <= revThresh) {
       errors.qualified_threshold = 'Qualified threshold must be greater than review threshold';
       errors.review_threshold = 'Review threshold must be less than qualified threshold';
     }
 
-    // Validate baseline_project_score
-    if (formValues.baseline_project_score < 0 || formValues.baseline_project_score > 10) {
-      errors.baseline_project_score = 'Baseline project score must be between 0 and 10';
+    // Validate baselines
+    const baselines = [
+      formValues.baseline_experience,
+      formValues.baseline_skills,
+      formValues.baseline_education,
+      formValues.baseline_projects,
+      formValues.baseline_traincert,
+      formValues.baseline_achievements,
+    ];
+    if (baselines.some(b => (b || 0) < 0 || (b || 0) > 100)) {
+      errors.baseline = 'All baselines must be between 0 and 100';
     }
 
     setValidationErrors(errors);
@@ -93,8 +200,11 @@ export function AdminScoringSettings() {
   }, [formValues]);
 
   useEffect(() => {
-    validateForm();
-  }, [formValues, validateForm]);
+    // Skip validation while loading initial data
+    if (!loading) {
+      validateForm();
+    }
+  }, [formValues, validateForm, loading]);
 
   const loadSettings = async () => {
     try {
@@ -117,6 +227,7 @@ export function AdminScoringSettings() {
           // Use default values without showing error
           setSettings(null);
           setFormValues(DEFAULT_SETTINGS);
+          setLoading(false);
           return;
         }
         throw fetchError;
@@ -125,13 +236,22 @@ export function AdminScoringSettings() {
       if (data) {
         setSettings(data);
         setFormValues({
-          experience_weight: data.experience_weight,
-          skills_weight: data.skills_weight,
-          education_weight: data.education_weight,
-          projects_weight: data.projects_weight,
-          qualified_threshold: data.qualified_threshold,
-          review_threshold: data.review_threshold,
-          baseline_project_score: data.baseline_project_score,
+          job_level: data.job_level || 'entry_level',
+          experience_weight: data.experience_weight ?? 28,
+          skills_weight: data.skills_weight ?? 30,
+          education_weight: data.education_weight ?? 18,
+          projects_weight: data.projects_weight ?? 14,
+          traincert_weight: data.traincert_weight ?? 6,
+          achievements_weight: data.achievements_weight ?? 4,
+          qualified_threshold: data.qualified_threshold ?? 78,
+          review_threshold: data.review_threshold ?? 65,
+          baseline_experience: data.baseline_experience ?? 2,
+          baseline_skills: data.baseline_skills ?? 10,
+          baseline_education: data.baseline_education ?? 2,
+          baseline_projects: data.baseline_projects ?? 2,
+          baseline_traincert: data.baseline_traincert ?? 2,
+          baseline_achievements: data.baseline_achievements ?? 1,
+          scoring_type: data.scoring_type ?? 'hybrid',
         });
       } else {
         // No settings row exists, use defaults
@@ -157,35 +277,134 @@ export function AdminScoringSettings() {
       setSaveSuccess(false);
       const adminClient = getSupabaseAdminClient();
 
+      // Get the appropriate column names based on job level
+      const levelKey = formValues.job_level;
+      const qualifiedKey = `${levelKey}_qualified_threshold`;
+      const reviewKey = `${levelKey}_review_threshold`;
+      const weightsKey = `${levelKey}_weights`;
+
+      // Prepare the data to save - include both individual fields and job-level specific columns
+      const saveData = {
+        job_level: formValues.job_level,
+        // Legacy columns (for backward compatibility)
+        experience_weight: formValues.experience_weight,
+        skills_weight: formValues.skills_weight,
+        education_weight: formValues.education_weight,
+        projects_weight: formValues.projects_weight,
+        traincert_weight: formValues.traincert_weight,
+        achievements_weight: formValues.achievements_weight,
+        qualified_threshold: formValues.qualified_threshold,
+        review_threshold: formValues.review_threshold,
+        baseline_experience: formValues.baseline_experience,
+        baseline_skills: formValues.baseline_skills,
+        baseline_education: formValues.baseline_education,
+        baseline_projects: formValues.baseline_projects,
+        baseline_traincert: formValues.baseline_traincert,
+        baseline_achievements: formValues.baseline_achievements,
+        scoring_type: formValues.scoring_type,
+        // New separate columns for each job level
+        [qualifiedKey]: formValues.qualified_threshold,
+        [reviewKey]: formValues.review_threshold,
+        [weightsKey]: {
+          experience_weight: formValues.experience_weight,
+          skills_weight: formValues.skills_weight,
+          education_weight: formValues.education_weight,
+          projects_weight: formValues.projects_weight,
+          traincert_weight: formValues.traincert_weight,
+          achievements_weight: formValues.achievements_weight,
+          baseline_experience: formValues.baseline_experience,
+          baseline_skills: formValues.baseline_skills,
+          baseline_education: formValues.baseline_education,
+          baseline_projects: formValues.baseline_projects,
+          baseline_traincert: formValues.baseline_traincert,
+          baseline_achievements: formValues.baseline_achievements,
+        },
+        // Also update weights_by_level JSONB with all job levels
+        weights_by_level: {
+          fresh_grad: formValues.job_level === 'fresh_grad' ? {
+            qualified_threshold: formValues.qualified_threshold,
+            review_threshold: formValues.review_threshold,
+            experience_weight: formValues.experience_weight,
+            skills_weight: formValues.skills_weight,
+            education_weight: formValues.education_weight,
+            projects_weight: formValues.projects_weight,
+            traincert_weight: formValues.traincert_weight,
+            achievements_weight: formValues.achievements_weight,
+            baseline_experience: formValues.baseline_experience,
+            baseline_skills: formValues.baseline_skills,
+            baseline_education: formValues.baseline_education,
+            baseline_projects: formValues.baseline_projects,
+            baseline_traincert: formValues.baseline_traincert,
+            baseline_achievements: formValues.baseline_achievements,
+          } : undefined,
+          entry_level: formValues.job_level === 'entry_level' ? {
+            qualified_threshold: formValues.qualified_threshold,
+            review_threshold: formValues.review_threshold,
+            experience_weight: formValues.experience_weight,
+            skills_weight: formValues.skills_weight,
+            education_weight: formValues.education_weight,
+            projects_weight: formValues.projects_weight,
+            traincert_weight: formValues.traincert_weight,
+            achievements_weight: formValues.achievements_weight,
+            baseline_experience: formValues.baseline_experience,
+            baseline_skills: formValues.baseline_skills,
+            baseline_education: formValues.baseline_education,
+            baseline_projects: formValues.baseline_projects,
+            baseline_traincert: formValues.baseline_traincert,
+            baseline_achievements: formValues.baseline_achievements,
+          } : undefined,
+          mid_level: formValues.job_level === 'mid_level' ? {
+            qualified_threshold: formValues.qualified_threshold,
+            review_threshold: formValues.review_threshold,
+            experience_weight: formValues.experience_weight,
+            skills_weight: formValues.skills_weight,
+            education_weight: formValues.education_weight,
+            projects_weight: formValues.projects_weight,
+            traincert_weight: formValues.traincert_weight,
+            achievements_weight: formValues.achievements_weight,
+            baseline_experience: formValues.baseline_experience,
+            baseline_skills: formValues.baseline_skills,
+            baseline_education: formValues.baseline_education,
+            baseline_projects: formValues.baseline_projects,
+            baseline_traincert: formValues.baseline_traincert,
+            baseline_achievements: formValues.baseline_achievements,
+          } : undefined,
+        },
+        updated_at: new Date().toISOString(),
+      };
+
       if (settings) {
         // Update existing settings
         const { error: updateError } = await adminClient
           .from('scoring_settings')
-          .update({
-            ...formValues,
-            updated_at: new Date().toISOString(),
-          })
+          .update(saveData)
           .eq('settings_id', settings.settings_id);
 
         if (updateError) {
-          // Check if table doesn't exist
+          // Check if error is column does not exist
+          if (updateError.message?.includes('column') || updateError.code === '42703') {
+            throw new Error(`Database column missing: ${updateError.message}. Please run the migration add_hybrid_scoring_columns.sql in Supabase.`);
+          }
           if (isTableNotExistError(updateError)) {
             throw new Error('Database table "scoring_settings" does not exist. Please run the database migration first.');
           }
-          throw updateError;
+          throw new Error(`Update failed: ${updateError.message}`);
         }
       } else {
         // Create new settings
         const { error: insertError } = await adminClient
           .from('scoring_settings')
-          .insert(formValues);
+          .insert(saveData);
 
         if (insertError) {
-          // Check if table doesn't exist
+          // Check if error is column does not exist
+          if (insertError.message?.includes('column') || insertError.code === '42703') {
+            throw new Error(`Database column missing: ${insertError.message}. Please run the migration add_hybrid_scoring_columns.sql in Supabase.`);
+          }
           if (isTableNotExistError(insertError)) {
             throw new Error('Database table "scoring_settings" does not exist. Please run the database migration first.');
           }
-          throw insertError;
+          throw new Error(`Insert failed: ${insertError.message}`);
         }
       }
 
@@ -205,19 +424,85 @@ export function AdminScoringSettings() {
   const handleReset = () => {
     if (settings) {
       setFormValues({
-        experience_weight: settings.experience_weight,
-        skills_weight: settings.skills_weight,
-        education_weight: settings.education_weight,
-        projects_weight: settings.projects_weight,
-        qualified_threshold: settings.qualified_threshold,
-        review_threshold: settings.review_threshold,
-        baseline_project_score: settings.baseline_project_score,
+        job_level: settings.job_level || 'entry_level',
+        experience_weight: settings.experience_weight || 28,
+        skills_weight: settings.skills_weight || 30,
+        education_weight: settings.education_weight || 18,
+        projects_weight: settings.projects_weight || 14,
+        traincert_weight: settings.traincert_weight || 6,
+        achievements_weight: settings.achievements_weight || 4,
+        qualified_threshold: settings.qualified_threshold || 78,
+        review_threshold: settings.review_threshold || 65,
+        baseline_experience: settings.baseline_experience || 2,
+        baseline_skills: settings.baseline_skills || 10,
+        baseline_education: settings.baseline_education || 2,
+        baseline_projects: settings.baseline_projects || 2,
+        baseline_traincert: settings.baseline_traincert || 2,
+        baseline_achievements: settings.baseline_achievements || 1,
+        scoring_type: settings.scoring_type || 'hybrid',
       });
     } else {
       setFormValues(DEFAULT_SETTINGS);
     }
     setValidationErrors({});
     setError(null);
+  };
+
+  const applyJobLevelPreset = (level: 'fresh_grad' | 'entry_level' | 'mid_level') => {
+    // First check if there are saved values in the separate columns for this job level
+    const qualifiedKey = `${level}_qualified_threshold`;
+    const reviewKey = `${level}_review_threshold`;
+    const weightsKey = `${level}_weights`;
+    
+    // Check if saved values exist in the new column structure
+    const savedQualifiedThreshold = settings?.[qualifiedKey as keyof typeof settings] as number | undefined;
+    const savedReviewThreshold = settings?.[reviewKey as keyof typeof settings] as number | undefined;
+    const savedWeights = settings?.[weightsKey as keyof typeof settings] as Record<string, number> | undefined;
+    
+    // If there's saved data for this job level, use those values
+    if (savedQualifiedThreshold !== undefined || savedWeights) {
+      console.log(`[applyJobLevelPreset] Using saved values for ${level}:`, { savedQualifiedThreshold, savedReviewThreshold, savedWeights });
+      setFormValues({
+        ...formValues,
+        job_level: level,
+        experience_weight: savedWeights?.experience_weight ?? JOB_LEVEL_PRESETS[level].experience_weight,
+        skills_weight: savedWeights?.skills_weight ?? JOB_LEVEL_PRESETS[level].skills_weight,
+        education_weight: savedWeights?.education_weight ?? JOB_LEVEL_PRESETS[level].education_weight,
+        projects_weight: savedWeights?.projects_weight ?? JOB_LEVEL_PRESETS[level].projects_weight,
+        traincert_weight: savedWeights?.traincert_weight ?? JOB_LEVEL_PRESETS[level].traincert_weight,
+        achievements_weight: savedWeights?.achievements_weight ?? JOB_LEVEL_PRESETS[level].achievements_weight,
+        qualified_threshold: savedQualifiedThreshold ?? JOB_LEVEL_PRESETS[level].qualified_threshold,
+        review_threshold: savedReviewThreshold ?? JOB_LEVEL_PRESETS[level].review_threshold,
+        baseline_experience: savedWeights?.baseline_experience ?? JOB_LEVEL_PRESETS[level].baseline_experience,
+        baseline_skills: savedWeights?.baseline_skills ?? JOB_LEVEL_PRESETS[level].baseline_skills,
+        baseline_education: savedWeights?.baseline_education ?? JOB_LEVEL_PRESETS[level].baseline_education,
+        baseline_projects: savedWeights?.baseline_projects ?? JOB_LEVEL_PRESETS[level].baseline_projects,
+        baseline_traincert: savedWeights?.baseline_traincert ?? JOB_LEVEL_PRESETS[level].baseline_traincert,
+        baseline_achievements: savedWeights?.baseline_achievements ?? JOB_LEVEL_PRESETS[level].baseline_achievements,
+      });
+    } else {
+      // No saved preset, use the hardcoded JOB_LEVEL_PRESETS
+      const preset = JOB_LEVEL_PRESETS[level];
+      console.log(`[applyJobLevelPreset] Using default preset for ${level}:`, preset);
+      setFormValues({
+        ...formValues,
+        job_level: level,
+        experience_weight: preset.experience_weight,
+        skills_weight: preset.skills_weight,
+        education_weight: preset.education_weight,
+        projects_weight: preset.projects_weight,
+        traincert_weight: preset.traincert_weight,
+        achievements_weight: preset.achievements_weight,
+        qualified_threshold: preset.qualified_threshold,
+        review_threshold: preset.review_threshold,
+        baseline_experience: preset.baseline_experience,
+        baseline_skills: preset.baseline_skills,
+        baseline_education: preset.baseline_education,
+        baseline_projects: preset.baseline_projects,
+        baseline_traincert: preset.baseline_traincert,
+        baseline_achievements: preset.baseline_achievements,
+      });
+    }
   };
 
   const handleResetToDefaults = async () => {
@@ -292,8 +577,46 @@ export function AdminScoringSettings() {
             Scoring Settings
           </h1>
           <p className="text-gray-600 mt-1">
-            Configure resume scoring weights and qualification thresholds
+            Configure 6-category hybrid resume scoring weights and qualification thresholds
           </p>
+          
+          {/* Job Level Selector */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="text-sm font-medium text-gray-700 py-2">Quick Presets:</span>
+            <button
+              onClick={() => applyJobLevelPreset('fresh_grad')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                formValues.job_level === 'fresh_grad'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              Fresh Graduate
+            </button>
+            <button
+              onClick={() => applyJobLevelPreset('entry_level')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                formValues.job_level === 'entry_level'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              Entry Level
+            </button>
+            <button
+              onClick={() => applyJobLevelPreset('mid_level')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                formValues.job_level === 'mid_level'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              Mid Level
+            </button>
+            <span className="text-sm text-gray-500 py-2 ml-2">
+              Current: <span className="font-medium text-gray-900 capitalize">{formValues.job_level.replace('_', ' ')}</span>
+            </span>
+          </div>
         </div>
 
         {/* Error Display */}
@@ -356,6 +679,22 @@ export function AdminScoringSettings() {
                 value={formValues.projects_weight}
                 onChange={(value) => setFormValues({ ...formValues, projects_weight: value })}
                 color="bg-orange-600"
+              />
+              
+              <WeightInput
+                label="Trainings & Certifications Weight"
+                icon={BookOpen}
+                value={formValues.traincert_weight}
+                onChange={(value) => setFormValues({ ...formValues, traincert_weight: value })}
+                color="bg-teal-600"
+              />
+              
+              <WeightInput
+                label="Achievements Weight"
+                icon={Award}
+                value={formValues.achievements_weight}
+                onChange={(value) => setFormValues({ ...formValues, achievements_weight: value })}
+                color="bg-yellow-600"
               />
 
               {/* Total Weight Indicator */}
@@ -513,49 +852,131 @@ export function AdminScoringSettings() {
               </div>
             </div>
 
-            {/* Project Score Settings */}
+            {/* Baseline Settings for Count Scoring */}
             <div className="bg-white rounded-lg shadow">
               <div className="p-6 border-b border-gray-200">
                 <div className="flex items-center gap-3">
                   <FolderGit2 className="w-6 h-6 text-blue-600" />
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Project Scoring</h2>
-                    <p className="text-sm text-gray-500">Configure project evaluation</p>
+                    <h2 className="text-lg font-semibold text-gray-900">Count Baselines</h2>
+                    <p className="text-sm text-gray-500">Minimum counts for full score in each category</p>
                   </div>
                 </div>
               </div>
               
-              <div className="p-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Baseline Project Score
-                  <span className="text-gray-400 text-xs ml-2">(Default score for projects, 0-10)</span>
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min="0"
-                    max="10"
-                    step="0.5"
-                    value={formValues.baseline_project_score}
-                    onChange={(e) => setFormValues({ ...formValues, baseline_project_score: Number(e.target.value) })}
-                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-600"
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    step="0.5"
-                    value={formValues.baseline_project_score}
-                    onChange={(e) => setFormValues({ ...formValues, baseline_project_score: Number(e.target.value) || 0 })}
-                    className={`w-20 px-3 py-2 border rounded-lg text-center font-medium focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
-                      validationErrors.baseline_project_score ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  />
+              <div className="p-6 space-y-4">
+                {/* Experience Baseline */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Experience Baseline
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={formValues.baseline_experience}
+                      onChange={(e) => setFormValues({ ...formValues, baseline_experience: Number(e.target.value) || 0 })}
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-center font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <span className="text-gray-500 text-sm">experiences needed for 100%</span>
+                  </div>
                 </div>
-                {validationErrors.baseline_project_score && (
-                  <p className="text-red-600 text-sm mt-2 flex items-center gap-1">
+
+                {/* Skills Baseline */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Skills Baseline
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="0"
+                      max="50"
+                      value={formValues.baseline_skills}
+                      onChange={(e) => setFormValues({ ...formValues, baseline_skills: Number(e.target.value) || 0 })}
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-center font-medium focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                    <span className="text-gray-500 text-sm">skills needed for 100%</span>
+                  </div>
+                </div>
+
+                {/* Education Baseline */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Education Baseline
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      value={formValues.baseline_education}
+                      onChange={(e) => setFormValues({ ...formValues, baseline_education: Number(e.target.value) || 0 })}
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-center font-medium focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    />
+                    <span className="text-gray-500 text-sm">educations needed for 100%</span>
+                  </div>
+                </div>
+
+                {/* Projects Baseline */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Projects Baseline
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={formValues.baseline_projects}
+                      onChange={(e) => setFormValues({ ...formValues, baseline_projects: Number(e.target.value) || 0 })}
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-center font-medium focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                    <span className="text-gray-500 text-sm">projects needed for 100%</span>
+                  </div>
+                </div>
+
+                {/* Training/Cert Baseline */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Trainings & Certifications Baseline
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={formValues.baseline_traincert}
+                      onChange={(e) => setFormValues({ ...formValues, baseline_traincert: Number(e.target.value) || 0 })}
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-center font-medium focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    />
+                    <span className="text-gray-500 text-sm">trainings/certs needed for 100%</span>
+                  </div>
+                </div>
+
+                {/* Achievements Baseline */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Achievements Baseline
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={formValues.baseline_achievements}
+                      onChange={(e) => setFormValues({ ...formValues, baseline_achievements: Number(e.target.value) || 0 })}
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-center font-medium focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                    />
+                    <span className="text-gray-500 text-sm">achievements needed for 100%</span>
+                  </div>
+                </div>
+
+                {validationErrors.baseline && (
+                  <p className="text-red-600 text-sm flex items-center gap-1">
                     <AlertCircle className="w-4 h-4" />
-                    {validationErrors.baseline_project_score}
+                    {validationErrors.baseline}
                   </p>
                 )}
               </div>
