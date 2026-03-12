@@ -30,9 +30,7 @@ import {
   calculateAlignmentScore,
   calculateDimensionScores,
   DIMENSION_LABELS,
-  WorkStyleAnswer,
-  detectRoleFamily,
-  ROLE_FAMILY_PROFILES
+  WorkStyleAnswer
 } from '../config/workStyleConfig';
 
 interface ApplicantWithDetails extends Applicant {
@@ -656,7 +654,7 @@ export function ApplicantDetailModal({
                               </div>
                               <div className="text-right">
                                 <p className="text-sm text-gray-600">Target Role</p>
-                                <p className="font-semibold text-gray-900">{result.matchedRoleDisplayName}</p>
+                                <p className="font-semibold text-gray-900">{applicant.position}</p>
                               </div>
                             </div>
                             <p className="text-xs text-gray-500 mt-2">

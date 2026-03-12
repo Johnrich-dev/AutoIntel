@@ -151,9 +151,9 @@ function calculateResumeScore(applicant?: ApplicantWithDetails, settings?: Scori
   educationScore = Math.min(((parsed.education?.length || 0) / 3) * 100, 100);
   
   const projectCount = parsed.projects?.length || 0;
-  projectsScore = projectCount >= config.baseline_project_score
-    ? Math.min((projectCount / config.baseline_project_score) * 100, 100)
-    : (projectCount / config.baseline_project_score) * 50;
+  projectsScore = projectCount >= config.baseline_projects
+    ? Math.min((projectCount / config.baseline_projects) * 100, 100)
+    : (projectCount / config.baseline_projects) * 50;
   
   const weightedScore = (
     (skillsScore * (config.skills_weight / 100)) +
@@ -195,7 +195,7 @@ function calculateProfileFit(test?: PersonalityTest, jobRole?: string): number {
 }
 
 function calculateOverallScore(resumeScore: number, videoScore: number, profileFit: number): number {
-  const weights = { resume: 0.4, video: 0.4, profile: 0.2 };
+  const weights = { resume: 0.5, video: 0.4, profile: 0.1 };
   const score = (resumeScore * weights.resume) + (videoScore * weights.video) + (profileFit * weights.profile);
   return Math.round(score);
 }

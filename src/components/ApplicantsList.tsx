@@ -121,9 +121,9 @@ function calculateResumeScore(applicant?: ApplicantWithDetails, settings?: Scori
   
   // Projects: Based on number of projects relative to baseline
   const projectCount = parsed.projects?.length || 0;
-  projectsScore = projectCount >= config.baseline_project_score
-    ? Math.min((projectCount / config.baseline_project_score) * 100, 100)
-    : (projectCount / config.baseline_project_score) * 50; // Below baseline gives partial credit
+  projectsScore = projectCount >= config.baseline_projects
+    ? Math.min((projectCount / config.baseline_projects) * 100, 100)
+    : (projectCount / config.baseline_projects) * 50; // Below baseline gives partial credit
   
   // Calculate weighted total using HR settings
   const weightedScore = (
@@ -169,7 +169,7 @@ function calculateProfileFit(test?: PersonalityTest, jobRole?: string): number {
 
 // Calculate overall score
 function calculateOverallScore(resumeScore: number, videoScore: number, profileFit: number): number {
-  const weights = { resume: 0.4, video: 0.4, profile: 0.2 };
+  const weights = { resume: 0.5, video: 0.4, profile: 0.1 };
   const score = (resumeScore * weights.resume) + (videoScore * weights.video) + (profileFit * weights.profile);
   return Math.round(score);
 }
