@@ -25,6 +25,13 @@ import {
   User
 } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest, ResumeParsedData } from '../lib/supabase';
+import { 
+  getWorkStyleResult, 
+  calculateAlignmentScore,
+  calculateDimensionScores,
+  DIMENSION_LABELS,
+  WorkStyleAnswer
+} from '../config/workStyleConfig';
 
 interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
@@ -558,7 +565,7 @@ export function ApplicantDetailModal({
                         <p className="text-sm text-gray-700">
                           {typeof training === 'string' 
                             ? training 
-                            : training.name || training.title || JSON.stringify(training)}
+                            : (training as any).name || (training as any).title || JSON.stringify(training)}
                         </p>
                       </div>
                     ))}
@@ -619,35 +626,112 @@ export function ApplicantDetailModal({
           {activeTab === 'test' && (
             <div className="space-y-6">
               <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <h3 className="font-semibold text-gray-900 mb-4">Personality Test Results</h3>
-                {applicant.test && applicant.test.status === 'completed' ? (
+                <h3 className="font-semibold text-gray-900 mb-4">Work Style Assessment Results</h3>
+                {applicant.test && applicant.test.status === 'submitted' ? (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div className="bg-orange-50 rounded-lg p-4">
-                        <p className="text-orange-600 font-medium mb-1">Completion Status</p>
-                        <p className="text-2xl font-bold text-orange-700">Completed</p>
-                      </div>
-                      <div className="bg-blue-50 rounded-lg p-4">
-                        <p className="text-blue-600 font-medium mb-1">Submitted On</p>
-                        <p className="text-lg font-bold text-blue-700">
-                          {applicant.test.submitted_at 
-                            ? new Date(applicant.test.submitted_at).toLocaleDateString() 
-                            : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h4 className="font-medium text-gray-900 mb-3">Answers Summary</h4>
-                      <p className="text-sm text-gray-600">
-                        {applicant.test.answers.length} questions answered
-                      </p>
-                    </div>
+                    {/* Calculate Work Style Result */}
+                    {(() => {
+                      const answers: WorkStyleAnswer[] = applicant.test?.answers?.map((a: any) => ({
+                        question: a.question,
+                        answer: a.answer,
+                      })) || [];
+                      const dimensionScores = calculateDimensionScores(answers);
+                      const { score: alignmentScore, breakdown } = calculateAlignmentScore(dimensionScores, 'Backend Developer');
+                      const result = getWorkStyleResult(answers, 'Backend Developer');
+                      
+                      return (
+                        <>
+                          {/* Overall Alignment Score */}
+                          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+                            <div className="flex items-center justify-between mb-4">
+                              <div>
+                                <p className="text-sm text-gray-600 mb-1">Work Style Alignment Score</p>
+                                <p className="text-4xl font-bold text-blue-700">{alignmentScore}%</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm text-gray-600">Target Role</p>
+                                <p className="font-semibold text-gray-900">Backend Developer</p>
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-2">
+                              This score reflects self-reported work style tendencies and should be used only as a supplementary decision-support metric.
+                            </p>
+                          </div>
+
+                          {/* Dimension Scores */}
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <h4 className="font-medium text-gray-900 mb-4">Dimension Scores</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {dimensionScores.map((ds) => {
+                                const normalizedScore = Math.round((ds.score / 5) * 100);
+                                const barColor = normalizedScore >= 70 ? 'bg-green-500' : normalizedScore >= 50 ? 'bg-amber-500' : 'bg-red-500';
+                                return (
+                                  <div key={ds.dimension} className="flex items-center gap-3">
+                                    <span className="text-sm text-gray-600 w-32 truncate">{DIMENSION_LABELS[ds.dimension]}</span>
+                                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                      <div className={`h-2 rounded-full ${barColor}`} style={{ width: `${normalizedScore}%` }} />
+                                    </div>
+                                    <span className="text-sm font-medium text-gray-700 w-10">{normalizedScore}%</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Areas Summary */}
+                          <div className="grid grid-cols-3 gap-4">
+                            <div className="bg-green-50 rounded-lg p-4">
+                              <p className="text-green-700 font-medium mb-2">Strong Areas</p>
+                              <p className="text-sm text-green-600">
+                                {result.strongAreas.length > 0 
+                                  ? result.strongAreas.map(d => DIMENSION_LABELS[d]).join(', ') 
+                                  : 'None'}
+                              </p>
+                            </div>
+                            <div className="bg-amber-50 rounded-lg p-4">
+                              <p className="text-amber-700 font-medium mb-2">Moderate Areas</p>
+                              <p className="text-sm text-amber-600">
+                                {result.moderateAreas.length > 0 
+                                  ? result.moderateAreas.map(d => DIMENSION_LABELS[d]).join(', ') 
+                                  : 'None'}
+                              </p>
+                            </div>
+                            <div className="bg-red-50 rounded-lg p-4">
+                              <p className="text-red-700 font-medium mb-2">Development Areas</p>
+                              <p className="text-sm text-red-600">
+                                {result.developmentAreas.length > 0 
+                                  ? result.developmentAreas.map(d => DIMENSION_LABELS[d]).join(', ') 
+                                  : 'None'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Submission Info */}
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="bg-blue-50 rounded-lg p-4">
+                              <p className="text-blue-600 font-medium mb-1">Submitted On</p>
+                              <p className="text-lg font-bold text-blue-700">
+                                {applicant.test.submitted_at 
+                                  ? new Date(applicant.test.submitted_at).toLocaleDateString() 
+                                  : 'N/A'}
+                              </p>
+                            </div>
+                            <div className="bg-purple-50 rounded-lg p-4">
+                              <p className="text-purple-600 font-medium mb-1">Questions Answered</p>
+                              <p className="text-lg font-bold text-purple-700">
+                                {applicant.test.answers.length}
+                              </p>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <p className="text-gray-500 text-center py-8">
                     {applicant.test 
-                      ? 'Personality test not completed yet' 
-                      : 'No personality test data available'}
+                      ? 'Work Style assessment not completed yet' 
+                      : 'No work style assessment data available'}
                   </p>
                 )}
               </div>

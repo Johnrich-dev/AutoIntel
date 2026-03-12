@@ -43,6 +43,12 @@ import {
 } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest, ResumeParsedData, ScoringSettings } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
+import { 
+  getWorkStyleResult, 
+  calculateAlignmentScore,
+  calculateDimensionScores,
+  WorkStyleAnswer
+} from '../config/workStyleConfig';
 
 // ============================================================================
 // Types & Interfaces
@@ -166,14 +172,30 @@ function calculateVideoScore(video?: VideoAssessment): number {
   return 0;
 }
 
-function calculateProfileFit(test?: PersonalityTest): number {
-  if (!test || test.status !== 'completed') return 0;
-  const avgAnswer = test.answers.reduce((sum, a) => sum + a.answer, 0) / (test.answers.length || 1);
-  return Math.min(Math.round((avgAnswer / 5) * 100), 100);
+function calculateProfileFit(test?: PersonalityTest, jobRole?: string): number {
+  if (!test || test.status !== 'submitted') return 0;
+  if (!test.answers || !Array.isArray(test.answers) || test.answers.length === 0) return 0;
+  
+  // Convert answers to WorkStyleAnswer format
+  const answers: WorkStyleAnswer[] = test.answers.map((a: any) => ({
+    question: a.question,
+    answer: a.answer,
+  }));
+  
+  // Default to 'Backend Developer' if no job role specified
+  const targetRole = jobRole || 'Backend Developer';
+  
+  // Calculate alignment score using the new config
+  const { score } = calculateAlignmentScore(
+    calculateDimensionScores(answers),
+    targetRole
+  );
+  
+  return score;
 }
 
 function calculateOverallScore(resumeScore: number, videoScore: number, profileFit: number): number {
-  const weights = { resume: 0.4, video: 0.35, profile: 0.25 };
+  const weights = { resume: 0.4, video: 0.4, profile: 0.2 };
   const score = (resumeScore * weights.resume) + (videoScore * weights.video) + (profileFit * weights.profile);
   return Math.round(score);
 }

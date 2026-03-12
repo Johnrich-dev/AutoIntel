@@ -1,44 +1,25 @@
 import { useState } from 'react';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { getSupabaseClient } from '../lib/supabase';
+import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase';
+import {
+  WORK_STYLE_QUESTIONS,
+  SCALE_LABELS,
+  WorkStyleAnswer
+} from '../config/workStyleConfig';
 
 interface PersonalityTestProps {
   onComplete: () => void;
   onBack: () => void;
 }
 
-const questions = [
-  "I enjoy working in team environments and collaborating with others",
-  "I prefer to work independently and manage my own schedule",
-  "I am comfortable taking on leadership roles when needed",
-  "I adapt quickly to changing priorities and new challenges",
-  "I pay close attention to details in my work",
-  "I am motivated by creative problem-solving",
-  "I communicate effectively with team members and stakeholders",
-  "I remain calm and focused under pressure",
-  "I actively seek feedback to improve my performance",
-  "I am comfortable with ambiguity and uncertain situations",
-  "I take initiative without waiting for explicit direction",
-  "I prioritize building strong professional relationships",
-  "I am passionate about continuous learning and development",
-  "I approach conflicts constructively and professionally",
-  "I value work-life balance and personal well-being",
-];
-
-const scaleLabels = [
-  "Strongly Disagree",
-  "Disagree",
-  "Neutral",
-  "Agree",
-  "Strongly Agree",
-];
-
 export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
   const { applicant, accessToken } = useAuth();
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitting, setSubmitting] = useState(false);
+
+  const questions = WORK_STYLE_QUESTIONS;
 
   const handleAnswer = (value: number) => {
     setAnswers({ ...answers, [currentQuestion]: value });
@@ -65,37 +46,63 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
     setSubmitting(true);
 
     try {
-      const client = getSupabaseClient(accessToken ?? undefined);
-      const formattedAnswers = Object.entries(answers).map(([question, answer]) => ({
+      // Use admin client to bypass RLS for database operations
+      const client = getSupabaseAdminClient();
+      
+      // Format answers for database storage
+      const formattedAnswers: WorkStyleAnswer[] = Object.entries(answers).map(([question, answer]) => ({
         question: parseInt(question) + 1,
         answer,
       }));
 
-      const { data: test } = await client
-        .from('personality_tests')
+      // Check if test already exists in either table
+      // First check new work_style_assessments table
+      const { data: newTest } = await client
+        .from('work_style_assessments')
         .select('*')
         .eq('applicant_id', applicant.id)
         .maybeSingle();
 
-      if (test) {
+      if (newTest) {
+        // Update existing in new table
         await client
-          .from('personality_tests')
+          .from('work_style_assessments')
           .update({
             answers: formattedAnswers,
             status: 'submitted',
             submitted_at: new Date().toISOString(),
           })
-          .eq('id', test.id);
+          .eq('id', newTest.id);
       } else {
-        await client.from('personality_tests').insert({
-          applicant_id: applicant.id,
-          answers: formattedAnswers,
-          status: 'submitted',
-          submitted_at: new Date().toISOString(),
-        });
+        // Check old personality_tests table for existing data
+        const { data: oldTest } = await client
+          .from('personality_tests')
+          .select('*')
+          .eq('applicant_id', applicant.id)
+          .maybeSingle();
+
+        if (oldTest) {
+          // Update old table
+          await client
+            .from('personality_tests')
+            .update({
+              answers: formattedAnswers,
+              status: 'submitted',
+              submitted_at: new Date().toISOString(),
+            })
+            .eq('id', oldTest.id);
+        } else {
+          // Insert into new table
+          await client.from('work_style_assessments').insert({
+            applicant_id: applicant.id,
+            answers: formattedAnswers,
+            status: 'submitted',
+            submitted_at: new Date().toISOString(),
+          });
+        }
       }
 
-      alert('Personality test submitted successfully!');
+      alert('Your assessment has been submitted successfully!');
       onComplete();
     } catch (error) {
       console.error('Error submitting test:', error);
@@ -121,7 +128,7 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
               <ArrowLeft className="w-4 h-4" />
               Back to Dashboard
             </button>
-            <h1 className="text-2xl font-bold">Personality Assessment</h1>
+            <h1 className="text-2xl font-bold">Work Style Assessment</h1>
             <p className="text-blue-100 mt-1">15 questions about your work style and preferences</p>
 
             <div className="mt-4">
@@ -139,12 +146,19 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
           </div>
 
           <div className="p-8">
+            {/* Instructions */}
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+              <p className="text-amber-900 text-sm">
+                <strong>Instructions:</strong> Please answer honestly based on how you usually behave in academic, internship, or work-related situations. There are no right or wrong answers.
+              </p>
+            </div>
+
             <div className="mb-8">
               <div className="text-sm text-gray-500 mb-2">
                 Question {currentQuestion + 1} of {questions.length}
               </div>
               <h2 className="text-xl font-semibold text-gray-900 mb-6">
-                {questions[currentQuestion]}
+                {questions[currentQuestion].text}
               </h2>
 
               <div className="space-y-3">
@@ -173,7 +187,7 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
                       <span className={`font-medium ${
                         answers[currentQuestion] === value ? 'text-blue-900' : 'text-gray-700'
                       }`}>
-                        {scaleLabels[value - 1]}
+                        {SCALE_LABELS[value - 1]}
                       </span>
                     </div>
                   </button>
@@ -207,13 +221,18 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
               </div>
 
               {isLastQuestion && allAnswered ? (
-                <button
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                  className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {submitting ? 'Submitting...' : 'Submit Test'}
-                </button>
+                <div className="flex flex-col items-end gap-2">
+                  <button
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {submitting ? 'Submitting...' : 'Submit Assessment'}
+                  </button>
+                  <p className="text-xs text-gray-500">
+                    Your responses will be reviewed together with other application components.
+                  </p>
+                </div>
               ) : (
                 <button
                   onClick={handleNext}

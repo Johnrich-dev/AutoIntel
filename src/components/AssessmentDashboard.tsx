@@ -25,18 +25,30 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
     if (!applicant) return;
 
     try {
-      const client = getSupabaseClient(accessToken ?? undefined);
+      // Use admin client to bypass RLS
+      const client = getSupabaseAdminClient();
+      
       const [videoResult, testResult] = await Promise.all([
         client
           .from('video_assessments')
           .select('*')
           .eq('applicant_id', applicant.id)
           .maybeSingle(),
+        // Check new work_style_assessments table first, fallback to old personality_tests
         client
-          .from('personality_tests')
+          .from('work_style_assessments')
           .select('*')
           .eq('applicant_id', applicant.id)
-          .maybeSingle(),
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data) return { data };
+            // Fallback to old personality_tests table
+            return client
+              .from('personality_tests')
+              .select('*')
+              .eq('applicant_id', applicant.id)
+              .maybeSingle();
+          }),
       ]);
 
       if (videoResult.data) setVideoStatus(videoResult.data);
@@ -260,10 +272,10 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
                     </div>
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                        Personality Assessment
+                        Work Style and Job Preference Assessment
                       </h3>
                       <p className="text-gray-600 text-sm mb-3">
-                        Complete a 15-question personality assessment to help us understand your work style.
+                        Complete a 15-question work style assessment to help us understand your preferences.
                       </p>
                       {testCompleted ? (
                         <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
@@ -275,7 +287,7 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
                           onClick={onStartPersonalityTest}
                           className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
                         >
-                          Start Personality Test
+                          Start Work Style Assessment
                         </button>
                       )}
                     </div>
