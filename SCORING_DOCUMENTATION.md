@@ -1,4 +1,3 @@
-````markdown
 # AutoIntel Resume Screening Scoring System
 
 ## Overview
@@ -10,9 +9,9 @@ The AutoIntel recruitment system uses a **hybrid scoring approach** that combine
 
 ```text
 FINAL SCORE = (Requirement Match Score × 0.6) + (Count Score × 0.4)
-````
+```
 
-The scoring is designed for **Fresh Graduate**, **Entry-Level**, and **Mid-Level** hiring. The HR admin selects the job level in the job posting, and the system loads the default scoring profile for that level. HR may still adjust the weights, baselines, and thresholds as needed.
+The scoring is designed for **Fresh Graduate**, **Entry-Level**, and **Mid-Level** hiring. Instead of requiring HR to manually choose the applicant level for each screening, the company configures separate scoring profiles in the settings for fresh graduate, entry-level, and mid-level applicants. During screening, the system automatically detects the applicant level from the parsed resume, then loads the corresponding scoring profile and applies the configured weights, baselines, and thresholds.
 
 ---
 
@@ -29,7 +28,7 @@ The scoring is designed for **Fresh Graduate**, **Entry-Level**, and **Mid-Level
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  1. RESUME PARSING (resume_parser.py)                                       │
 │     - Extract text from PDF/DOCX                                            │
-│     - GPT cleaning                                                           │
+│     - GPT cleaning                                                          │
 │     - BERT NER for entity extraction                                        │
 │     - Parse into structured JSON:                                           │
 │       { skills, experience, education, projects, trainings,                 │
@@ -43,15 +42,15 @@ The scoring is designed for **Fresh Graduate**, **Entry-Level**, and **Mid-Level
 │     - Strategies: exact title → role_family → fallback                      │
 │     - Get job requirements: skills, education, projects, experience,        │
 │       trainings/certifications, achievements                                │
-│     - Read job level: Fresh Grad / Entry-Level / Mid-Level                  │
 └──────────────────────────────────────────────────────────────────────────────┘
              │
              ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│  3. JOB LEVEL / APPLICANT LEVEL CHECK                                       │
-│     - Primary basis: job level selected by HR in job posting                │
-│     - Supporting logic: fresh grad detection from parsed resume             │
-│     - Used to load default baselines, weights, and thresholds               │
+│  3. APPLICANT LEVEL DETECTION                                               │
+│     - Detect applicant as: Fresh Graduate / Entry-Level / Mid-Level         │
+│     - Evaluate: education recency, relevant experience, experience type,    │
+│       role titles, and academic-vs-professional resume dominance            │
+│     - Load the corresponding company-configured scoring profile             │
 └──────────────────────────────────────────────────────────────────────────────┘
              │
              ▼
@@ -198,13 +197,13 @@ Mid-level roles prioritize experience more heavily, while projects, trainings/ce
 
 ## Company-Adaptable Scoring Settings
 
-The scoring values are stored in the `scoring_settings` table in Supabase and may be loaded based on the job level selected by HR.
+The scoring values are stored in the `scoring_settings` table in Supabase. Each company may configure separate scoring profiles for fresh graduate, entry-level, and mid-level applicants.
 
 ### Recommended Fields
 
 | Field                 | Description                                      |
 | --------------------- | ------------------------------------------------ |
-| job_level             | fresh_grad / entry_level / mid_level             |
+| profile_level         | fresh_grad / entry_level / mid_level             |
 | experience_weight     | Category weight for experience                   |
 | skills_weight         | Category weight for skills                       |
 | education_weight      | Category weight for education                    |
@@ -220,7 +219,7 @@ The scoring values are stored in the `scoring_settings` table in Supabase and ma
 | qualified_threshold   | Minimum score for qualified                      |
 | review_threshold      | Minimum score for needs review                   |
 
-**Note:** The weights for each job level should always total **100%**.
+**Note:** The weights for each profile level should always total **100%**.
 
 ---
 
@@ -308,9 +307,173 @@ Not all supporting items should have equal impact. The system should only give s
 
 ---
 
+## Applicant Level Detection Logic
+
+The system automatically detects whether an applicant is **Fresh Graduate**, **Entry-Level**, or **Mid-Level**. This detection is used to determine which company-configured scoring profile should be applied.
+
+The detection uses a **multi-factor rule-based classification** based on the following evidence:
+
+1. **Education recency**
+2. **Relevant work experience**
+3. **Type of work experience**
+4. **Role title indicators**
+5. **Resume evidence dominance**
+
+### 1. Education Recency
+
+Education recency is treated as a strong indicator of fresh graduate status, but not as the only basis.
+
+**Examples of fresh graduate indicators:**
+- `present`
+- `ongoing`
+- `currently studying`
+- `expected graduation`
+- recently graduated
+
+**Suggested interpretation:**
+- currently studying or graduating soon → strong Fresh Graduate signal
+- graduated within the last 1 year → strong Fresh Graduate signal
+- graduated within the last 2 years → moderate Fresh Graduate signal
+
+### 2. Relevant Work Experience
+
+The system estimates **relevant experience** for the target role, not total experience from unrelated jobs.
+
+**Suggested interpretation:**
+- 0 years relevant experience → strong Fresh Graduate signal
+- 0 to less than 1 year → Fresh Graduate / Entry-Level borderline
+- 1 to less than 2 years → strong Entry-Level signal
+- 2 or more years → strong Mid-Level signal
+
+### 3. Type of Work Experience
+
+The system distinguishes internship-like roles from real professional roles.
+
+**Internship-like roles:**
+- intern
+- OJT
+- practicum
+- trainee
+- student assistant
+
+These strengthen the **Fresh Graduate** classification.
+
+**Real professional roles:**
+- junior developer
+- IT support staff
+- QA tester
+- analyst
+- specialist
+- web developer
+
+These strengthen the **Entry-Level** or **Mid-Level** classification depending on duration and count.
+
+### 4. Role Title Indicators
+
+Role titles provide supporting signals.
+
+**Fresh Graduate signals:**
+- intern
+- OJT
+- trainee
+- student
+
+**Entry-Level signals:**
+- junior
+- associate
+- assistant
+- staff
+- support
+
+**Mid-Level signals:**
+- developer
+- engineer
+- analyst
+- specialist
+
+**Strong Mid-Level signals:**
+- senior
+- lead
+- supervisor
+
+### 5. Resume Evidence Dominance
+
+The system checks whether the resume is more academic-heavy or work-heavy.
+
+**Academic-heavy resume:**
+- education
+- capstone
+- thesis
+- school projects
+- seminars
+- certifications
+- academic awards
+
+This leans toward **Fresh Graduate**.
+
+**Mixed resume:**
+- a blend of academic projects and real work exposure
+
+This leans toward **Entry-Level**.
+
+**Work-heavy resume:**
+- multiple work roles
+- professional responsibilities
+- production support
+- client work
+- implementation or deployment tasks
+
+This leans toward **Mid-Level**.
+
+### Suggested Classification Scoring Rules
+
+```text
+Education Recency
+- current/ongoing study                    → Fresh +4
+- graduated within last 1 year             → Fresh +3
+- graduated within last 2 years            → Fresh +2
+
+Relevant Experience Years
+- 0 years                                  → Fresh +4
+- 0 to <1 year                             → Fresh +2, Entry +2
+- 1 to <2 years                            → Entry +5
+- 2+ years                                 → Mid +6
+
+Experience Type
+- only internship/OJT/trainee roles        → Fresh +4
+- at least 1 real relevant job             → Entry +3
+- 2 or more real relevant jobs             → Mid +3
+
+Role Titles
+- intern / ojt / trainee / student         → Fresh +3
+- junior / associate / assistant / staff   → Entry +3
+- developer / engineer / analyst /
+  specialist with enough experience        → Mid +2
+- senior / lead / supervisor               → Mid +3
+
+Resume Dominance
+- mostly academic projects/education       → Fresh +2
+- mixed academic and work evidence         → Entry +2
+- mostly professional work evidence        → Mid +3
+```
+
+### Final Detection Rule
+
+The system computes:
+
+```text
+fresh_grad_score
+entry_level_score
+mid_level_score
+```
+
+The applicant is assigned to the level with the highest score. The corresponding company-configured scoring profile is then loaded and used for the final hybrid scoring process.
+
+---
+
 ## Requirement Match Score Formula
 
-The Requirement Match Score uses the selected job-level weights.
+The Requirement Match Score uses the selected applicant-level profile weights.
 
 ### Fresh Graduate
 
@@ -352,7 +515,7 @@ Requirement Match Score =
 
 ## Count Score Formula
 
-The Count Score also uses the selected job-level weights, but the per-category score is based on the applicant’s count against the configured baseline.
+The Count Score also uses the selected applicant-level profile weights, but the per-category score is based on the applicant’s count against the configured baseline.
 
 ### General Formula
 
@@ -400,45 +563,10 @@ Count Score =
 
 ---
 
-## Fresh Graduate Detection Logic
-
-Fresh graduate detection can still be used as a supporting logic, especially when HR has not fully configured the job yet. However, the **primary basis** of scoring should be the **job level selected by HR**.
-
-```python
-def is_fresh_grad_detected(parsed_resume_json):
-    # Check 1: No experience at all
-    if not experience_list:
-        return True
-
-    # Check 2: Only internship/trainee/student roles
-    has_intern_only = True
-    for exp in experience_list:
-        role = exp.get('role', '').lower()
-        if 'intern' not in role and 'trainee' not in role and 'student' not in role:
-            has_intern_only = False
-            break
-    if has_intern_only:
-        return True
-
-    # Check 3: Current education (present/current year)
-    for edu in education_list:
-        year_range = edu.get('year_range', '').lower()
-        if 'present' in year_range or 'current' in year_range:
-            return True
-
-    return False
-```
-
-**Note:** In implementation, the current year check should be dynamic rather than hardcoded.
-
----
-
 ## Example Calculation
 
 ### Applicant: John Rich Alaya-ay
-
-### Job Level: Fresh Graduate
-
+### Detected Applicant Level: Fresh Graduate
 ### Target Role: Application Developer
 
 **Resume Content**
@@ -474,15 +602,22 @@ Using the **Fresh Graduate** default weights:
 
 ```text
 Requirement Match Score =
-(50.0 × 0.18) +
-(66.7 × 0.30) +
-(66.7 × 0.22) +
-(33.3 × 0.18) +
-(50.0 × 0.07) +
-(50.0 × 0.05)
+(experience_match × 0.18) +
+(skills_match × 0.30) +
+(education_match × 0.22) +
+(projects_match × 0.18) +
+(traincert_match × 0.07) +
+(achievement_match × 0.05)
 ```
 
 ```text
+= (50.0 × 0.18) +
+  (66.7 × 0.30) +
+  (66.7 × 0.22) +
+  (33.3 × 0.18) +
+  (50.0 × 0.07) +
+  (50.0 × 0.05)
+
 = 9.00 + 20.01 + 14.67 + 5.99 + 3.50 + 2.50
 = 55.67%
 ```
@@ -502,15 +637,22 @@ Using the **Fresh Graduate** default weights:
 
 ```text
 Count Score =
-(100.0 × 0.18) +
-(100.0 × 0.30) +
-(100.0 × 0.22) +
-(100.0 × 0.18) +
-(50.0 × 0.07) +
-(100.0 × 0.05)
+(experience_count_score × 0.18) +
+(skills_count_score × 0.30) +
+(education_count_score × 0.22) +
+(projects_count_score × 0.18) +
+(traincert_count_score × 0.07) +
+(achievement_count_score × 0.05)
 ```
 
 ```text
+= (100.0 × 0.18) +
+  (100.0 × 0.30) +
+  (100.0 × 0.22) +
+  (100.0 × 0.18) +
+  (50.0 × 0.07) +
+  (100.0 × 0.05)
+
 = 18.00 + 30.00 + 22.00 + 18.00 + 3.50 + 5.00
 = 96.50%
 ```
@@ -525,8 +667,8 @@ FINAL SCORE = 33.40 + 38.60
 FINAL SCORE = 72.00%
 ```
 
-**Result:** `needs_review` or `qualified` depending on the configured Fresh Graduate threshold.
-With the recommended threshold of **75**, this example becomes **needs_review**.
+**Result:** `needs_review` or `qualified` depending on the configured Fresh Graduate threshold.  
+With the recommended threshold of **75**, this example becomes **needs_review**.  
 If the company lowers the threshold, it may become **qualified**.
 
 ---
@@ -547,7 +689,7 @@ This keeps the system as a **decision-support tool** rather than a fully automat
 
 | File                   | Purpose                                          |
 | ---------------------- | ------------------------------------------------ |
-| `job_alignment.py`     | Core matching and scoring logic                  |
+| `job_alignment.py`     | Core matching, applicant-level detection, and scoring logic |
 | `screening_service.py` | Orchestrates the screening process               |
 | `resume_collector.py`  | Processes incoming applications and matches jobs |
 | `resume_parser.py`     | Parses resume files into structured JSON         |
@@ -559,15 +701,22 @@ This keeps the system as a **decision-support tool** rather than a fully automat
 ### Scores are too low?
 
 1. Check whether the job posting has complete requirements in all categories.
-2. Verify the selected job level and loaded scoring profile.
+2. Verify whether the detected applicant level matches the resume evidence.
 3. Check the category weights in the `scoring_settings` table.
 4. Check the configured baselines and thresholds.
 
 ### Scores are too high?
 
-1. Review whether the baselines are too low for the selected job level.
+1. Review whether the baselines are too low for the detected applicant level.
 2. Check whether unrelated trainings, certifications, or achievements are being counted.
 3. Verify that duplicate skills, projects, or entries are not inflating the count.
+
+### Applicant level is misdetected?
+
+1. Check if education `year_range` contains current-study indicators such as `"present"` or `"ongoing"`.
+2. Verify whether internship, trainee, or student roles are properly identified.
+3. Check whether relevant experience is being measured correctly for the target job.
+4. Review whether the resume is being classified correctly as academic-heavy, mixed, or work-heavy.
 
 ### Scoring crashes?
 
@@ -575,19 +724,8 @@ This keeps the system as a **decision-support tool** rather than a fully automat
 2. Verify that all required fields exist in `job_posting`.
 3. Confirm that weight, baseline, and threshold settings are present in the database.
 
-### Fresh grad not detected?
-
-1. Check if education `year_range` contains `"present"` or other current-study indicators.
-2. Verify that experience entries use role names such as `"intern"` or `"trainee"` where applicable.
-3. Ensure the current year logic in implementation is dynamic and not hardcoded.
-
 ### Matching looks weak?
 
 1. Review the job requirement keywords.
 2. Check normalization and matching rules for skills and role titles.
 3. Confirm that trainings/certifications and achievements are filtered by relevance.
-
-```
-
-A small recommendation: for the actual system, let **HR choose the job level first** and use fresh-grad detection only as a backup hint, not as the main controller of scoring.
-```

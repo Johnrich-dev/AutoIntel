@@ -263,20 +263,35 @@ def process_applicant_screening(
         }
         
         # Use parsed_resume_json and job_posting if available, otherwise fallback
-        # First, detect job level from resume (either parsed or raw text)
-        detected_job_level = job_level  # Start with HR-configured job level
+        # But respect HR-configured job level from scoring settings first
+        # Only auto-detect if explicitly needed
+        detected_job_level = job_level  # Start with HR-configured job level from scoring settings
         
-        if parsed_resume_json:
-            # Use parsed resume to detect job level
-            detected_level = job_alignment.detect_job_level_from_resume(parsed_resume_json)
-            print(f"[INFO] Auto-detected job level from parsed resume: {detected_level}")
-            detected_job_level = detected_level
-        elif resume_text:
-            # Use raw resume text to detect job level (when NER not complete)
-            detected_level = job_alignment.detect_job_level_from_raw_text(resume_text)
-            print(f"[INFO] Auto-detected job level from raw text: {detected_level}")
-            detected_job_level = detected_level
+        # Always log the starting job level
+        print(f"[INFO] Starting job level from settings: {detected_job_level}")
+        
+        # Only use auto-detection as fallback if job_level is not set or is generic default
+        if not detected_job_level or detected_job_level == 'entry_level':
+            # Try to auto-detect from resume
+            if parsed_resume_json:
+                # Use parsed resume to detect job level
+                detected_level = job_alignment.detect_job_level_from_resume(parsed_resume_json)
+                print(f"[INFO] Auto-detected job level from parsed resume: {detected_level}")
+                # Only use detected level if it's more specific (e.g., fresh_grad vs entry_level)
+                if detected_level == 'fresh_grad':
+                    detected_job_level = detected_level
+                elif detected_level == 'mid_level':
+                    detected_job_level = detected_level
+                # If detected is entry_level but we started with nothing, use detected
+                elif not job_level:
+                    detected_job_level = detected_level
+            elif resume_text and not detected_job_level:
+                # Use raw resume text to detect job level (when NER not complete)
+                detected_level = job_alignment.detect_job_level_from_raw_text(resume_text)
+                print(f"[INFO] Auto-detected job level from raw text: {detected_level}")
+                detected_job_level = detected_level
         else:
+            print(f"[INFO] Using HR-configured job level: {detected_job_level}")
             print(f"[INFO] Using HR-configured job level: {job_level}")
         
         # Load the appropriate weights and thresholds based on detected job level
@@ -360,6 +375,12 @@ def process_applicant_screening(
             }
         
         print(f"[DEBUG] Using detected job level: {detected_job_level}, qualified_threshold: {qualified_threshold}, review_threshold: {review_threshold}")
+        
+        # Initialize variables for score breakdown (to be used in email)
+        requirement_match_score = None
+        count_score = None
+        requirement_weight = 0.6
+        count_weight = 0.4
         
         if parsed_resume_json and job_posting:
             # Calculate final hybrid score using the new 6-category scoring
@@ -469,6 +490,16 @@ def process_applicant_screening(
         
         # Step 4: Send appropriate email notification
         email_sent = False
+        
+        # Extract score breakdown for email (use values already extracted in scoring section)
+        requirement_breakdown = component_scores.get('requirement_match', {}) if component_scores else {}
+        count_breakdown = component_scores.get('count', {}) if component_scores else {}
+        
+        # Add requirement/count weights to weights dict for email display
+        weights_with_components = dict(weights) if weights else {}
+        weights_with_components['requirement_weight'] = requirement_weight
+        weights_with_components['count_weight'] = count_weight
+        
         # Handle both "passed" (old) and "qualified" (new hybrid scoring) decisions
         if decision in ("passed", "qualified") and access_token:
             email_sent = email_service.send_pass_notification(
@@ -476,21 +507,36 @@ def process_applicant_screening(
                 applicant_email=applicant_email,
                 job_title=job_title,
                 score=score,
-                access_token=access_token
+                access_token=access_token,
+                requirement_match_score=requirement_match_score,
+                count_score=count_score,
+                requirement_breakdown=requirement_breakdown,
+                count_breakdown=count_breakdown,
+                weights_used=weights_with_components
             )
         elif decision == "needs_review":
             email_sent = email_service.send_review_notification(
                 applicant_name=applicant_name,
                 applicant_email=applicant_email,
                 job_title=job_title,
-                score=score
+                score=score,
+                requirement_match_score=requirement_match_score,
+                count_score=count_score,
+                requirement_breakdown=requirement_breakdown,
+                count_breakdown=count_breakdown,
+                weights_used=weights_with_components
             )
-        elif decision == "failed":
+        elif decision == "failed" or decision == "not_recommended":
             email_sent = email_service.send_fail_notification(
                 applicant_name=applicant_name,
                 applicant_email=applicant_email,
                 job_title=job_title,
-                score=score
+                score=score,
+                requirement_match_score=requirement_match_score,
+                count_score=count_score,
+                requirement_breakdown=requirement_breakdown,
+                count_breakdown=count_breakdown,
+                weights_used=weights_with_components
             )
         
         # Step 5: Return comprehensive result

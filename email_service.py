@@ -82,7 +82,12 @@ def send_pass_notification(
     applicant_email: str,
     job_title: str,
     score: float,
-    access_token: str
+    access_token: str,
+    requirement_match_score: Optional[float] = None,
+    count_score: Optional[float] = None,
+    requirement_breakdown: Optional[Dict[str, float]] = None,
+    count_breakdown: Optional[Dict[str, Any]] = None,
+    weights_used: Optional[Dict[str, float]] = None
 ) -> bool:
     """
     Send notification to applicants who passed initial screening.
@@ -93,6 +98,11 @@ def send_pass_notification(
         job_title: Position applied for
         score: Screening score
         access_token: Unique access token
+        requirement_match_score: Requirement match component score (optional)
+        count_score: Count-based component score (optional)
+        requirement_breakdown: Dict with breakdown scores by category (optional)
+        count_breakdown: Dict with count details by category (optional)
+        weights_used: Dict with weights used for scoring (optional)
     
     Returns:
         True if sent successfully
@@ -109,6 +119,69 @@ def send_pass_notification(
     
     expiry_time = datetime.now() + timedelta(hours=TOKEN_EXPIRY_HOURS)
     expiry_str = expiry_time.strftime("%B %d, %Y at %I:%M %p")
+    
+    # Build score breakdown HTML if provided
+    score_breakdown_html = ""
+    if requirement_breakdown or count_breakdown:
+        score_breakdown_html = """
+                <div class="score-breakdown">
+                    <h3>📊 Your Score Breakdown</h3>
+                    <table style="width:100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr style="background: #f3f4f6;">
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Category</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Relevance Score</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Count</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Count Score</th>
+                        </tr>
+        """
+        
+        categories = [
+            ("Experience", "experience"),
+            ("Skills", "skills"),
+            ("Education", "education"),
+            ("Projects", "projects"),
+            ("Training & Certifications", "traincert"),
+            ("Achievements", "achievements")
+        ]
+        
+        for cat_name, cat_key in categories:
+            req_score = requirement_breakdown.get(cat_key, "-") if requirement_breakdown else "-"
+            if isinstance(req_score, float):
+                req_score = f"{req_score:.1f}%"
+            
+            count_info = count_breakdown.get(cat_key, {}) if count_breakdown else {}
+            count = count_info.get("count", "-")
+            count_score_val = count_info.get("score", "-")
+            if isinstance(count_score_val, float):
+                count_score_val = f"{count_score_val:.1f}%"
+            
+            score_breakdown_html += f"""
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{cat_name}</td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{req_score}</td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{count}</td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{count_score_val}</td>
+                        </tr>
+            """
+        
+        score_breakdown_html += """
+                    </table>
+        """
+        
+        # Add component scores if available
+        if requirement_match_score is not None and count_score is not None:
+            req_w = weights_used.get("requirement_weight", 0.6) if weights_used else 0.6
+            cnt_w = weights_used.get("count_weight", 0.4) if weights_used else 0.4
+            score_breakdown_html += f"""
+                    <div class="component-scores" style="background: #e0e7ff; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <p style="margin: 5px 0;"><strong>Requirement Match Score:</strong> {requirement_match_score:.2f}% (weight: {req_w*100:.0f}%)</p>
+                        <p style="margin: 5px 0;"><strong>Count Score:</strong> {count_score:.2f}% (weight: {cnt_w*100:.0f}%)</p>
+                    </div>
+            """
+        
+        score_breakdown_html += """
+                </div>
+        """
     
     body_html = f"""
     <!DOCTYPE html>
@@ -138,6 +211,8 @@ def send_pass_notification(
                 <div class="score">
                     Your Match Score: {score:.0f}/100 - {fit_category}
                 </div>
+                
+                {score_breakdown_html}
                 
                 <div class="instructions">
                     <h3>📋 NEXT STEPS:</h3>
@@ -189,7 +264,12 @@ def send_fail_notification(
     applicant_name: str,
     applicant_email: str,
     job_title: str,
-    score: float
+    score: float,
+    requirement_match_score: Optional[float] = None,
+    count_score: Optional[float] = None,
+    requirement_breakdown: Optional[Dict[str, float]] = None,
+    count_breakdown: Optional[Dict[str, Any]] = None,
+    weights_used: Optional[Dict[str, float]] = None
 ) -> bool:
     """
     Send notification to applicants who did not pass initial screening.
@@ -199,11 +279,79 @@ def send_fail_notification(
         applicant_email: Email address
         job_title: Position applied for
         score: Screening score
+        requirement_match_score: Requirement match component score (optional)
+        count_score: Count-based component score (optional)
+        requirement_breakdown: Dict with breakdown scores by category (optional)
+        count_breakdown: Dict with count details by category (optional)
+        weights_used: Dict with weights used for scoring (optional)
     
     Returns:
         True if sent successfully
     """
     subject = f"Update on Your Application - {job_title}"
+    
+    # Build score breakdown HTML if provided
+    score_breakdown_html = ""
+    if requirement_breakdown or count_breakdown:
+        score_breakdown_html = """
+                <div class="score-breakdown">
+                    <h3>📊 Your Score Breakdown</h3>
+                    <table style="width:100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr style="background: #f3f4f6;">
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Category</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Relevance Score</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Count</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Count Score</th>
+                        </tr>
+        """
+        
+        categories = [
+            ("Experience", "experience"),
+            ("Skills", "skills"),
+            ("Education", "education"),
+            ("Projects", "projects"),
+            ("Training & Certifications", "traincert"),
+            ("Achievements", "achievements")
+        ]
+        
+        for cat_name, cat_key in categories:
+            req_score = requirement_breakdown.get(cat_key, "-") if requirement_breakdown else "-"
+            if isinstance(req_score, float):
+                req_score = f"{req_score:.1f}%"
+            
+            count_info = count_breakdown.get(cat_key, {}) if count_breakdown else {}
+            count = count_info.get("count", "-")
+            count_score_val = count_info.get("score", "-")
+            if isinstance(count_score_val, float):
+                count_score_val = f"{count_score_val:.1f}%"
+            
+            score_breakdown_html += f"""
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{cat_name}</td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{req_score}</td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{count}</td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{count_score_val}</td>
+                        </tr>
+            """
+        
+        score_breakdown_html += """
+                    </table>
+        """
+        
+        # Add component scores if available
+        if requirement_match_score is not None and count_score is not None:
+            req_w = weights_used.get("requirement_weight", 0.6) if weights_used else 0.6
+            cnt_w = weights_used.get("count_weight", 0.4) if weights_used else 0.4
+            score_breakdown_html += f"""
+                    <div class="component-scores" style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <p style="margin: 5px 0;"><strong>Requirement Match Score:</strong> {requirement_match_score:.2f}% (weight: {req_w*100:.0f}%)</p>
+                        <p style="margin: 5px 0;"><strong>Count Score:</strong> {count_score:.2f}% (weight: {cnt_w*100:.0f}%)</p>
+                    </div>
+            """
+        
+        score_breakdown_html += """
+                </div>
+        """
     
     body_html = f"""
     <!DOCTYPE html>
@@ -236,6 +384,8 @@ def send_fail_notification(
                     Your Match Score: {score:.0f}/100
                 </div>
                 
+                {score_breakdown_html}
+                
                 <p>We encourage you to apply for future positions that better match your 
                 skills and experience. We appreciate the time you took to apply and 
                 wish you the best in your career pursuits.</p>
@@ -259,7 +409,12 @@ def send_review_notification(
     applicant_name: str,
     applicant_email: str,
     job_title: str,
-    score: float
+    score: float,
+    requirement_match_score: Optional[float] = None,
+    count_score: Optional[float] = None,
+    requirement_breakdown: Optional[Dict[str, float]] = None,
+    count_breakdown: Optional[Dict[str, Any]] = None,
+    weights_used: Optional[Dict[str, float]] = None
 ) -> bool:
     """
     Send notification to applicants whose score is in review range (60-79).
@@ -269,11 +424,79 @@ def send_review_notification(
         applicant_email: Email address
         job_title: Position applied for
         score: Screening score
+        requirement_match_score: Requirement match component score (optional)
+        count_score: Count-based component score (optional)
+        requirement_breakdown: Dict with breakdown scores by category (optional)
+        count_breakdown: Dict with count details by category (optional)
+        weights_used: Dict with weights used for scoring (optional)
     
     Returns:
         True if sent successfully
     """
     subject = f"Application Status Update - {job_title}"
+    
+    # Build score breakdown HTML if provided
+    score_breakdown_html = ""
+    if requirement_breakdown or count_breakdown:
+        score_breakdown_html = """
+                <div class="score-breakdown">
+                    <h3>📊 Your Score Breakdown</h3>
+                    <table style="width:100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr style="background: #f3f4f6;">
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Category</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Relevance Score</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Count</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Count Score</th>
+                        </tr>
+        """
+        
+        categories = [
+            ("Experience", "experience"),
+            ("Skills", "skills"),
+            ("Education", "education"),
+            ("Projects", "projects"),
+            ("Training & Certifications", "traincert"),
+            ("Achievements", "achievements")
+        ]
+        
+        for cat_name, cat_key in categories:
+            req_score = requirement_breakdown.get(cat_key, "-") if requirement_breakdown else "-"
+            if isinstance(req_score, float):
+                req_score = f"{req_score:.1f}%"
+            
+            count_info = count_breakdown.get(cat_key, {}) if count_breakdown else {}
+            count = count_info.get("count", "-")
+            count_score_val = count_info.get("score", "-")
+            if isinstance(count_score_val, float):
+                count_score_val = f"{count_score_val:.1f}%"
+            
+            score_breakdown_html += f"""
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{cat_name}</td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{req_score}</td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{count}</td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{count_score_val}</td>
+                        </tr>
+            """
+        
+        score_breakdown_html += """
+                    </table>
+        """
+        
+        # Add component scores if available
+        if requirement_match_score is not None and count_score is not None:
+            req_w = weights_used.get("requirement_weight", 0.6) if weights_used else 0.6
+            cnt_w = weights_used.get("count_weight", 0.4) if weights_used else 0.4
+            score_breakdown_html += f"""
+                    <div class="component-scores" style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <p style="margin: 5px 0;"><strong>Requirement Match Score:</strong> {requirement_match_score:.2f}% (weight: {req_w*100:.0f}%)</p>
+                        <p style="margin: 5px 0;"><strong>Count Score:</strong> {count_score:.2f}% (weight: {cnt_w*100:.0f}%)</p>
+                    </div>
+            """
+        
+        score_breakdown_html += """
+                </div>
+        """
     
     body_html = f"""
     <!DOCTYPE html>
@@ -305,6 +528,8 @@ def send_review_notification(
                     Your Match Score: {score:.0f}/100
                 </div>
                 
+                {score_breakdown_html}
+                
                 <p>We will notify you of the outcome once the review process is complete. 
                 This may take a few days.</p>
                 
@@ -329,7 +554,12 @@ def process_screening_decision(
     applicant_data: Dict[str, Any],
     score: float,
     threshold_pass: float = 80.0,
-    threshold_review: float = 60.0
+    threshold_review: float = 60.0,
+    requirement_match_score: Optional[float] = None,
+    count_score: Optional[float] = None,
+    requirement_breakdown: Optional[Dict[str, float]] = None,
+    count_breakdown: Optional[Dict[str, Any]] = None,
+    weights_used: Optional[Dict[str, float]] = None
 ) -> str:
     """
     Process the screening decision based on score and send appropriate notification.
@@ -339,6 +569,11 @@ def process_screening_decision(
         score: The screening score (0-100)
         threshold_pass: Score above which applicant passes (default: 80)
         threshold_review: Score above which needs review (default: 60)
+        requirement_match_score: Requirement match component score (optional)
+        count_score: Count-based component score (optional)
+        requirement_breakdown: Dict with breakdown scores by category (optional)
+        count_breakdown: Dict with count details by category (optional)
+        weights_used: Dict with weights used for scoring (optional)
     
     Returns:
         Decision status: "passed", "needs_review", or "failed"
@@ -357,7 +592,12 @@ def process_screening_decision(
             applicant_email=applicant_email,
             job_title=job_title,
             score=score,
-            access_token=access_token
+            access_token=access_token,
+            requirement_match_score=requirement_match_score,
+            count_score=count_score,
+            requirement_breakdown=requirement_breakdown,
+            count_breakdown=count_breakdown,
+            weights_used=weights_used
         )
         
         return "passed"
@@ -368,7 +608,12 @@ def process_screening_decision(
             applicant_name=applicant_name,
             applicant_email=applicant_email,
             job_title=job_title,
-            score=score
+            score=score,
+            requirement_match_score=requirement_match_score,
+            count_score=count_score,
+            requirement_breakdown=requirement_breakdown,
+            count_breakdown=count_breakdown,
+            weights_used=weights_used
         )
         
         return "needs_review"
@@ -379,7 +624,12 @@ def process_screening_decision(
             applicant_name=applicant_name,
             applicant_email=applicant_email,
             job_title=job_title,
-            score=score
+            score=score,
+            requirement_match_score=requirement_match_score,
+            count_score=count_score,
+            requirement_breakdown=requirement_breakdown,
+            count_breakdown=count_breakdown,
+            weights_used=weights_used
         )
         
         return "failed"
