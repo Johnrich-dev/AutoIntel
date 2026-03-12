@@ -184,13 +184,30 @@ export interface JobPosting {
 
 export interface ScoringSettings {
   settings_id: string;
+  // Weights for 6 categories
   experience_weight: number;
   skills_weight: number;
   education_weight: number;
   projects_weight: number;
+  traincert_weight: number;
+  achievements_weight: number;
+  // Thresholds
   qualified_threshold: number;
   review_threshold: number;
-  baseline_project_score: number;
+  // Baselines for count scoring
+  baseline_experience: number;
+  baseline_skills: number;
+  baseline_education: number;
+  baseline_projects: number;
+  baseline_traincert: number;
+  baseline_achievements: number;
+  // Job level
+  job_level: 'fresh_grad' | 'entry_level' | 'mid_level';
+  // Scoring type
+  scoring_type: 'semantic' | 'hybrid';
+  // Presets
+  weights_by_level?: Record<string, any>;
+  baselines_by_level?: Record<string, any>;
   created_at: string;
   updated_at: string;
 }

@@ -37,6 +37,96 @@ DEFAULT_COUNT_WEIGHTS = {
     'projects_weight': 10
 }
 
+# Job Level Presets for Hybrid Scoring (from SCORING_DOCUMENTATION.md)
+JOB_LEVEL_PRESETS = {
+    'fresh_grad': {
+        'weights': {
+            'experience_weight': 18,
+            'skills_weight': 30,
+            'education_weight': 22,
+            'projects_weight': 18,
+            'traincert_weight': 7,
+            'achievements_weight': 5
+        },
+        'baselines': {
+            'baseline_experience': 1,
+            'baseline_skills': 8,
+            'baseline_education': 2,
+            'baseline_projects': 2,
+            'baseline_traincert': 2,
+            'baseline_achievements': 1
+        },
+        'thresholds': {
+            'qualified_threshold': 75,
+            'review_threshold': 60
+        }
+    },
+    'entry_level': {
+        'weights': {
+            'experience_weight': 28,
+            'skills_weight': 30,
+            'education_weight': 18,
+            'projects_weight': 14,
+            'traincert_weight': 6,
+            'achievements_weight': 4
+        },
+        'baselines': {
+            'baseline_experience': 2,
+            'baseline_skills': 10,
+            'baseline_education': 2,
+            'baseline_projects': 2,
+            'baseline_traincert': 2,
+            'baseline_achievements': 1
+        },
+        'thresholds': {
+            'qualified_threshold': 78,
+            'review_threshold': 65
+        }
+    },
+    'mid_level': {
+        'weights': {
+            'experience_weight': 42,
+            'skills_weight': 28,
+            'education_weight': 14,
+            'projects_weight': 8,
+            'traincert_weight': 5,
+            'achievements_weight': 3
+        },
+        'baselines': {
+            'baseline_experience': 4,
+            'baseline_skills': 12,
+            'baseline_education': 2,
+            'baseline_projects': 2,
+            'baseline_traincert': 2,
+            'baseline_achievements': 1
+        },
+        'thresholds': {
+            'qualified_threshold': 80,
+            'review_threshold': 68
+        }
+    }
+}
+
+# Default 6-category weights for hybrid scoring
+DEFAULT_HYBRID_WEIGHTS = {
+    'experience_weight': 28,
+    'skills_weight': 30,
+    'education_weight': 18,
+    'projects_weight': 14,
+    'traincert_weight': 6,
+    'achievements_weight': 4
+}
+
+# Default baselines for hybrid scoring
+DEFAULT_HYBRID_BASELINES = {
+    'baseline_experience': 2,
+    'baseline_skills': 10,
+    'baseline_education': 2,
+    'baseline_projects': 2,
+    'baseline_traincert': 2,
+    'baseline_achievements': 1
+}
+
 # Model cache
 _model = None
 
@@ -701,6 +791,222 @@ def is_fresh_grad_detected(parsed_resume_json: Dict) -> bool:
     
     # If all experience is internship/trainee, likely fresh grad
     return True
+
+
+def detect_job_level_from_resume(parsed_resume_json: Dict) -> str:
+    """
+    Auto-detect job level from resume content.
+    
+    Detection logic:
+    - fresh_grad: No experience, only internship/trainee, or current student
+    - entry_level: 1-3 years of full-time experience
+    - mid_level: 4+ years of full-time experience
+    
+    Args:
+        parsed_resume_json: Parsed resume data
+    
+    Returns:
+        Job level: 'fresh_grad', 'entry_level', or 'mid_level'
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    if not parsed_resume_json:
+        logger.warning("[detect_job_level] No parsed resume JSON, defaulting to entry_level")
+        return 'entry_level'  # Default
+    
+    # Check experience entries
+    experience_list = parsed_resume_json.get('experience', [])
+    education_list = parsed_resume_json.get('education', [])
+    
+    logger.info(f"[detect_job_level] Experience list: {experience_list}")
+    logger.info(f"[detect_job_level] Education list: {education_list}")
+    
+    # If no experience at all, likely fresh grad
+    if not experience_list:
+        # Check education for current student status
+        for edu in education_list:
+            raw_text = str(edu.get('raw_text', '')).lower()
+            year_range = str(edu.get('year_range', '')).lower()
+            logger.info(f"[detect_job_level] Checking education: year_range={year_range}, raw_text={raw_text[:50]}...")
+            if 'present' in year_range or 'present' in raw_text:
+                return 'fresh_grad'
+            # Check for recent grad (2025 or 2026)
+            if '2026' in year_range or '2025' in year_range:
+                return 'fresh_grad'
+        return 'fresh_grad'
+    
+    # Analyze experience entries
+    has_full_time_experience = False
+    has_intern_only = True
+    total_years = 0
+    
+    for exp in experience_list:
+        role = str(exp.get('role', '')).lower()
+        title = str(exp.get('title', '')).lower()
+        combined_text = role + ' ' + title
+        years = exp.get('years', '')
+        
+        logger.info(f"[detect_job_level] Experience entry: role='{role}', title='{title}', years='{years}'")
+        
+        # Check if this is a full-time job (not intern/trainee/student)
+        is_intern = ('intern' in combined_text or 
+                     'trainee' in combined_text or 
+                     'student' in combined_text or
+                     'volunteer' in combined_text)
+        
+        logger.info(f"[detect_job_level] is_intern={is_intern}, combined_text='{combined_text}'")
+        
+        if not is_intern:
+            has_full_time_experience = True
+            has_intern_only = False
+        
+        # Extract years of experience
+        years_str = str(years)
+        if years_str:
+            try:
+                years_val = float(years_str)
+                total_years += years_val
+            except ValueError:
+                pass
+    
+    logger.info(f"[detect_job_level] has_intern_only={has_intern_only}, has_full_time={has_full_time_experience}, total_years={total_years}")
+    
+    # KEY FIX: If only internship experience (no full-time), always fresh_grad
+    if has_intern_only:
+        logger.info("[detect_job_level] Returning fresh_grad (intern only)")
+        return 'fresh_grad'
+    
+    # Check education for current student status
+    for edu in education_list:
+        raw_text = str(edu.get('raw_text', '')).lower()
+        year_range = str(edu.get('year_range', '')).lower()
+        if 'present' in raw_text or 'present' in year_range:
+            # Has full-time experience but also current student
+            if total_years >= 4:
+                return 'mid_level'
+            elif total_years >= 1:
+                return 'entry_level'
+            else:
+                return 'entry_level'
+    
+    # Determine level based on years of full-time experience
+    if total_years >= 4:
+        return 'mid_level'
+    elif total_years >= 1:
+        return 'entry_level'
+    else:
+        # Has some experience but less than 1 year
+        return 'entry_level'
+
+
+def detect_job_level_from_raw_text(resume_text: str) -> str:
+    """
+    Detect job level from raw resume text (before NER processing).
+    This is used when parsed_resume_json is not yet available.
+    
+    Detection logic:
+    - fresh_grad: No experience, only internship/trainee, or current student (2026/2025 Present)
+    - entry_level: 1-3 years of experience  
+    - mid_level: 4+ years of experience
+    
+    Args:
+        resume_text: Raw resume text
+    
+    Returns:
+        Job level: 'fresh_grad', 'entry_level', or 'mid_level'
+    """
+    import re
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    if not resume_text:
+        logger.warning("[detect_job_level_from_raw_text] No resume text, defaulting to entry_level")
+        return 'entry_level'
+    
+    text_lower = resume_text.lower()
+    
+    # Check for current student indicators
+    if 'present' in text_lower and ('202' in text_lower or 'college' in text_lower or 'university' in text_lower):
+        # Check if only internship experience (no full-time jobs)
+        # Count occurrences of job-related terms
+        intern_count = text_lower.count('intern')
+        internship_count = text_lower.count('internship')
+        trainee_count = text_lower.count('trainee')
+        
+        # Check for full-time job indicators
+        fulltime_patterns = [
+            r'\bsoftware engineer\b',
+            r'\bdeveloper\b', 
+            r'\bmanager\b',
+            r'\bdirector\b',
+            r'\blead\b',
+            r'\bsenior\b',
+            r'\bjunior\b',
+            r'\bassociate\b',
+            r'\bfull.?time\b',
+            r'\bemployee\b',
+        ]
+        
+        fulltime_count = sum(len(re.findall(pattern, text_lower)) for pattern in fulltime_patterns)
+        
+        # If more internships than full-time jobs, likely fresh grad
+        if (intern_count + internship_count + trainee_count) > fulltime_count:
+            logger.info("[detect_job_level_from_raw_text] Detected fresh_grad (student with internship only)")
+            return 'fresh_grad'
+    
+    # Look for years of experience patterns
+    # Pattern: "X years" or "X-Y years" or "X+ years"
+    year_patterns = [
+        r'(\d+)\+?\s*(?:years?|yrs?)\s*(?:of)?\s*(?:experience|exp)',
+        r'(?:experience|exp):?\s*(\d+)\+?\s*(?:years?|yrs?)',
+    ]
+    
+    total_years = 0
+    for pattern in year_patterns:
+        matches = re.findall(pattern, text_lower)
+        for match in matches:
+            try:
+                years = int(match)
+                if years > total_years:
+                    total_years = years
+            except ValueError:
+                pass
+    
+    # Also look for employment duration patterns like "2020-2024" or "2022 to present"
+    year_range_patterns = [
+        r'(20\d{2})\s*[-–—to]+\s*(20\d{2}|present)',
+    ]
+    
+    for pattern in year_range_patterns:
+        matches = re.findall(pattern, text_lower)
+        for match in matches:
+            if len(match) == 2:
+                start_year = int(match[0]) if match[0].isdigit() else 0
+                end_year = 2026 if match[1] == 'present' else (int(match[1]) if match[1].isdigit() else 0)
+                if start_year and end_year:
+                    duration = end_year - start_year
+                    if duration > total_years:
+                        total_years = duration
+    
+    logger.info(f"[detect_job_level_from_raw_text] Detected total_years: {total_years}")
+    
+    # Determine job level based on years
+    if total_years >= 4:
+        logger.info("[detect_job_level_from_raw_text] Detected mid_level (4+ years)")
+        return 'mid_level'
+    elif total_years >= 1:
+        logger.info("[detect_job_level_from_raw_text] Detected entry_level (1-3 years)")
+        return 'entry_level'
+    else:
+        # No clear experience, check for internship vs full-time
+        intern_count = text_lower.count('intern') + text_lower.count('internship') + text_lower.count('trainee')
+        if intern_count > 0:
+            logger.info("[detect_job_level_from_raw_text] Detected fresh_grad (internship only)")
+            return 'fresh_grad'
+        
+        logger.info("[detect_job_level_from_raw_text] Defaulting to entry_level")
+        return 'entry_level'
 
 
 def calculate_experience_keyword_match(
@@ -1528,6 +1834,420 @@ def test_model():
         print("[PASS] Correct job recommended as top match")
     
     return result1, result2, recommendations
+
+
+# ============================================
+# NEW HYBRID SCORING FUNCTIONS (6-Category)
+# Implemented per SCORING_DOCUMENTATION.md
+# ============================================
+
+
+def calculate_traincert_keyword_match(
+    resume_traincerts: List[Dict],
+    job_traincerts: List[str]
+) -> float:
+    """
+    Calculate trainings & certifications match using keyword matching.
+    
+    Args:
+        resume_traincerts: List of training/certification entries from resume
+        job_traincerts: List of expected trainings/certifications from job posting
+    
+    Returns:
+        Match score from 0-100 (percentage of job requirements matched)
+    """
+    if not job_traincerts:
+        return 50.0  # No requirements, give half credit
+    
+    if not resume_traincerts:
+        return 0.0
+    
+    # Extract training/certification names from resume
+    resume_tcert_names = []
+    for tc in resume_traincerts:
+        if isinstance(tc, dict):
+            name = tc.get('name', '') or tc.get('title', '') or tc.get('certification', '')
+            if name:
+                resume_tcert_names.append(name.lower())
+        elif isinstance(tc, str):
+            resume_tcert_names.append(tc.lower())
+    
+    if not resume_tcert_names:
+        return 0.0
+    
+    # Normalize job requirements
+    normalized_job_tc = {normalize_skill(s): s for s in job_traincerts if s}
+    required_tc = set(normalized_job_tc.keys())
+    
+    # Count matches
+    matched_tc = set()
+    
+    for resume_tc in resume_tcert_names:
+        for req_tc in required_tc:
+            # Exact match
+            if resume_tc == req_tc:
+                matched_tc.add(req_tc)
+            # Partial match
+            elif resume_tc in req_tc or req_tc in resume_tc:
+                matched_tc.add(req_tc)
+    
+    # Calculate percentage
+    match_percentage = (len(matched_tc) / len(required_tc)) * 100 if required_tc else 0
+    
+    return round(match_percentage, 2)
+
+
+def calculate_achievement_keyword_match(
+    resume_achievements: List[Dict],
+    job_achievements: List[str]
+) -> float:
+    """
+    Calculate achievements match using keyword matching.
+    
+    Args:
+        resume_achievements: List of achievement entries from resume
+        job_achievements: List of expected achievements from job posting
+    
+    Returns:
+        Match score from 0-100 (percentage of job requirements matched)
+    """
+    if not job_achievements:
+        return 50.0  # No requirements, give half credit
+    
+    if not resume_achievements:
+        return 0.0
+    
+    # Extract achievement names from resume
+    resume_achievement_names = []
+    for ach in resume_achievements:
+        if isinstance(ach, dict):
+            name = ach.get('name', '') or ach.get('title', '') or ach.get('award', '')
+            if name:
+                resume_achievement_names.append(name.lower())
+        elif isinstance(ach, str):
+            resume_achievement_names.append(ach.lower())
+    
+    if not resume_achievement_names:
+        return 0.0
+    
+    # Normalize job requirements
+    normalized_job_ach = {normalize_skill(s): s for s in job_achievements if s}
+    required_ach = set(normalized_job_ach.keys())
+    
+    # Count matches
+    matched_ach = set()
+    
+    for resume_ach in resume_achievement_names:
+        for req_ach in required_ach:
+            # Exact match
+            if resume_ach == req_ach:
+                matched_ach.add(req_ach)
+            # Partial match
+            elif resume_ach in req_ach or req_ach in resume_ach:
+                matched_ach.add(req_ach)
+    
+    # Calculate percentage
+    match_percentage = (len(matched_ach) / len(required_ach)) * 100 if required_ach else 0
+    
+    return round(match_percentage, 2)
+
+
+def get_job_level_preset(job_level: str) -> Dict[str, Any]:
+    """
+    Get the preset weights, baselines, and thresholds for a job level.
+    
+    Args:
+        job_level: One of 'fresh_grad', 'entry_level', 'mid_level'
+    
+    Returns:
+        Dictionary with weights, baselines, and thresholds
+    """
+    if job_level not in JOB_LEVEL_PRESETS:
+        # Default to entry_level if not specified
+        job_level = 'entry_level'
+    
+    return JOB_LEVEL_PRESETS[job_level]
+
+
+def calculate_requirement_match_score(
+    parsed_resume_json: Dict,
+    job_posting: Dict,
+    weights: Optional[Dict[str, float]] = None,
+    job_level: str = 'entry_level'
+) -> Dict[str, Any]:
+    """
+    Calculate the Requirement Match Score (60% of final score).
+    This measures how well resume content aligns with job requirements
+    across 6 categories: experience, skills, education, projects, traincert, achievements.
+    
+    Args:
+        parsed_resume_json: Parsed resume data
+        job_posting: Job posting data with requirements
+        weights: Optional custom weights (if None, uses job level preset)
+        job_level: Job level for loading preset weights
+    
+    Returns:
+        Dictionary with requirement_match_score and breakdown
+    """
+    # Get preset weights if not provided
+    if weights is None:
+        preset = get_job_level_preset(job_level)
+        weights = preset['weights']
+    
+    # Extract resume data
+    resume_skills = parsed_resume_json.get('skills', {})
+    resume_experience = parsed_resume_json.get('experience', [])
+    resume_education = parsed_resume_json.get('education', [])
+    resume_projects = parsed_resume_json.get('projects', [])
+    resume_traincerts = parsed_resume_json.get('trainings', []) + parsed_resume_json.get('certifications', [])
+    resume_achievements = parsed_resume_json.get('achievements', [])
+    
+    # Extract job requirements
+    job_skills = job_posting.get('skills', [])
+    job_min_years = job_posting.get('min_years_experience')
+    job_title_keywords = job_posting.get('keywords', [])
+    job_education = job_posting.get('required_education', [])
+    job_projects = job_posting.get('expected_projects', [])
+    job_traincerts = job_posting.get('preferred_certifications', [])
+    job_achievements = job_posting.get('preferred_achievements', [])
+    
+    # Calculate individual category matches
+    experience_match = calculate_experience_keyword_match(
+        resume_experience, job_min_years, job_title_keywords
+    )
+    skills_match = calculate_skills_keyword_match(resume_skills, job_skills)
+    education_match = calculate_education_keyword_match(resume_education, job_education)
+    projects_match = calculate_projects_keyword_match(resume_projects, job_projects)
+    traincert_match = calculate_traincert_keyword_match(resume_traincerts, job_traincerts)
+    achievement_match = calculate_achievement_keyword_match(resume_achievements, job_achievements)
+    
+    # Calculate weighted requirement match score
+    requirement_match_score = (
+        experience_match * (weights.get('experience_weight', 28) / 100) +
+        skills_match * (weights.get('skills_weight', 30) / 100) +
+        education_match * (weights.get('education_weight', 18) / 100) +
+        projects_match * (weights.get('projects_weight', 14) / 100) +
+        traincert_match * (weights.get('traincert_weight', 6) / 100) +
+        achievement_match * (weights.get('achievements_weight', 4) / 100)
+    )
+    
+    return {
+        'requirement_match_score': round(requirement_match_score, 2),
+        'breakdown': {
+            'experience': round(experience_match, 2),
+            'skills': round(skills_match, 2),
+            'education': round(education_match, 2),
+            'projects': round(projects_match, 2),
+            'traincert': round(traincert_match, 2),
+            'achievements': round(achievement_match, 2)
+        },
+        'weights_used': weights
+    }
+
+
+def calculate_category_count_score(
+    parsed_resume_json: Dict,
+    baselines: Optional[Dict[str, float]] = None,
+    job_level: str = 'entry_level'
+) -> Dict[str, Any]:
+    """
+    Calculate the Count Score (40% of final score).
+    This measures whether the applicant meets the expected baseline quantity
+    for each of the 6 categories.
+    
+    Args:
+        parsed_resume_json: Parsed resume data
+        baselines: Optional custom baselines (if None, uses job level preset)
+        job_level: Job level for loading preset baselines
+    
+    Returns:
+        Dictionary with count_score and breakdown
+    """
+    # Get preset baselines if not provided
+    if baselines is None:
+        preset = get_job_level_preset(job_level)
+        baselines = preset['baselines']
+    
+    # Get category counts from resume
+    experience_list = parsed_resume_json.get('experience', [])
+    skills_dict = parsed_resume_json.get('skills', {})
+    education_list = parsed_resume_json.get('education', [])
+    project_list = parsed_resume_json.get('projects', [])
+    traincert_list = parsed_resume_json.get('trainings', []) + parsed_resume_json.get('certifications', [])
+    achievement_list = parsed_resume_json.get('achievements', [])
+    
+    # Count items in each category
+    experience_count = len(experience_list)
+    skills_count = len(skills_dict.get('hard_skills', [])) + len(skills_dict.get('soft_skills', []))
+    education_count = len(education_list)
+    projects_count = len(project_list)
+    traincert_count = len(traincert_list)
+    achievements_count = len(achievement_list)
+    
+    # Calculate category count scores (capped at 100)
+    baseline_exp = baselines.get('baseline_experience', 2)
+    baseline_skills = baselines.get('baseline_skills', 10)
+    baseline_edu = baselines.get('baseline_education', 2)
+    baseline_proj = baselines.get('baseline_projects', 2)
+    baseline_tc = baselines.get('baseline_traincert', 2)
+    baseline_ach = baselines.get('baseline_achievements', 1)
+    
+    experience_count_score = min((experience_count / baseline_exp) * 100, 100) if baseline_exp > 0 else 0
+    skills_count_score = min((skills_count / baseline_skills) * 100, 100) if baseline_skills > 0 else 0
+    education_count_score = min((education_count / baseline_edu) * 100, 100) if baseline_edu > 0 else 0
+    projects_count_score = min((projects_count / baseline_proj) * 100, 100) if baseline_proj > 0 else 0
+    traincert_count_score = min((traincert_count / baseline_tc) * 100, 100) if baseline_tc > 0 else 0
+    achievements_count_score = min((achievements_count / baseline_ach) * 100, 100) if baseline_ach > 0 else 0
+    
+    # Get weights (same as requirement match)
+    preset = get_job_level_preset(job_level)
+    weights = preset['weights']
+    
+    # Calculate weighted count score
+    count_score = (
+        experience_count_score * (weights.get('experience_weight', 28) / 100) +
+        skills_count_score * (weights.get('skills_weight', 30) / 100) +
+        education_count_score * (weights.get('education_weight', 18) / 100) +
+        projects_count_score * (weights.get('projects_weight', 14) / 100) +
+        traincert_count_score * (weights.get('traincert_weight', 6) / 100) +
+        achievements_count_score * (weights.get('achievements_weight', 4) / 100)
+    )
+    
+    return {
+        'count_score': round(count_score, 2),
+        'breakdown': {
+            'experience': {'count': experience_count, 'score': round(experience_count_score, 2)},
+            'skills': {'count': skills_count, 'score': round(skills_count_score, 2)},
+            'education': {'count': education_count, 'score': round(education_count_score, 2)},
+            'projects': {'count': projects_count, 'score': round(projects_count_score, 2)},
+            'traincert': {'count': traincert_count, 'score': round(traincert_count_score, 2)},
+            'achievements': {'count': achievements_count, 'score': round(achievements_count_score, 2)}
+        },
+        'baselines_used': baselines
+    }
+
+
+def calculate_final_hybrid_score(
+    parsed_resume_json: Dict,
+    job_posting: Dict,
+    job_level: str = 'entry_level',
+    weights: Optional[Dict[str, float]] = None,
+    baselines: Optional[Dict[str, float]] = None,
+    requirement_weight: float = 0.6,
+    count_weight: float = 0.4,
+    auto_detect_job_level: bool = True
+) -> Dict[str, Any]:
+    """
+    Calculate the final hybrid score using the formula from SCORING_DOCUMENTATION.md:
+    
+    FINAL SCORE = (Requirement Match Score × 0.6) + (Count Score × 0.4)
+    
+    Args:
+        parsed_resume_json: Parsed resume data
+        job_posting: Job posting data
+        job_level: Job level ('fresh_grad', 'entry_level', 'mid_level'). If not provided or invalid,
+                   will be auto-detected from resume if auto_detect_job_level is True.
+        weights: Optional custom weights (overrides job level preset)
+        baselines: Optional custom baselines (overrides job level preset)
+        requirement_weight: Weight for requirement match (default 0.6)
+        count_weight: Weight for count score (default 0.4)
+        auto_detect_job_level: If True, detect job level from resume when not provided
+    
+    Returns:
+        Dictionary with final_score, requirement_match_score, count_score,
+        decision, and detailed breakdown
+    """
+    # Save original job_level to know if HR set it explicitly
+    original_job_level = job_level
+    
+    # Validate job_level - if invalid or not provided, use default
+    valid_job_levels = ['fresh_grad', 'entry_level', 'mid_level']
+    if job_level not in valid_job_levels:
+        job_level = 'entry_level'  # Default
+    
+    # Auto-detect job level from resume ONLY as fallback:
+    # - If HR has explicitly set a valid job_level in settings (original_job_level is valid),
+    #   use that as PRIMARY
+    # - Only auto-detect if:
+    #   1. HR didn't set a job_level (original not in valid list) OR
+    #   2. original_job_level was None/empty AND we have parsed resume data
+    if original_job_level not in valid_job_levels:
+        # HR didn't set a valid job level, try auto-detection
+        if parsed_resume_json:
+            detected_level = detect_job_level_from_resume(parsed_resume_json)
+            print(f"[INFO] Auto-detected job level: {detected_level} (resume analysis, no valid settings level)")
+            job_level = detected_level
+        else:
+            # No parsed data, use default
+            print("[INFO] Using default job level: entry_level (no parsed resume data)")
+    elif not original_job_level or str(original_job_level).strip() == '':
+        # HR set job_level but it's empty/None
+        if parsed_resume_json:
+            detected_level = detect_job_level_from_resume(parsed_resume_json)
+            print(f"[INFO] Auto-detected job level: {detected_level} (resume analysis, empty settings level)")
+            job_level = detected_level
+    # If HR set a valid job_level, keep it - don't auto-detect
+    
+    # Get thresholds from job level preset - but prefer HR-configured thresholds from database
+    preset = get_job_level_preset(job_level)
+    preset_thresholds = preset['thresholds']
+    
+    # Use HR-configured thresholds if provided in weights, otherwise use preset
+    qualified_threshold = weights.get('qualified_threshold') if weights else None
+    review_threshold = weights.get('review_threshold') if weights else None
+    
+    # Fall back to preset thresholds if not configured in HR settings
+    if qualified_threshold is None:
+        qualified_threshold = preset_thresholds.get('qualified_threshold', 78)
+    if review_threshold is None:
+        review_threshold = preset_thresholds.get('review_threshold', 65)
+    
+    # Calculate Requirement Match Score (60%)
+    requirement_result = calculate_requirement_match_score(
+        parsed_resume_json=parsed_resume_json,
+        job_posting=job_posting,
+        weights=weights,
+        job_level=job_level
+    )
+    
+    # Calculate Count Score (40%)
+    count_result = calculate_category_count_score(
+        parsed_resume_json=parsed_resume_json,
+        baselines=baselines,
+        job_level=job_level
+    )
+    
+    # Calculate final score
+    final_score = (
+        requirement_result['requirement_match_score'] * requirement_weight +
+        count_result['count_score'] * count_weight
+    )
+    
+    # Determine decision based on thresholds (already computed above)
+    
+    if final_score >= qualified_threshold:
+        decision = 'qualified'
+    elif final_score >= review_threshold:
+        decision = 'needs_review'
+    else:
+        decision = 'not_recommended'
+    
+    return {
+        'final_score': round(final_score, 2),
+        'requirement_match_score': requirement_result['requirement_match_score'],
+        'count_score': count_result['count_score'],
+        'requirement_weight': requirement_weight,
+        'count_weight': count_weight,
+        'decision': decision,
+        'thresholds': {
+            'qualified_threshold': qualified_threshold,
+            'review_threshold': review_threshold
+        },
+        'job_level': job_level,
+        'requirement_breakdown': requirement_result['breakdown'],
+        'count_breakdown': count_result['breakdown'],
+        'status': 'success'
+    }
 
 
 if __name__ == "__main__":
