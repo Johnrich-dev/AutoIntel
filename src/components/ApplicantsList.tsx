@@ -633,9 +633,17 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <div className="relative">
-                          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold shadow-sm">
-                            {applicant.name.charAt(0).toUpperCase()}
-                          </div>
+                          {applicant.photo_url ? (
+                            <img 
+                              src={applicant.photo_url} 
+                              alt={applicant.name}
+                              className="w-11 h-11 rounded-xl object-cover shadow-sm"
+                            />
+                          ) : (
+                            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold shadow-sm">
+                              {applicant.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
                           <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
                             applicant.status === 'completed' ? 'bg-green-500' :
                             applicant.status === 'submitted' ? 'bg-blue-500' :

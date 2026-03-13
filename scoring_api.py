@@ -16,6 +16,7 @@ import sys
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from typing import Dict, Any, List, Optional
+from datetime import datetime
 
 # Add project root to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -446,6 +447,158 @@ def get_job_level_presets():
             "presets": job_alignment.JOB_LEVEL_PRESETS,
             "status": "success"
         }), 200
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+
+@app.route('/api/schedule-interview', methods=['POST'])
+def schedule_interview():
+    """
+    Schedule an interview and send email notification to applicant.
+    
+    Request Body:
+    {
+        "applicant_email": "string (required)",
+        "applicant_name": "string (required)",
+        "position": "string (required)",
+        "interview_date": "string - ISO date format (required)",
+        "interview_time": "string - HH:MM format (required)",
+        "interview_platform": "string (optional)",
+        "interview_notes": "string (optional)"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "message": "Interview scheduled and email sent",
+        "status": "success"
+    }
+    """
+    try:
+        # Import email service
+        try:
+            import email_service
+        except ImportError as e:
+            return jsonify({"error": f"Could not import email_service: {e}"}), 500
+        
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        # Extract parameters
+        applicant_email = data.get('applicant_email')
+        applicant_name = data.get('applicant_name')
+        position = data.get('position')
+        interview_date = data.get('interview_date')
+        interview_time = data.get('interview_time')
+        interview_platform = data.get('interview_platform', 'Google Meet')
+        interview_notes = data.get('interview_notes', '')
+        
+        # Validate required fields
+        if not applicant_email:
+            return jsonify({"error": "applicant_email is required"}), 400
+        if not applicant_name:
+            return jsonify({"error": "applicant_name is required"}), 400
+        if not position:
+            return jsonify({"error": "position is required"}), 400
+        if not interview_date:
+            return jsonify({"error": "interview_date is required"}), 400
+        if not interview_time:
+            return jsonify({"error": "interview_time is required"}), 400
+        
+        # Format the interview date/time
+        try:
+            # Parse the date
+            date_obj = datetime.fromisoformat(interview_date.replace('Z', '+00:00'))
+            formatted_date = date_obj.strftime('%B %d, %Y')
+        except:
+            formatted_date = interview_date
+        
+        # Build email content
+        subject = f"Interview Scheduled - {position} at AutoIntel"
+        
+        body_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px 10px 0 0; }}
+                .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }}
+                .details {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+                .detail-row {{ display: flex; margin-bottom: 10px; }}
+                .detail-label {{ font-weight: bold; width: 120px; color: #666; }}
+                .detail-value {{ color: #333; }}
+                .button {{ display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 20px; }}
+                .footer {{ text-align: center; margin-top: 20px; color: #999; font-size: 12px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1 style="margin: 0;">Interview Scheduled! 🎉</h1>
+                    <p>AutoIntel Recruitment</p>
+                </div>
+                <div class="content">
+                    <p>Dear <strong>{applicant_name}</strong>,</p>
+                    <p>We are pleased to inform you that your interview for the <strong>{position}</strong> position has been scheduled.</p>
+                    
+                    <div class="details">
+                        <div class="detail-row">
+                            <span class="detail-label">Date:</span>
+                            <span class="detail-value">{formatted_date}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Time:</span>
+                            <span class="detail-value">{interview_time}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Platform:</span>
+                            <span class="detail-value">{interview_platform}</span>
+                        </div>
+                        {f'<div class="detail-row"><span class="detail-label">Notes:</span><span class="detail-value">{interview_notes}</span></div>' if interview_notes else ''}
+                    </div>
+                    
+                    <p>Please ensure you:</p>
+                    <ul>
+                        <li>Test your audio and video before the interview</li>
+                        <li>Find a quiet and well-lit location</li>
+                        <li>Have your resume ready for reference</li>
+                    </ul>
+                    
+                    <p>We look forward to speaking with you!</p>
+                    
+                    <div class="footer">
+                        <p>This is an automated message from AutoIntel Recruitment System</p>
+                        <p>© {datetime.now().year} AutoIntel. All rights reserved.</p>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Send the email
+        success = email_service.send_email(applicant_email, subject, body_html)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Interview scheduled and email sent successfully",
+                "status": "success"
+            }), 200
+        else:
+            return jsonify({
+                "success": False,
+                "message": "Failed to send email. Please check email configuration.",
+                "status": "error"
+            }), 500
+            
     except Exception as e:
         return jsonify({
             "error": str(e),

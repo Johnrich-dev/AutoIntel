@@ -224,9 +224,17 @@ export function ApplicantDetailModal({
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold shadow-lg">
-              {applicant.name.charAt(0).toUpperCase()}
-            </div>
+            {applicant.photo_url ? (
+              <img 
+                src={applicant.photo_url} 
+                alt={applicant.name}
+                className="w-14 h-14 rounded-2xl object-cover shadow-lg"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold shadow-lg">
+                {applicant.name.charAt(0).toUpperCase()}
+              </div>
+            )}
             <div>
               <h2 className="text-xl font-bold text-gray-900">{applicant.name}</h2>
               <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -281,20 +289,19 @@ export function ApplicantDetailModal({
               {applicant.status?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             <button
               onClick={() => setShowEmailModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
             >
               <Mail className="w-4 h-4" />
-              Send Email
+              <span className="hidden sm:inline">Send Email</span>
+              <span className="sm:hidden">Email</span>
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors">
+            <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm">
               <Calendar className="w-4 h-4" />
-              Schedule Interview
-            </button>
-            <button className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              Move to Stage
+              <span className="hidden sm:inline">Schedule Interview</span>
+              <span className="sm:hidden">Schedule</span>
             </button>
           </div>
         </div>
@@ -380,29 +387,157 @@ export function ApplicantDetailModal({
               <div className="bg-white rounded-xl border border-gray-200 p-4">
                 <h3 className="font-semibold text-gray-900 mb-4">Recent Activity</h3>
                 <div className="space-y-3">
-                  {notes.slice(0, 3).map(note => (
-                    <div key={note.id} className="flex items-start gap-3 text-sm">
-                      <MessageSquare className="w-4 h-4 text-blue-500 mt-0.5" />
-                      <div>
-                        <p className="text-gray-700">{note.text}</p>
-                        <p className="text-xs text-gray-400">
-                          {note.author} • {new Date(note.date).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  {emails.slice(0, 2).map(email => (
-                    <div key={email.id} className="flex items-start gap-3 text-sm">
-                      <Mail className="w-4 h-4 text-emerald-500 mt-0.5" />
-                      <div>
-                        <p className="text-gray-700">{email.subject}</p>
-                        <p className="text-xs text-gray-400">
-                          {email.type} • {new Date(email.date).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  {notes.length === 0 && emails.length === 0 && (
+                  {/* Build activity from applicant data */}
+                  {(() => {
+                    const activities: Array<{ id: string; type: string; icon: React.ReactNode; color: string; title: string; date: string }> = [];
+                    
+                    // Resume uploaded
+                    if (applicant.resume?.uploaded_at) {
+                      activities.push({
+                        id: 'resume_upload',
+                        type: 'resume',
+                        icon: <FileText className="w-4 h-4" />,
+                        color: 'text-emerald-500',
+                        title: 'Resume uploaded',
+                        date: applicant.resume.uploaded_at
+                      });
+                    }
+                    
+                    // Resume status
+                    if (applicant.resume?.status) {
+                      const statusMap: Record<string, string> = {
+                        'pending': 'Resume pending review',
+                        'parsing': 'Resume being parsed',
+                        'parsed': 'Resume parsed successfully',
+                        'suitable': 'Resume marked as suitable',
+                        'not_suitable': 'Resume marked as not suitable',
+                        'error': 'Resume parsing error'
+                      };
+                      activities.push({
+                        id: 'resume_status',
+                        type: 'resume',
+                        icon: <FileText className="w-4 h-4" />,
+                        color: 'text-blue-500',
+                        title: statusMap[applicant.resume.status] || `Resume status: ${applicant.resume.status}`,
+                        date: applicant.resume.parsed_at || applicant.resume.uploaded_at
+                      });
+                    }
+                    
+                    // Video assessment
+                    if (applicant.video?.created_at) {
+                      activities.push({
+                        id: 'video_created',
+                        type: 'video',
+                        icon: <Video className="w-4 h-4" />,
+                        color: 'text-purple-500',
+                        title: 'Video assessment started',
+                        date: applicant.video.created_at
+                      });
+                    }
+                    
+                    if (applicant.video?.submitted_at) {
+                      const videoStatusMap: Record<string, string> = {
+                        'pending': 'Video pending review',
+                        'transcribing': 'Video being transcribed',
+                        'transcribed': 'Video transcribed',
+                        'completed': 'Video assessment completed',
+                        'error': 'Video processing error'
+                      };
+                      activities.push({
+                        id: 'video_submit',
+                        type: 'video',
+                        icon: <Video className="w-4 h-4" />,
+                        color: 'text-purple-500',
+                        title: videoStatusMap[applicant.video.status] || 'Video submitted',
+                        date: applicant.video.submitted_at
+                      });
+                    }
+                    
+                    // Personality test
+                    if (applicant.test?.created_at) {
+                      activities.push({
+                        id: 'test_created',
+                        type: 'test',
+                        icon: <ClipboardCheck className="w-4 h-4" />,
+                        color: 'text-orange-500',
+                        title: 'Personality test started',
+                        date: applicant.test.created_at
+                      });
+                    }
+                    
+                    if (applicant.test?.submitted_at) {
+                      activities.push({
+                        id: 'test_submit',
+                        type: 'test',
+                        icon: <ClipboardCheck className="w-4 h-4" />,
+                        color: 'text-orange-500',
+                        title: applicant.test.status === 'completed' ? 'Personality test completed' : 'Personality test submitted',
+                        date: applicant.test.submitted_at
+                      });
+                    }
+                    
+                    // Application date
+                    if (applicant.created_at) {
+                      activities.push({
+                        id: 'application',
+                        type: 'application',
+                        icon: <User className="w-4 h-4" />,
+                        color: 'text-gray-500',
+                        title: `Applied for ${applicant.position}`,
+                        date: applicant.created_at
+                      });
+                    }
+                    
+                    // Add notes
+                    notes.slice(0, 3).forEach(note => {
+                      activities.push({
+                        id: note.id,
+                        type: 'note',
+                        icon: <MessageSquare className="w-4 h-4" />,
+                        color: 'text-blue-500',
+                        title: note.text.length > 50 ? note.text.substring(0, 50) + '...' : note.text,
+                        date: note.date
+                      });
+                    });
+                    
+                    // Add emails
+                    emails.slice(0, 2).forEach(email => {
+                      activities.push({
+                        id: email.id,
+                        type: 'email',
+                        icon: <Mail className="w-4 h-4" />,
+                        color: 'text-emerald-500',
+                        title: email.subject,
+                        date: email.date
+                      });
+                    });
+                    
+                    // Sort by date descending
+                    activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                    
+                    return activities.length > 0 ? (
+                      activities.slice(0, 8).map(activity => (
+                        <div key={activity.id} className="flex items-start gap-3 text-sm">
+                          <div className={`mt-0.5 ${activity.color}`}>
+                            {activity.icon}
+                          </div>
+                          <div>
+                            <p className="text-gray-700">{activity.title}</p>
+                            <p className="text-xs text-gray-400">
+                              {new Date(activity.date).toLocaleDateString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    ) : null;
+                  })()}
+                  {notes.length === 0 && emails.length === 0 && !applicant.resume && !applicant.video && !applicant.test && (
                     <p className="text-gray-400 text-sm">No recent activity</p>
                   )}
                 </div>
@@ -922,3 +1057,4 @@ export function ApplicantDetailModal({
     </div>
   );
 }
+

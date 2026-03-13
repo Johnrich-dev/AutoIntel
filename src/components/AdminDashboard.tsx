@@ -52,6 +52,12 @@ export function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeMenu, setActiveMenu] = useState<MenuId>('dashboard');
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('');
+  const [schedulePlatform, setSchedulePlatform] = useState('Google Meet');
+  const [scheduleNotes, setScheduleNotes] = useState('');
+  const [scheduling, setScheduling] = useState(false);
 
   useEffect(() => {
     loadApplicants();
@@ -769,26 +775,194 @@ export function AdminDashboard() {
               </div>
             </div>
 
-            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3 flex-wrap sm:flex-nowrap">
               <button
                 onClick={() => setSelectedApplicant(null)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-100 transition-colors"
+                className="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-100 transition-colors text-sm"
               >
                 Close
               </button>
               <button
                 onClick={() => {
-                  handleAction(
-                    selectedApplicant.id,
-                    'scheduled_interview',
-                    'Scheduled final interview'
-                  );
-                  setSelectedApplicant(null);
+                  setShowScheduleModal(true);
                 }}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm"
               >
                 <Calendar className="w-4 h-4" />
                 Schedule Interview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Interview Modal */}
+      {showScheduleModal && selectedApplicant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900">Schedule Interview</h3>
+              <button 
+                onClick={() => {
+                  setShowScheduleModal(false);
+                  setScheduleDate('');
+                  setScheduleTime('');
+                  setSchedulePlatform('Google Meet');
+                  setScheduleNotes('');
+                }}
+                className="p-1 hover:bg-gray-100 rounded-full"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Applicant</label>
+                <div className="px-3 py-2 bg-gray-50 rounded-lg text-gray-900">
+                  {selectedApplicant.name} <span className="text-gray-500">({selectedApplicant.email})</span>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
+                <div className="px-3 py-2 bg-gray-50 rounded-lg text-gray-900">
+                  {selectedApplicant.position}
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Interview Date</label>
+                <input
+                  type="date"
+                  value={scheduleDate}
+                  onChange={(e) => setScheduleDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Interview Time</label>
+                <input
+                  type="time"
+                  value={scheduleTime}
+                  onChange={(e) => setScheduleTime(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
+                <select
+                  value={schedulePlatform}
+                  onChange={(e) => setSchedulePlatform(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="Google Meet">Google Meet</option>
+                  <option value="Zoom">Zoom</option>
+                  <option value="Microsoft Teams">Microsoft Teams</option>
+                  <option value="Phone Call">Phone Call</option>
+                  <option value="In-Person">In-Person</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+                <textarea
+                  value={scheduleNotes}
+                  onChange={(e) => setScheduleNotes(e.target.value)}
+                  placeholder="Add any additional notes for the applicant..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2 p-4 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowScheduleModal(false);
+                  setScheduleDate('');
+                  setScheduleTime('');
+                  setSchedulePlatform('Google Meet');
+                  setScheduleNotes('');
+                }}
+                className="px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!scheduleDate || !scheduleTime) {
+                    alert('Please select both date and time');
+                    return;
+                  }
+                  
+                  setScheduling(true);
+                  try {
+                    // Call the API to schedule interview and send email
+                    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/schedule-interview`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        applicant_email: selectedApplicant.email,
+                        applicant_name: selectedApplicant.name,
+                        position: selectedApplicant.position,
+                        interview_date: scheduleDate,
+                        interview_time: scheduleTime,
+                        interview_platform: schedulePlatform,
+                        interview_notes: scheduleNotes,
+                      }),
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                      // Update applicant status
+                      const adminClient = getSupabaseAdminClient();
+                      await adminClient
+                        .from('applicants')
+                        .update({ status: 'interview_scheduled' })
+                        .eq('id', selectedApplicant.id);
+                      
+                      // Log the action
+                      handleAction(
+                        selectedApplicant.id,
+                        'scheduled_interview',
+                        `Scheduled for ${scheduleDate} at ${scheduleTime} via ${schedulePlatform}`
+                      );
+                      
+                      // Refresh the applicants list
+                      loadApplicants();
+                      
+                      // Close modals
+                      setShowScheduleModal(false);
+                      setSelectedApplicant(null);
+                      
+                      // Reset form
+                      setScheduleDate('');
+                      setScheduleTime('');
+                      setSchedulePlatform('Google Meet');
+                      setScheduleNotes('');
+                      
+                      alert('Interview scheduled and email sent to applicant!');
+                    } else {
+                      alert('Failed to schedule interview: ' + result.message);
+                    }
+                  } catch (err) {
+                    console.error('Error scheduling interview:', err);
+                    alert('Failed to schedule interview. Please check if the API server is running.');
+                  } finally {
+                    setScheduling(false);
+                  }
+                }}
+                disabled={scheduling || !scheduleDate || !scheduleTime}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <Calendar className="w-4 h-4" />
+                {scheduling ? 'Sending...' : 'Schedule & Send Email'}
               </button>
             </div>
           </div>
