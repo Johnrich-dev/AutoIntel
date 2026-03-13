@@ -474,7 +474,7 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
                     </li>
                     <li className="flex items-start gap-1.5">
                       <span className="text-blue-600 mt-0.5">•</span> 
-                      <span>Speak clearly, maintain eye contact, and present professionally.</span>
+                      <span>Speak clearly and present professionally.</span>
                     </li>
                   </ul>
                 </div>
