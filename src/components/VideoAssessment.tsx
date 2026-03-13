@@ -426,97 +426,109 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-3 sm:p-4 md:p-6 lg:p-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-2 sm:px-4 lg:px-6 py-4">
+      <div className="max-w-7xl mx-auto h-[calc(100vh-2rem)] flex flex-col">
+        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden flex-1 flex flex-col">
           {/* Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-4 sm:p-6 text-white">
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-4 sm:p-6 text-white flex-shrink-0">
             <button
               onClick={onBack}
-              className="flex items-center gap-2 text-white/90 hover:text-white mb-3 sm:mb-4 transition-colors text-sm sm:text-base"
+              className="flex items-center gap-2 text-white/90 hover:text-white mb-2 transition-colors text-sm"
             >
-              <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+              <ArrowLeft className="w-4 h-4" />
               <span className="hidden sm:inline">Back to Dashboard</span>
               <span className="sm:hidden">Back</span>
             </button>
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Video Assessment</h1>
-            <p className="text-blue-100 mt-1 text-sm sm:text-base">Record or upload your video introduction</p>
+            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold">Video Assessment</h1>
+            <p className="text-blue-100 mt-0.5 text-xs sm:text-sm">Record or upload your video introduction</p>
           </div>
 
-          <div className="p-4 sm:p-6 lg:p-8">
-            {/* Instructions */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
-              <h3 className="font-semibold text-blue-900 mb-2 text-sm sm:text-base">Instructions</h3>
-              <ul className="text-xs sm:text-sm text-blue-800 space-y-1">
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-0.5">•</span>
-                  <span>Introduce yourself and explain why you're interested in this position</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-0.5">•</span>
-                  <span>Describe your relevant experience and skills</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-0.5">•</span>
-                  <span>Keep your video between 2-5 minutes</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-0.5">•</span>
-                  <span>Ensure good lighting and clear audio</span>
-                </li>
-              </ul>
-            </div>
+          <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-hidden">
+            {/* Main Content - Two Column Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4 h-full">
+              {/* Left Column - Instructions */}
+              <div className="lg:col-span-4 xl:col-span-3">
+                {/* Instructions */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4 mb-4">
+                  <h3 className="font-semibold text-blue-900 mb-1.5 text-xs sm:text-sm">Instructions</h3>
+                  <ul className="text-xs text-blue-800 space-y-1">
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-blue-600 mt-0.5">•</span>
+                      <span>Introduce yourself and explain why you're interested in this position.</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-blue-600 mt-0.5">•</span>
+                      <span>Highlight your relevant experience, skills, and qualifications.</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-blue-600 mt-0.5">•</span>
+                      <span>Keep your video response between 2-5 minutes</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-blue-600 mt-0.5">•</span>
+                      <span>Ensure good lighting and clear audio.</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-blue-600 mt-0.5">•</span>
+                      <span>Record in a quiet environment with minimal distractions.</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-blue-600 mt-0.5">•</span> 
+                      <span>Speak clearly, maintain eye contact, and present professionally.</span>
+                    </li>
+                  </ul>
+                </div>
 
-            {/* Tab Navigation */}
-            <div className="flex gap-2 mb-4 sm:mb-6">
-              <button
-                onClick={() => {
-                  setActiveTab('record');
-                  // Clear upload file when switching to record
-                  if (videoFile && !recordedUrl) {
-                    setVideoFile(null);
-                  }
-                }}
-                className={`flex-1 py-2 sm:py-3 px-3 sm:px-4 rounded-lg font-medium text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 ${
-                  activeTab === 'record'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <Camera className="w-4 h-4" />
-                <span className="hidden sm:inline">Record Video</span>
-                <span className="sm:hidden">Record</span>
-              </button>
-              <button
-                onClick={() => {
-                  setActiveTab('upload');
-                  // Clear recorded preview when switching to upload
-                  if (isPreviewMode) {
-                    clearRecordedPreview();
-                  }
-                }}
-                className={`flex-1 py-2 sm:py-3 px-3 sm:px-4 rounded-lg font-medium text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 ${
-                  activeTab === 'upload'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <Upload className="w-4 h-4" />
-                <span className="hidden sm:inline">Upload Video</span>
-                <span className="sm:hidden">Upload</span>
-              </button>
-            </div>
+                {/* Tab Navigation */}
+                <div className="flex gap-2 mb-3">
+                  <button
+                    onClick={() => {
+                      setActiveTab('record');
+                      if (videoFile && !recordedUrl) {
+                        setVideoFile(null);
+                      }
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-lg font-medium text-xs transition-colors flex items-center justify-center gap-1.5 ${
+                      activeTab === 'record'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Record</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveTab('upload');
+                      if (isPreviewMode) {
+                        clearRecordedPreview();
+                      }
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-lg font-medium text-xs transition-colors flex items-center justify-center gap-1.5 ${
+                      activeTab === 'upload'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Upload</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Column - Video Area */}
+              <div className="lg:col-span-8 xl:col-span-9 flex flex-col h-full">
 
             {/* Recording Section */}
             {activeTab === 'record' && (
-              <div className="space-y-4">
+              <div className="space-y-3 flex-1 flex flex-col">
                 {/* Camera Error */}
                 {(cameraError || permissionDenied) && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 sm:p-4">
-                    <p className="text-red-700 text-xs sm:text-sm">{cameraError}</p>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-2 sm:p-3">
+                    <p className="text-red-700 text-xs">{cameraError}</p>
                     <button
                       onClick={initCamera}
-                      className="mt-2 text-red-600 hover:text-red-800 text-xs sm:text-sm font-medium"
+                      className="mt-1.5 text-red-600 hover:text-red-800 text-xs font-medium"
                     >
                       Try Again
                     </button>
@@ -524,7 +536,7 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
                 )}
 
                 {/* Video Display Area - Conditional Rendering */}
-                <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+                <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-0" style={{ maxHeight: 'calc(100% - 60px)' }}>
                   {/* Live Camera Feed - shown when not in preview mode */}
                   {!isPreviewMode && (
                     <video
@@ -555,9 +567,9 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
 
                   {/* Recording Indicator - only show when recording */}
                   {isRecording && (
-                    <div className="absolute top-3 left-3 sm:top-4 sm:left-4 flex items-center gap-2 bg-black/50 backdrop-blur-sm px-2 py-1 sm:px-3 sm:py-1.5 rounded-full">
-                      <div className="w-2 h-2 sm:w-3 sm:h-3 bg-red-600 rounded-full animate-pulse" />
-                      <span className="text-white text-xs sm:text-sm font-medium">
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/50 backdrop-blur-sm px-2 py-1 rounded-full">
+                      <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse" />
+                      <span className="text-white text-xs font-medium">
                         REC {formatTime(recordingTime)}
                       </span>
                     </div>
@@ -565,9 +577,9 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
 
                   {/* Preview Mode Indicator */}
                   {isPreviewMode && (
-                    <div className="absolute top-3 left-3 sm:top-4 sm:left-4 flex items-center gap-2 bg-green-600/80 backdrop-blur-sm px-2 py-1 sm:px-3 sm:py-1.5 rounded-full">
-                      <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
-                      <span className="text-white text-xs sm:text-sm font-medium">
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-green-600/80 backdrop-blur-sm px-2 py-1 rounded-full">
+                      <CheckCircle className="w-3 h-3 text-white" />
+                      <span className="text-white text-xs font-medium">
                         Preview
                       </span>
                     </div>
@@ -575,24 +587,24 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
 
                   {/* Camera Controls - only show in live mode when ready and not recording */}
                   {!isPreviewMode && cameraReady && !isRecording && (
-                    <div className="absolute bottom-3 left-3 sm:bottom-4 sm:left-4 flex gap-2">
+                    <div className="absolute bottom-2 left-2 flex gap-1.5">
                       <button
                         onClick={toggleVideo}
-                        className={`p-2 rounded-full backdrop-blur-sm transition-colors ${
+                        className={`p-1.5 rounded-full backdrop-blur-sm transition-colors ${
                           isVideoMuted ? 'bg-red-600/80 text-white' : 'bg-black/50 text-white hover:bg-black/70'
                         }`}
                         title={isVideoMuted ? 'Enable Camera' : 'Disable Camera'}
                       >
-                        {isVideoMuted ? <VideoOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <VideoIcon className="w-4 h-4 sm:w-5 sm:h-5" />}
+                        {isVideoMuted ? <VideoOff className="w-3.5 h-3.5" /> : <VideoIcon className="w-3.5 h-3.5" />}
                       </button>
                       <button
                         onClick={toggleAudio}
-                        className={`p-2 rounded-full backdrop-blur-sm transition-colors ${
+                        className={`p-1.5 rounded-full backdrop-blur-sm transition-colors ${
                           isAudioMuted ? 'bg-red-600/80 text-white' : 'bg-black/50 text-white hover:bg-black/70'
                         }`}
                         title={isAudioMuted ? 'Enable Microphone' : 'Disable Microphone'}
                       >
-                        {isAudioMuted ? <MicOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Mic className="w-4 h-4 sm:w-5 sm:h-5" />}
+                        {isAudioMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
                       </button>
                     </div>
                   )}
@@ -601,33 +613,33 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
                   {!isPreviewMode && !cameraReady && !cameraError && (
                     <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
                       <div className="text-center">
-                        <div className="w-8 h-8 sm:w-12 sm:h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2 sm:mb-3" />
-                        <p className="text-gray-400 text-xs sm:text-sm">Initializing camera...</p>
+                        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                        <p className="text-gray-400 text-xs">Initializing camera...</p>
                       </div>
                     </div>
                   )}
                 </div>
 
                 {/* Recording Controls */}
-                <div className="flex flex-col sm:flex-row justify-center gap-3">
+                <div className="flex justify-center gap-2 mt-2">
                   {!isPreviewMode ? (
                     // Recording controls
                     !isRecording ? (
                       <button
                         onClick={startRecording}
                         disabled={!cameraReady}
-                        className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-2.5 sm:py-3 px-4 sm:px-6 rounded-full transition-colors text-sm sm:text-base"
+                        className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 sm:px-5 rounded-full transition-colors text-xs sm:text-sm"
                       >
-                        <div className="w-3 h-3 bg-white rounded-full" />
+                        <div className="w-2.5 h-2.5 bg-white rounded-full" />
                         Start Recording
                       </button>
                     ) : (
                       <button
                         onClick={stopRecording}
-                        className="flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-900 text-white font-semibold py-2.5 sm:py-3 px-4 sm:px-6 rounded-full transition-colors text-sm sm:text-base"
+                        className="flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-900 text-white font-semibold py-2 px-4 sm:px-5 rounded-full transition-colors text-xs sm:text-sm"
                       >
-                        <Square className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
-                        Stop Recording ({formatTime(recordingTime)})
+                        <Square className="w-3.5 h-3.5 fill-current" />
+                        Stop ({formatTime(recordingTime)})
                       </button>
                     )
                   ) : (
@@ -635,17 +647,17 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
                     <>
                       <button
                         onClick={retakeVideo}
-                        className="flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 sm:py-3 px-4 sm:px-6 rounded-lg transition-colors text-sm sm:text-base"
+                        className="flex items-center justify-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors text-xs"
                       >
-                        <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
-                        Retake Video
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Retake
                       </button>
                       <button
                         onClick={downloadVideo}
-                        className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 sm:py-3 px-4 sm:px-6 rounded-lg transition-colors text-sm sm:text-base"
+                        className="flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors text-xs"
                       >
-                        <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-                        Download Video
+                        <Download className="w-3.5 h-3.5" />
+                        Download
                       </button>
                     </>
                   )}
@@ -655,12 +667,12 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
 
             {/* Upload Section */}
             {activeTab === 'upload' && (
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 sm:p-6 lg:p-8 hover:border-blue-400 transition-colors">
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 sm:p-4 flex-1 flex flex-col justify-center">
                 <div className="text-center">
-                  <Upload className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3" />
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Upload Video File</h3>
-                  <p className="text-gray-600 mb-4 text-xs sm:text-sm">
-                    Choose a pre-recorded video file (MP4, MOV, WEBM, or AVI)
+                  <Upload className="w-8 h-8 sm:w-10 sm:h-10 text-gray-400 mx-auto mb-2" />
+                  <h3 className="text-sm sm:text-base font-semibold text-gray-900 mb-1.5">Upload Video File</h3>
+                  <p className="text-gray-600 mb-3 text-xs">
+                    Choose a pre-recorded video (MP4, MOV, WEBM, or AVI)
                   </p>
                   <input
                     type="file"
@@ -671,17 +683,17 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
                   />
                   <label
                     htmlFor="video-upload"
-                    className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 sm:px-6 rounded-lg cursor-pointer transition-colors text-sm"
+                    className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-4 rounded-lg cursor-pointer transition-colors text-xs sm:text-sm"
                   >
                     Choose File
                   </label>
                   
                   {/* Selected File Preview */}
                   {videoFile && activeTab === 'upload' && (
-                    <div className="mt-4 p-3 sm:p-4 bg-green-50 border border-green-200 rounded-lg">
-                      <div className="flex items-center justify-center gap-2 text-green-700 mb-2">
-                        <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-                        <span className="font-medium text-xs sm:text-sm truncate max-w-[200px] sm:max-w-xs">{videoFile.name}</span>
+                    <div className="mt-3 p-2 sm:p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center justify-center gap-2 text-green-700 mb-1">
+                        <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        <span className="font-medium text-xs truncate max-w-[180px]">{videoFile.name}</span>
                       </div>
                       <p className="text-green-600 text-xs">
                         Size: {(videoFile.size / (1024 * 1024)).toFixed(2)} MB
@@ -693,31 +705,33 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
             )}
 
             {/* Submit Section */}
-            <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row justify-end gap-3 sm:gap-4">
+            <div className="mt-3 flex justify-end gap-2">
               <button
                 onClick={onBack}
-                className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors text-sm sm:text-base order-2 sm:order-1"
+                className="w-full sm:w-auto px-4 sm:px-5 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm order-2 sm:order-1"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={!videoFile || uploading}
-                className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors text-sm sm:text-base order-1 sm:order-2"
+                className="w-full sm:w-auto px-4 sm:px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors text-xs sm:text-sm order-1 sm:order-2"
               >
                 {uploading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span className="flex items-center justify-center gap-1.5">
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     Submitting...
                   </span>
                 ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    <Save className="w-4 h-4 sm:w-5 sm:h-5" />
-                    Submit Video Assessment
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Save className="w-3.5 h-3.5" />
+                    Submit
                   </span>
                 )}
               </button>
             </div>
+            </div>{/* End Right Column */}
+            </div>{/* End Grid */}
           </div>
         </div>
       </div>
