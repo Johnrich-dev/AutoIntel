@@ -140,6 +140,17 @@ export interface VideoAssessment {
     end: number;
     text: string;
   }> | null;
+  // Video scoring fields
+  video_duration_seconds?: number | null;
+  transcript_word_count?: number | null;
+  transcript_score?: number | null;
+  relevance_score?: number | null;
+  experience_score?: number | null;
+  skills_score?: number | null;
+  completeness_score?: number | null;
+  validation_status?: string | null;
+  validation_message?: string | null;
+  scored_at?: string | null;
 }
 
 export interface PersonalityTest {

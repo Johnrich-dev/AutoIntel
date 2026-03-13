@@ -634,7 +634,7 @@ export function AdminDashboard() {
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
                           <FileText className="w-4 h-4" />
-                          Video Transcription
+                          Video Assessment
                         </h4>
                         {selectedApplicant.video?.transcription_status && (
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${
@@ -653,6 +653,70 @@ export function AdminDashboard() {
                           </span>
                         )}
                       </div>
+
+                      {/* Video Player */}
+                      {selectedApplicant.video?.video_url && (
+                        <div className="mb-3">
+                          <video
+                            controls
+                            className="w-full max-h-48 rounded-lg bg-black"
+                            src={selectedApplicant.video.video_url}
+                          />
+                        </div>
+                      )}
+
+                      {/* Transcript Score Display */}
+                      {selectedApplicant.video?.transcript_score !== null && selectedApplicant.video?.transcript_score !== undefined && (
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3 mb-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <h5 className="text-sm font-semibold text-blue-900">AI Transcript Score</h5>
+                            <span className="text-lg font-bold text-blue-700">
+                              {selectedApplicant.video.transcript_score}/10
+                            </span>
+                          </div>
+                          
+                          {/* Score Breakdown */}
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="bg-white/60 rounded p-2">
+                              <span className="text-gray-600">Relevance:</span>
+                              <span className="ml-1 font-medium text-gray-900">{selectedApplicant.video.relevance_score}/10</span>
+                            </div>
+                            <div className="bg-white/60 rounded p-2">
+                              <span className="text-gray-600">Experience:</span>
+                              <span className="ml-1 font-medium text-gray-900">{selectedApplicant.video.experience_score}/10</span>
+                            </div>
+                            <div className="bg-white/60 rounded p-2">
+                              <span className="text-gray-600">Skills:</span>
+                              <span className="ml-1 font-medium text-gray-900">{selectedApplicant.video.skills_score}/10</span>
+                            </div>
+                            <div className="bg-white/60 rounded p-2">
+                              <span className="text-gray-600">Completeness:</span>
+                              <span className="ml-1 font-medium text-gray-900">{selectedApplicant.video.completeness_score}/10</span>
+                            </div>
+                          </div>
+                          
+                          {/* Validation Status */}
+                          {selectedApplicant.video?.validation_status && selectedApplicant.video.validation_status !== 'validated' && (
+                            <div className={`mt-2 text-xs px-2 py-1 rounded ${
+                              selectedApplicant.video.validation_status === 'insufficient_response' 
+                                ? 'bg-red-100 text-red-700' 
+                                : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {selectedApplicant.video.validation_message}
+                            </div>
+                          )}
+                          
+                          {/* Word Count & Duration */}
+                          <div className="mt-2 flex gap-4 text-xs text-gray-500">
+                            {selectedApplicant.video?.transcript_word_count && (
+                              <span>Word Count: {selectedApplicant.video.transcript_word_count}</span>
+                            )}
+                            {selectedApplicant.video?.video_duration_seconds && (
+                              <span>Duration: {Math.floor(selectedApplicant.video.video_duration_seconds / 60)}:{(selectedApplicant.video.video_duration_seconds % 60).toString().padStart(2, '0')}</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Transcription Content */}
                       {selectedApplicant.video?.transcription_status === 'completed' && selectedApplicant.video?.transcription && (

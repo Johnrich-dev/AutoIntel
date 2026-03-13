@@ -419,7 +419,7 @@ export function ApplicantDetailModal({
                         icon: <FileText className="w-4 h-4" />,
                         color: 'text-blue-500',
                         title: statusMap[applicant.resume.status] || `Resume status: ${applicant.resume.status}`,
-                        date: applicant.resume.parsed_at || applicant.resume.uploaded_at
+                        date: applicant.resume.uploaded_at
                       });
                     }
                     
@@ -747,8 +747,62 @@ export function ApplicantDetailModal({
                         </span>
                       </div>
                     </div>
+                    
+                    {/* Video Score Display */}
+                    {applicant.video.transcript_score !== null && applicant.video.transcript_score !== undefined && (
+                      <div className="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-semibold text-gray-900">AI Transcript Score</h4>
+                          <span className="text-2xl font-bold text-blue-700">
+                            {applicant.video.transcript_score}/10
+                          </span>
+                        </div>
+                        
+                        {/* Score Breakdown */}
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div className="bg-white/60 rounded p-2">
+                            <span className="text-gray-600">Relevance:</span>
+                            <span className="ml-1 font-semibold text-gray-900">{applicant.video.relevance_score}/10</span>
+                          </div>
+                          <div className="bg-white/60 rounded p-2">
+                            <span className="text-gray-600">Experience:</span>
+                            <span className="ml-1 font-semibold text-gray-900">{applicant.video.experience_score}/10</span>
+                          </div>
+                          <div className="bg-white/60 rounded p-2">
+                            <span className="text-gray-600">Skills:</span>
+                            <span className="ml-1 font-semibold text-gray-900">{applicant.video.skills_score}/10</span>
+                          </div>
+                          <div className="bg-white/60 rounded p-2">
+                            <span className="text-gray-600">Completeness:</span>
+                            <span className="ml-1 font-semibold text-gray-900">{applicant.video.completeness_score}/10</span>
+                          </div>
+                        </div>
+                        
+                        {/* Validation Message */}
+                        {applicant.video.validation_message && applicant.video.validation_status !== 'validated' && (
+                          <div className={`mt-3 text-sm px-3 py-2 rounded ${
+                            applicant.video.validation_status === 'insufficient_response' 
+                              ? 'bg-red-100 text-red-700' 
+                              : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {applicant.video.validation_message}
+                          </div>
+                        )}
+                        
+                        {/* Video Info */}
+                        <div className="mt-3 flex gap-4 text-xs text-gray-500">
+                          {applicant.video.transcript_word_count && (
+                            <span>Words: {applicant.video.transcript_word_count}</span>
+                          )}
+                          {applicant.video.video_duration_seconds && (
+                            <span>Duration: {Math.floor(applicant.video.video_duration_seconds / 60)}:{(applicant.video.video_duration_seconds % 60).toString().padStart(2, '0')}</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
                     {applicant.video.transcription && (
-                      <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="bg-gray-50 rounded-lg p-4 mt-4">
                         <h4 className="font-medium text-gray-900 mb-2">Transcription</h4>
                         <p className="text-sm text-gray-600">{applicant.video.transcription}</p>
                       </div>

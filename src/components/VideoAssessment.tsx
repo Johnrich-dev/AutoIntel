@@ -357,6 +357,8 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
 
       console.log('Existing assessment:', assessment);
 
+      let assessmentId: string | undefined;
+      
       if (assessment) {
         const { error: updateError } = await adminClient
           .from('video_assessments')
@@ -372,23 +374,25 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
           throw new Error(`Failed to update record: ${updateError.message}`);
         }
         console.log('Assessment record updated successfully');
+        assessmentId = assessment.id;
       } else {
-        const { error: insertError } = await adminClient.from('video_assessments').insert({
+        const { data: newAssessment, error: insertError } = await adminClient.from('video_assessments').insert({
           applicant_id: applicant.id,
           video_url: publicUrl,
           status: 'submitted',
           submitted_at: new Date().toISOString(),
-        });
+        }).select().single();
 
         if (insertError) {
           console.error('Insert error:', insertError);
           throw new Error(`Failed to create record: ${insertError.message}`);
         }
         console.log('Assessment record created successfully');
+        assessmentId = newAssessment?.id;
       }
 
       // Trigger automatic transcription
-      const assessmentId = assessment?.id;
+      // Trigger automatic transcription
       if (assessmentId) {
         console.log('Triggering automatic transcription for assessment:', assessmentId);
         

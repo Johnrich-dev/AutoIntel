@@ -167,8 +167,18 @@ function calculateResumeScore(applicant?: ApplicantWithDetails, settings?: Scori
 
 function calculateVideoScore(video?: VideoAssessment): number {
   if (!video) return 0;
-  if (video.status === 'completed') return Math.floor(Math.random() * 15) + 80;
-  if (video.status === 'submitted') return Math.floor(Math.random() * 20) + 60;
+  
+  // If there's a real transcript score, use it (scaled to 100)
+  if (video.transcript_score !== null && video.transcript_score !== undefined) {
+    // transcript_score is 0-10, convert to 0-100
+    return Math.round(video.transcript_score * 10);
+  }
+  
+  // Fallback: score based on status if no transcript score yet
+  if (video.status === 'completed' || video.transcription_status === 'completed') {
+    return 50;
+  }
+  if (video.status === 'submitted') return 30;
   return 0;
 }
 
