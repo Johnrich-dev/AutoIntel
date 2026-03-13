@@ -449,9 +449,9 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
               {/* Left Column - Instructions */}
               <div className="lg:col-span-4 xl:col-span-3">
                 {/* Instructions */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4 mb-4">
-                  <h3 className="font-semibold text-blue-900 mb-1.5 text-xs sm:text-sm">Instructions</h3>
-                  <ul className="text-xs text-blue-800 space-y-1">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg py-10 px-4 mb-4">
+                  <h3 className="font-semibold text-blue-900 mb-3 text-sm sm:text-base">Instructions</h3>
+                  <ul className="text-sm text-blue-800 space-y-2">
                     <li className="flex items-start gap-1.5">
                       <span className="text-blue-600 mt-0.5">•</span>
                       <span>Introduce yourself and explain why you're interested in this position.</span>
