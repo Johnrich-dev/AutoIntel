@@ -241,14 +241,14 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
       count: videoStages.notStarted,
       icon: Video,
       color: 'bg-purple-500',
-      action: () => onMenuChange?.('assessments'),
+      action: () => onMenuChange?.('applicants'),
     },
     {
       label: 'Pending Tests',
       count: testStages.notStarted,
       icon: ClipboardCheck,
       color: 'bg-orange-500',
-      action: () => onMenuChange?.('assessments'),
+      action: () => onMenuChange?.('applicants'),
     },
   ];
 
@@ -451,6 +451,31 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
               })}
             </div>
           </div>
+
+          {/* Recruitment Status Banner */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <AlertCircle className="w-6 h-6 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-gray-900">Recruitment Status</h3>
+                <p className="text-gray-600 mt-1">
+                  You have <span className="font-semibold text-blue-600">{resumeStages.pending}</span> resumes pending review and{' '}
+                  <span className="font-semibold text-orange-600">{testStages.notStarted}</span> candidates waiting to complete their assessments.
+                </p>
+              </div>
+              {resumeStages.pending > 0 && (
+                <button
+                  onClick={() => onMenuChange?.('applicants')}
+                  className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Eye className="w-4 h-4" />
+                  Review Now
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Right Column - Stage Breakdown & Recent Activity */}
@@ -594,30 +619,6 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
         </div>
       </div>
 
-      {/* Pipeline Status Banner */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
-        <div className="flex items-start gap-4">
-          <div className="p-3 bg-blue-100 rounded-lg">
-            <AlertCircle className="w-6 h-6 text-blue-600" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900">Recruitment Status</h3>
-            <p className="text-gray-600 mt-1">
-              You have <span className="font-semibold text-blue-600">{resumeStages.pending}</span> resumes pending review and{' '}
-              <span className="font-semibold text-orange-600">{testStages.notStarted}</span> candidates waiting to complete their assessments.
-            </p>
-          </div>
-          {resumeStages.pending > 0 && (
-            <button
-              onClick={() => onMenuChange?.('applicants')}
-              className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Eye className="w-4 h-4" />
-              Review Now
-            </button>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
