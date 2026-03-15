@@ -7,6 +7,7 @@ import { VideoAssessment } from './components/VideoAssessment';
 import { PersonalityTest } from './components/PersonalityTest';
 import { AdminDashboard } from './components/AdminDashboard';
 import { RoleSelection } from './components/RoleSelection';
+import { AdminLogin } from './components/AdminLogin';
 import { getSupabaseConfigError } from './lib/supabase';
 
 type View =
@@ -16,17 +17,25 @@ type View =
   | 'dashboard'
   | 'video'
   | 'test'
+  | 'admin-login'
   | 'admin';
 
 function AppContent() {
-  const { applicant, loading } = useAuth();
+  const { applicant, loading, isAdminAuthenticated, adminSession } = useAuth();
   const [view, setView] = useState<View>('login');
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const mode = urlParams.get('mode');
 
+    // If mode=admin in URL, go to admin-login view (will check auth)
     if (mode === 'admin') {
+      setView('admin-login');
+      return;
+    }
+
+    // If admin is authenticated, show admin dashboard
+    if (isAdminAuthenticated) {
       setView('admin');
       return;
     }
@@ -40,7 +49,7 @@ function AppContent() {
     } else if (!loading) {
       setView('choice');
     }
-  }, [applicant, loading]);
+  }, [applicant, loading, isAdminAuthenticated]);
 
   if (loading) {
     return (
@@ -54,12 +63,30 @@ function AppContent() {
     return (
       <RoleSelection
         onSelectApplicant={() => setView('login')}
-        onSelectAdmin={() => setView('admin')}
+        onSelectAdmin={() => setView('admin-login')}
+      />
+    );
+  }
+
+  if (view === 'admin-login') {
+    return (
+      <AdminLogin
+        onLoginSuccess={() => setView('admin')}
+        onCancel={() => setView('choice')}
       />
     );
   }
 
   if (view === 'admin') {
+    // Protect admin route - require authentication
+    if (!isAdminAuthenticated) {
+      return (
+        <AdminLogin
+          onLoginSuccess={() => setView('admin')}
+          onCancel={() => setView('choice')}
+        />
+      );
+    }
     return <AdminDashboard />;
   }
 

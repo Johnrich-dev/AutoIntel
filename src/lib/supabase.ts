@@ -70,11 +70,13 @@ export const getSupabaseAdminClient = () => {
   if (!supabaseServiceRoleKey) {
     throw new Error('Missing required frontend env var: VITE_SUPABASE_SERVICE_ROLE_KEY');
   }
-  if (!cachedAdminClient) {
-    cachedAdminClient = createClient(supabaseUrl as string, supabaseServiceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
+  // Reuse existing admin client if available
+  if (cachedAdminClient) {
+    return cachedAdminClient;
   }
+  cachedAdminClient = createClient(supabaseUrl as string, supabaseServiceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
   return cachedAdminClient;
 };
 
