@@ -366,6 +366,7 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
             video_url: publicUrl,
             status: 'submitted',
             submitted_at: new Date().toISOString(),
+            transcription_status: 'pending',
           })
           .eq('id', assessment.id);
 
@@ -381,6 +382,7 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
           video_url: publicUrl,
           status: 'submitted',
           submitted_at: new Date().toISOString(),
+          transcription_status: 'pending',
         }).select().single();
 
         if (insertError) {
@@ -392,11 +394,10 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
       }
 
       // Trigger automatic transcription
-      // Trigger automatic transcription
       if (assessmentId) {
         console.log('Triggering automatic transcription for assessment:', assessmentId);
         
-        // Option 1: Call the Flask API (if running)
+        // Call the Flask API to trigger transcription
         try {
           const response = await fetch('http://localhost:5000/api/trigger-transcription', {
             method: 'POST',
@@ -410,11 +411,11 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
           if (response.ok) {
             console.log('Transcription triggered successfully');
           } else {
-            console.warn('Transcription trigger returned non-ok status');
+            console.warn('Transcription trigger returned non-ok status:', response.status);
           }
         } catch (apiError) {
-          // API might not be running, log but don't block
-          console.log('Transcription API not available, will process later:', apiError);
+          // API might not be running - that's ok, background worker will pick it up
+          console.log('Transcription API not available, background worker will process it automatically');
         }
       }
 
