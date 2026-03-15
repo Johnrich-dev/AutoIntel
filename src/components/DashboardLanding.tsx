@@ -1,4 +1,5 @@
-import { Users, FileText, Video, ClipboardCheck, TrendingUp, CheckCircle, Clock, AlertCircle, Zap, Eye, Mail, Filter, ArrowRight, UserPlus, FileCheck } from 'lucide-react';
+import { useMemo } from 'react';
+import { Users, FileText, Video, ClipboardCheck, TrendingUp, CheckCircle, Clock, AlertCircle, Zap, Eye, Mail, Filter, ArrowRight, Briefcase, BarChart3, UserPlus, FileCheck } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest } from '../lib/supabase';
 
 interface ApplicantWithDetails extends Applicant {
@@ -120,6 +121,34 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
 
   const maxFunnelCount = Math.max(...funnelStages.map(s => s.count), 1);
 
+  // Job performance - calculate applicants per position
+  const jobPerformance = useMemo(() => {
+    const jobCounts: Record<string, { count: number; suitable: number }> = {};
+    applicants.forEach(app => {
+      const position = app.position || 'Unknown';
+      if (!jobCounts[position]) {
+        jobCounts[position] = { count: 0, suitable: 0 };
+      }
+      jobCounts[position].count++;
+      if (app.resume?.status === 'suitable') {
+        jobCounts[position].suitable++;
+      }
+    });
+    
+    return Object.entries(jobCounts)
+      .map(([position, data]) => ({
+        position,
+        applicants: data.count,
+        suitable: data.suitable,
+        conversionRate: data.count > 0 ? Math.round((data.suitable / data.count) * 100) : 0,
+      }))
+      .sort((a, b) => b.applicants - a.applicants)
+      .slice(0, 5);
+  }, [applicants]);
+
+  const totalJobs = jobPerformance.length;
+  const totalApplications = applicants.length;
+
   // Generate recent activity from applicants data
   const generateRecentActivity = () => {
     const activities: Array<{
@@ -212,14 +241,14 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
       count: videoStages.notStarted,
       icon: Video,
       color: 'bg-purple-500',
-      action: () => onMenuChange?.('assessments'),
+      action: () => onMenuChange?.('applicants'),
     },
     {
       label: 'Pending Tests',
       count: testStages.notStarted,
       icon: ClipboardCheck,
       color: 'bg-orange-500',
-      action: () => onMenuChange?.('assessments'),
+      action: () => onMenuChange?.('applicants'),
     },
   ];
 
@@ -264,6 +293,76 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
             </div>
           );
         })}
+      </div>
+
+      {/* Job Performance Section */}
+      <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-100 rounded-lg">
+              <BarChart3 className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Job Performance</h2>
+              <p className="text-sm text-gray-500">Applicant stats by position</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 text-sm">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">{totalJobs}</p>
+              <p className="text-gray-500">Active Jobs</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">{totalApplications}</p>
+              <p className="text-gray-500">Total Applications</p>
+            </div>
+          </div>
+        </div>
+
+        {jobPerformance.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {jobPerformance.map((job, index) => (
+              <div key={index} className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+                      <Briefcase className="w-4 h-4 text-indigo-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{job.position}</p>
+                      <p className="text-xs text-gray-500">{job.applicants} applicants</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    <span className="text-sm font-medium text-emerald-600">{job.suitable} suitable</span>
+                  </div>
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                    job.conversionRate >= 50 ? 'bg-green-100 text-green-700' :
+                    job.conversionRate >= 25 ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-red-100 text-red-700'
+                  }`}>
+                    {job.conversionRate}% rate
+                  </span>
+                </div>
+                <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                    style={{ width: `${job.conversionRate}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <Briefcase className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500">No job data available yet</p>
+            <p className="text-sm text-gray-400">Job performance will appear here</p>
+          </div>
+        )}
       </div>
 
       {/* Hiring Progress Section */}
@@ -350,6 +449,31 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Recruitment Status Banner */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <AlertCircle className="w-6 h-6 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-gray-900">Recruitment Status</h3>
+                <p className="text-gray-600 mt-1">
+                  You have <span className="font-semibold text-blue-600">{resumeStages.pending}</span> resumes pending review and{' '}
+                  <span className="font-semibold text-orange-600">{testStages.notStarted}</span> candidates waiting to complete their assessments.
+                </p>
+              </div>
+              {resumeStages.pending > 0 && (
+                <button
+                  onClick={() => onMenuChange?.('applicants')}
+                  className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Eye className="w-4 h-4" />
+                  Review Now
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -495,30 +619,6 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
         </div>
       </div>
 
-      {/* Pipeline Status Banner */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
-        <div className="flex items-start gap-4">
-          <div className="p-3 bg-blue-100 rounded-lg">
-            <AlertCircle className="w-6 h-6 text-blue-600" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900">Recruitment Status</h3>
-            <p className="text-gray-600 mt-1">
-              You have <span className="font-semibold text-blue-600">{resumeStages.pending}</span> resumes pending review and{' '}
-              <span className="font-semibold text-orange-600">{testStages.notStarted}</span> candidates waiting to complete their assessments.
-            </p>
-          </div>
-          {resumeStages.pending > 0 && (
-            <button
-              onClick={() => onMenuChange?.('applicants')}
-              className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Eye className="w-4 h-4" />
-              Review Now
-            </button>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

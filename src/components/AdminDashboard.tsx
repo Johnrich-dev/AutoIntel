@@ -1,4 +1,4 @@
-import { Calendar, CheckCircle, ClipboardList, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, XCircle, Briefcase, BarChart3, Sliders, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, CheckCircle, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, XCircle, Briefcase, BarChart3, Sliders, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AdminJobManagement } from './AdminJobManagement';
 import { AdminScoringSettings } from './AdminScoringSettings';
 import { DashboardLanding } from './DashboardLanding';
@@ -34,7 +34,6 @@ const menuItems = [
   { id: 'shortlisted', label: 'Shortlisted', icon: CheckCircle },
   { id: 'job-management', label: 'Job Management', icon: Briefcase },
   { id: 'scoring-settings', label: 'Scoring Settings', icon: Sliders },
-  { id: 'assessments', label: 'Assessments', icon: ClipboardList },
   { id: 'reports', label: 'Reports', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
@@ -42,7 +41,7 @@ const menuItems = [
 type MenuId = typeof menuItems[number]['id'];
 
 export function AdminDashboard() {
-  const { logout } = useAuth();
+  const { adminLogout, isAdminAuthenticated } = useAuth();
   const [applicants, setApplicants] = useState<ApplicantWithDetails[]>([]);
   const [filteredApplicants, setFilteredApplicants] = useState<ApplicantWithDetails[]>([]);
   const [selectedApplicant, setSelectedApplicant] = useState<ApplicantWithDetails | null>(null);
@@ -222,8 +221,8 @@ export function AdminDashboard() {
         <div className="p-4 border-t border-slate-800">
           <button
             onClick={() => {
-              logout();
-              window.location.href = '/';
+              adminLogout();
+              window.location.href = '/?loggedout=true';
             }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors ${sidebarCollapsed ? 'lg:justify-center' : ''}`}
             title={sidebarCollapsed ? 'Logout' : undefined}
@@ -261,110 +260,6 @@ export function AdminDashboard() {
           {activeMenu === 'job-management' && <AdminJobManagement />}
           {activeMenu === 'scoring-settings' && <AdminScoringSettings />}
           {activeMenu === 'shortlisted' && <ShortlistedCandidates applicants={applicants} />}
-          {activeMenu === 'assessments' && (
-            <div className="p-4 lg:p-8">
-          {error && (
-            <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-              {error}
-            </div>
-          )}
-
-          {/* Subheader */}
-          <div className="mb-6">
-            <p className="text-gray-600">Manage applicants and review assessments</p>
-          </div>
-
-          {/* Filter Tabs */}
-          <div className="mb-6 flex flex-wrap gap-2">
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-4 py-2 rounded-lg font-medium ${
-                filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'
-              }`}
-            >
-              All Resumes
-            </button>
-            <button
-              onClick={() => setFilter('filtered')}
-              className={`px-4 py-2 rounded-lg font-medium ${
-                filter === 'filtered' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'
-              }`}
-            >
-              Filtered (Suitable)
-            </button>
-            <button
-              onClick={() => setFilter('unfiltered')}
-              className={`px-4 py-2 rounded-lg font-medium ${
-                filter === 'unfiltered' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700'
-              }`}
-            >
-              Unfiltered (All)
-            </button>
-          </div>
-
-          {/* Applicants Table */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Applicant
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Position
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Resume
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Video
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Test
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredApplicants.map((applicant) => (
-                    <tr key={applicant.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{applicant.name}</div>
-                          <div className="text-sm text-gray-500">{applicant.email}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{applicant.position}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(applicant.resume?.status)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(applicant.video?.status)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(applicant.test?.status)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => setSelectedApplicant(applicant)}
-                          className="text-blue-600 hover:text-blue-800 font-medium"
-                        >
-                          View Details
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-          )}
         </div>
       </main>
 
