@@ -164,38 +164,50 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
       .slice(0, 5);
 
     recentApplicants.forEach(applicant => {
-      activities.push({
-        type: 'new_applicant',
-        message: `New applicant applied for ${applicant.position}`,
-        time: applicant.created_at,
-        applicantName: applicant.name,
-      });
-
-      if (applicant.resume?.status === 'suitable' || applicant.resume?.status === 'not_suitable') {
+      // Only add if created_at exists and is valid
+      if (applicant.created_at) {
         activities.push({
-          type: 'resume_reviewed',
-          message: `Resume marked as ${applicant.resume.status.replace('_', ' ')}`,
-          time: applicant.resume.uploaded_at,
+          type: 'new_applicant' as const,
+          message: `New applicant applied for ${applicant.position}`,
+          time: applicant.created_at,
           applicantName: applicant.name,
         });
+      }
+
+      if (applicant.resume?.status === 'suitable' || applicant.resume?.status === 'not_suitable') {
+        const resumeTime = applicant.resume?.uploaded_at;
+        if (resumeTime) {
+          activities.push({
+            type: 'resume_reviewed' as const,
+            message: `Resume marked as ${applicant.resume.status.replace('_', ' ')}`,
+            time: resumeTime,
+            applicantName: applicant.name,
+          });
+        }
       }
 
       if (applicant.video?.status === 'submitted' || applicant.video?.status === 'completed') {
-        activities.push({
-          type: 'video_submitted',
-          message: `Video assessment ${applicant.video.status}`,
-          time: applicant.video.submitted_at || applicant.video.created_at,
-          applicantName: applicant.name,
-        });
+        const videoTime = applicant.video.submitted_at || applicant.video.created_at;
+        if (videoTime) {
+          activities.push({
+            type: 'video_submitted' as const,
+            message: `Video assessment ${applicant.video.status}`,
+            time: videoTime,
+            applicantName: applicant.name,
+          });
+        }
       }
 
       if (applicant.test?.status === 'completed') {
-        activities.push({
-          type: 'test_completed',
-          message: 'Completed personality test',
-          time: applicant.test.submitted_at || applicant.test.created_at,
-          applicantName: applicant.name,
-        });
+        const testTime = applicant.test.submitted_at || applicant.test.created_at;
+        if (testTime) {
+          activities.push({
+            type: 'test_completed' as const,
+            message: 'Completed personality test',
+            time: testTime,
+            applicantName: applicant.name,
+          });
+        }
       }
     });
 
@@ -207,9 +219,12 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
 
   const recentActivity = generateRecentActivity();
 
-  // Format relative time
-  const getRelativeTime = (dateString: string) => {
+  // Format relative time with validation
+  const getRelativeTime = (dateString: string | null | undefined): string => {
+    if (!dateString) return 'Unknown';
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Unknown';
+    
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
     
@@ -228,6 +243,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
       icon: FileText,
       color: 'bg-emerald-500',
       action: () => onMenuChange?.('applicants'),
+      filter: 'unfiltered',
     },
     {
       label: 'View Shortlisted',
@@ -242,6 +258,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
       icon: Video,
       color: 'bg-purple-500',
       action: () => onMenuChange?.('applicants'),
+      filter: 'video_pending',
     },
     {
       label: 'Pending Tests',
@@ -249,6 +266,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
       icon: ClipboardCheck,
       color: 'bg-orange-500',
       action: () => onMenuChange?.('applicants'),
+      filter: 'test_pending',
     },
   ];
 
