@@ -79,6 +79,8 @@ export function AdminSettings({}: AdminSettingsProps) {
   const handleSave = () => {
     // Save to localStorage for demo
     localStorage.setItem('admin_settings', JSON.stringify(settings));
+    // Apply theme when saving
+    applyTheme(settings.theme);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -86,9 +88,21 @@ export function AdminSettings({}: AdminSettingsProps) {
   useEffect(() => {
     const saved = localStorage.getItem('admin_settings');
     if (saved) {
-      setSettings(JSON.parse(saved));
+      const parsed = JSON.parse(saved);
+      setSettings(parsed);
+      // Apply theme on load
+      applyTheme(parsed.theme || 'light');
     }
   }, []);
+
+  // Apply theme to document
+  const applyTheme = (theme: string) => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
 
   const sections = [
     { id: 'general', label: 'General', icon: Settings },
@@ -538,7 +552,10 @@ export function AdminSettings({}: AdminSettingsProps) {
                     'Choose your preferred color scheme',
                     <div className="flex gap-2">
                       <button
-                        onClick={() => setSettings({ ...settings, theme: 'light' })}
+                        onClick={() => {
+                          setSettings({ ...settings, theme: 'light' });
+                          document.documentElement.classList.remove('dark');
+                        }}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
                           settings.theme === 'light' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
                         }`}
@@ -547,7 +564,10 @@ export function AdminSettings({}: AdminSettingsProps) {
                         Light
                       </button>
                       <button
-                        onClick={() => setSettings({ ...settings, theme: 'dark' })}
+                        onClick={() => {
+                          setSettings({ ...settings, theme: 'dark' });
+                          document.documentElement.classList.add('dark');
+                        }}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
                           settings.theme === 'dark' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
                         }`}

@@ -24,6 +24,23 @@ function AppContent() {
   const { applicant, loading, isAdminAuthenticated, adminSession } = useAuth();
   const [view, setView] = useState<View>('login');
 
+  // Apply saved theme on mount
+  useEffect(() => {
+    const savedSettings = localStorage.getItem('admin_settings');
+    if (savedSettings) {
+      try {
+        const settings = JSON.parse(savedSettings);
+        if (settings.theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
+  }, []);
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const mode = urlParams.get('mode');

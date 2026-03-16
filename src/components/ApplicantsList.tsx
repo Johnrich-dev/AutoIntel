@@ -764,27 +764,6 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenModal(applicant);
-                          }}
-                          className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
-                          title="View details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-2 bg-gray-50 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                          title="More actions"
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
                   </tr>
                 ))
               ) : (
