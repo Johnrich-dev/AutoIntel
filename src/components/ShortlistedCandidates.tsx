@@ -513,6 +513,24 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
                             {skill}
                           </span>
                         ))}
+                        {/* NER format - when it's not hard_skills/all format */}
+                        {!parsedResume.skills.hard_skills && !parsedResume.skills.all &&
+                          Object.entries(parsedResume.skills).flatMap(([category, skills]) =>
+                            typeof skills === 'string'
+                              ? (skills as string).split(',').map((skill: string, idx: number) => (
+                                  <span key={`${category}-${idx}`} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                                    {skill.trim()}
+                                  </span>
+                                ))
+                              : Array.isArray(skills)
+                                ? (skills as string[]).map((skill: string, idx: number) => (
+                                    <span key={`${category}-${idx}`} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                                      {skill}
+                                    </span>
+                                  ))
+                                : []
+                          )
+                        }
                       </>
                     )}
                     {(!parsedResume.skills || (parsedResume.skills && Object.keys(parsedResume.skills).length === 0)) && (
