@@ -144,7 +144,7 @@ function calculateResumeScore(applicant?: ApplicantWithDetails, settings?: Scori
   let educationScore = 0;
   let projectsScore = 0;
   
-  const totalSkills = (parsed.skills?.hard_skills?.length || 0) + (parsed.skills?.soft_skills?.length || 0);
+  const totalSkills = parsed.skills?.hard_skills?.length || 0;
   skillsScore = Math.min((totalSkills / 20) * 100, 100);
   
   experienceScore = Math.min(((parsed.experience?.length || 0) / 5) * 100, 100);
@@ -295,11 +295,36 @@ interface QuickProfilePanelProps {
 function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNote }: QuickProfilePanelProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'resume' | 'video' | 'notes'>('overview');
   const [newNote, setNewNote] = useState('');
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [showTranscriptModal, setShowTranscriptModal] = useState(false);
 
   if (!candidate || !isOpen) return null;
 
   const parsedResume = getParsedResumeData(candidate.resume);
-  const topSkills = parsedResume?.skills?.hard_skills?.slice(0, 8) || [];
+  
+  // Extract skills from parsed resume - handle both old format and NER format
+  let topSkills: string[] = [];
+  if (parsedResume?.skills) {
+    const skills = parsedResume.skills as any;
+    // Check if it's the old format with hard_skills or new NER format
+    if (skills.hard_skills && Array.isArray(skills.hard_skills)) {
+      topSkills = skills.hard_skills.slice(0, 8);
+    } else if (skills.all && Array.isArray(skills.all)) {
+      // Use the combined skills array if available
+      topSkills = skills.all.slice(0, 8);
+    } else if (typeof skills === 'object') {
+      // NER format: extract from category-based dict
+      const allSkills: string[] = [];
+      Object.values(skills).forEach((value: any) => {
+        if (typeof value === 'string') {
+          allSkills.push(...value.split(',').map((s: string) => s.trim()));
+        } else if (Array.isArray(value)) {
+          allSkills.push(...value);
+        }
+      });
+      topSkills = allSkills.slice(0, 8);
+    }
+  }
 
   const handleAddNote = () => {
     if (newNote.trim()) {
@@ -475,11 +500,24 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <h4 className="font-medium text-gray-900 mb-2">Skills</h4>
                   <div className="flex flex-wrap gap-2">
-                    {parsedResume.skills?.all?.map((skill, idx) => (
-                      <span key={idx} className="px-2 py-1 bg-white text-gray-700 text-xs rounded border">
-                        {skill}
-                      </span>
-                    ))}
+                    {/* Display skills - try hard_skills first, then all, then NER format */}
+                    {parsedResume.skills && typeof parsedResume.skills === 'object' && (
+                      <>
+                        {parsedResume.skills.hard_skills?.map((skill: string, idx: number) => (
+                          <span key={`hard-${idx}`} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                            {skill}
+                          </span>
+                        ))}
+                        {parsedResume.skills.all?.map((skill: string, idx: number) => (
+                          <span key={`all-${idx}`} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                            {skill}
+                          </span>
+                        ))}
+                      </>
+                    )}
+                    {(!parsedResume.skills || (parsedResume.skills && Object.keys(parsedResume.skills).length === 0)) && (
+                      <span className="text-sm text-gray-400">No skills extracted</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -492,30 +530,106 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-gray-900">Video Interview Assessment</h3>
               <div className="flex gap-2">
-                <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <button 
+                  onClick={() => setShowVideoModal(true)}
+                  disabled={!candidate.video?.video_url}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   <Play className="w-4 h-4" />
                   Watch Video
                 </button>
-                <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                <button 
+                  onClick={() => setShowTranscriptModal(true)}
+                  disabled={!candidate.video?.transcription}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   <FileText className="w-4 h-4" />
                   Transcript
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-                <div className="text-sm text-blue-600 mb-1">Communication Score</div>
-                <div className="text-3xl font-bold text-blue-900">
-                  {candidate.videoScore ? Math.round(candidate.videoScore * 0.9) : '-'}
+            {candidate.video ? (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+                    <div className="text-sm text-blue-600 mb-1">Communication Score</div>
+                    <div className="text-3xl font-bold text-blue-900">
+                      {candidate.videoScore ? Math.round(candidate.videoScore * 0.9) : '-'}
+                    </div>
+                    <div className="text-xs text-blue-500 mt-1">Based on clarity and articulation</div>
+                  </div>
+                  <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-100">
+                    <div className="text-sm text-emerald-600 mb-1">Answer Relevance</div>
+                    <div className="text-3xl font-bold text-emerald-900">
+                      {candidate.videoScore ? Math.round(candidate.videoScore * 0.95) : '-'}
+                    </div>
+                    <div className="text-xs text-emerald-500 mt-1">Alignment with questions</div>
+                  </div>
                 </div>
-                <div className="text-xs text-blue-500 mt-1">Based on clarity and articulation</div>
+                {/* Video Status */}
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-medium text-gray-700">Status:</span>
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      candidate.video.status === 'completed' ? 'bg-green-100 text-green-700' :
+                      candidate.video.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {candidate.video.status || 'Not started'}
+                    </span>
+                  </div>
+                  {candidate.video.submitted_at && (
+                    <p className="text-xs text-gray-500">
+                      Submitted: {new Date(candidate.video.submitted_at).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                <Video className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>No video assessment available</p>
               </div>
-              <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-100">
-                <div className="text-sm text-emerald-600 mb-1">Answer Relevance</div>
-                <div className="text-3xl font-bold text-emerald-900">
-                  {candidate.videoScore ? Math.round(candidate.videoScore * 0.95) : '-'}
-                </div>
-                <div className="text-xs text-emerald-500 mt-1">Alignment with questions</div>
+            )}
+          </div>
+        )}
+
+        {/* Video Modal */}
+        {showVideoModal && candidate.video?.video_url && (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setShowVideoModal(false)}>
+            <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-4 py-3 border-b">
+                <h3 className="font-semibold text-gray-900">Video Interview</h3>
+                <button onClick={() => setShowVideoModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="aspect-video bg-black">
+                <video 
+                  src={candidate.video.video_url} 
+                  controls 
+                  className="w-full h-full"
+                  autoPlay 
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Transcript Modal */}
+        {showTranscriptModal && candidate.video?.transcription && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowTranscriptModal(false)}>
+            <div className="bg-white rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-4 py-3 border-b">
+                <h3 className="font-semibold text-gray-900">Interview Transcript</h3>
+                <button onClick={() => setShowTranscriptModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-4 overflow-y-auto max-h-[60vh]">
+                <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">
+                  {candidate.video.transcription}
+                </pre>
               </div>
             </div>
           </div>

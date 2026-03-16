@@ -110,7 +110,7 @@ function calculateResumeScore(applicant?: ApplicantWithDetails, settings?: Scori
   let projectsScore = 0;
   
   // Skills: Based on number of skills (max 20 skills = 100 points)
-  const totalSkills = (parsed.skills?.hard_skills?.length || 0) + (parsed.skills?.soft_skills?.length || 0);
+  const totalSkills = parsed.skills?.hard_skills?.length || 0;
   skillsScore = Math.min((totalSkills / 20) * 100, 100);
   
   // Experience: Based on number of experiences (max 5 experiences = 100 points)

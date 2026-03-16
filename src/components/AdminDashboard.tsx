@@ -1,4 +1,4 @@
-import { Calendar, CheckCircle, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, XCircle, Briefcase, BarChart3, Sliders, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, CheckCircle, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, XCircle, Briefcase, BarChart3, Sliders, ChevronLeft, ChevronRight, ClipboardList } from 'lucide-react';
 import { AdminJobManagement } from './AdminJobManagement';
 import { AdminScoringSettings } from './AdminScoringSettings';
 import { DashboardLanding } from './DashboardLanding';
@@ -336,38 +336,22 @@ export function AdminDashboard() {
                           </div>
                         )}
 
-                        {/* Skills - Separated into Hard and Soft */}
-                        {parsedData.skills && (parsedData.skills.hard_skills?.length > 0 || parsedData.skills.soft_skills?.length > 0) && (
+                        {/* Skills */}
+                        {parsedData.skills && parsedData.skills.hard_skills?.length > 0 && (
                           <div>
                             <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Skills</h4>
                             
                             {/* Hard Skills */}
-                            {parsedData.skills.hard_skills && parsedData.skills.hard_skills.length > 0 && (
-                              <div className="mb-2">
-                                <h5 className="text-xs font-medium text-gray-400 uppercase mb-1">Technical</h5>
-                                <div className="flex flex-wrap gap-1">
-                                  {parsedData.skills.hard_skills.map((skill: string, idx: number) => (
-                                    <span key={`hard-${idx}`} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
-                                      {skill}
-                                    </span>
-                                  ))}
-                                </div>
+                            <div className="mb-2">
+                              <h5 className="text-xs font-medium text-gray-400 uppercase mb-1">Technical</h5>
+                              <div className="flex flex-wrap gap-1">
+                                {parsedData.skills.hard_skills.map((skill: string, idx: number) => (
+                                  <span key={`hard-${idx}`} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                                    {skill}
+                                  </span>
+                                ))}
                               </div>
-                            )}
-                            
-                            {/* Soft Skills */}
-                            {parsedData.skills.soft_skills && parsedData.skills.soft_skills.length > 0 && (
-                              <div>
-                                <h5 className="text-xs font-medium text-gray-400 uppercase mb-1">Soft Skills</h5>
-                                <div className="flex flex-wrap gap-1">
-                                  {parsedData.skills.soft_skills.map((skill: string, idx: number) => (
-                                    <span key={`soft-${idx}`} className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
-                                      {skill}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
+                            </div>
                           </div>
                         )}
 

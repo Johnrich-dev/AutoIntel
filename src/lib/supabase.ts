@@ -118,7 +118,6 @@ export interface ResumeParsedData {
   trainings?: Array<{ title: string | null; date: string | null }>;
   skills: {
     hard_skills: string[];
-    soft_skills: string[];
     all: string[];
   };
   parsed_at: string;
