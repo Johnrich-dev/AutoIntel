@@ -594,30 +594,16 @@ export function ApplicantDetailModal({
                 <div className="bg-white rounded-xl border border-gray-200 p-4">
                   <h3 className="font-semibold text-gray-900 mb-3">Skills</h3>
                   
-                  {/* Handle both old format (hard_skills/soft_skills) and new NER format (category-based dict) */}
-                  {((parsedResume.skills as any).hard_skills || (parsedResume.skills as any).soft_skills) ? (
+                  {/* Handle old format (hard_skills) and new NER format (category-based dict) */}
+                  {(parsedResume.skills as any).hard_skills ? (
                     <>
                       {/* Hard Skills */}
                       {(parsedResume.skills as any).hard_skills && (parsedResume.skills as any).hard_skills.length > 0 && (
                         <div className="mb-4">
-                          <h4 className="text-sm font-medium text-gray-700 mb-2">Hard Skills</h4>
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">Skills</h4>
                           <div className="flex flex-wrap gap-2">
                             {(parsedResume.skills as any).hard_skills.map((skill: string, idx: number) => (
                               <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                                {skill}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Soft Skills */}
-                      {(parsedResume.skills as any).soft_skills && (parsedResume.skills as any).soft_skills.length > 0 && (
-                        <div>
-                          <h4 className="text-sm font-medium text-gray-700 mb-2">Soft Skills</h4>
-                          <div className="flex flex-wrap gap-2">
-                            {(parsedResume.skills as any).soft_skills.map((skill: string, idx: number) => (
-                              <span key={idx} className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
                                 {skill}
                               </span>
                             ))}
