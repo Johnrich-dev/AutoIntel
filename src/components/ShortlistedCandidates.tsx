@@ -297,6 +297,7 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
   const [newNote, setNewNote] = useState('');
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [showTranscriptModal, setShowTranscriptModal] = useState(false);
+  const [showFullResumeModal, setShowFullResumeModal] = useState(false);
 
   if (!candidate || !isOpen) return null;
 
@@ -482,7 +483,10 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-gray-900">Resume Highlights</h3>
-              <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              <button 
+                onClick={() => setShowFullResumeModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
                 <FileText className="w-4 h-4" />
                 View Full Resume
               </button>
@@ -648,6 +652,196 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
                 <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">
                   {candidate.video.transcription}
                 </pre>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Full Resume Modal */}
+        {showFullResumeModal && parsedResume && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowFullResumeModal(false)}>
+            <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Full Resume</h3>
+                  <p className="text-sm text-gray-500">{candidate.name} - {candidate.position}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {candidate.resume?.resume_url && (
+                    <a 
+                      href={candidate.resume.resume_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download
+                    </a>
+                  )}
+                  <button onClick={() => setShowFullResumeModal(false)} className="p-2 hover:bg-gray-200 rounded-lg">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+                {/* Personal Information */}
+                {(parsedResume.name || parsedResume.email || parsedResume.phone) && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Personal Information</h4>
+                    <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+                      {parsedResume.name && (
+                        <div>
+                          <span className="text-xs text-gray-500 uppercase">Name</span>
+                          <p className="text-sm font-medium text-gray-900">{parsedResume.name}</p>
+                        </div>
+                      )}
+                      {parsedResume.email && (
+                        <div>
+                          <span className="text-xs text-gray-500 uppercase">Email</span>
+                          <p className="text-sm font-medium text-gray-900">{parsedResume.email}</p>
+                        </div>
+                      )}
+                      {parsedResume.phone && (
+                        <div>
+                          <span className="text-xs text-gray-500 uppercase">Phone</span>
+                          <p className="text-sm font-medium text-gray-900">{parsedResume.phone}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Skills */}
+                {parsedResume.skills && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Skills</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {parsedResume.skills.hard_skills?.map((skill: string, idx: number) => (
+                        <span key={`hard-${idx}`} className="px-3 py-1.5 bg-blue-100 text-blue-700 text-sm rounded-full">
+                          {skill}
+                        </span>
+                      ))}
+                      {parsedResume.skills.all?.map((skill: string, idx: number) => (
+                        <span key={`all-${idx}`} className="px-3 py-1.5 bg-blue-100 text-blue-700 text-sm rounded-full">
+                          {skill}
+                        </span>
+                      ))}
+                      {/* NER format */}
+                      {(!parsedResume.skills.hard_skills && !parsedResume.skills.all) &&
+                        Object.entries(parsedResume.skills).flatMap(([category, skills]) =>
+                          typeof skills === 'string'
+                            ? (skills as string).split(',').map((skill: string, idx: number) => (
+                                <span key={`${category}-${idx}`} className="px-3 py-1.5 bg-blue-100 text-blue-700 text-sm rounded-full">
+                                  {skill.trim()}
+                                </span>
+                              ))
+                            : Array.isArray(skills)
+                              ? (skills as string[]).map((skill: string, idx: number) => (
+                                  <span key={`${category}-${idx}`} className="px-3 py-1.5 bg-blue-100 text-blue-700 text-sm rounded-full">
+                                    {skill}
+                                  </span>
+                                ))
+                              : []
+                        )
+                      }
+                    </div>
+                  </div>
+                )}
+
+                {/* Education */}
+                {parsedResume.education && parsedResume.education.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Education</h4>
+                    <div className="space-y-3">
+                      {parsedResume.education.map((edu, idx) => (
+                        <div key={idx} className="p-4 bg-gray-50 rounded-lg">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="font-medium text-gray-900">{edu.school}</p>
+                              <p className="text-sm text-gray-600">{edu.course_or_strand}</p>
+                            </div>
+                            {edu.year_range && (
+                              <span className="text-sm text-gray-500">{edu.year_range}</span>
+                            )}
+                          </div>
+                          {edu.education_type && (
+                            <p className="text-xs text-gray-500 mt-1">{edu.education_type}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Experience */}
+                {parsedResume.experience && parsedResume.experience.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Work Experience</h4>
+                    <div className="space-y-4">
+                      {parsedResume.experience.map((exp, idx) => (
+                        <div key={idx} className="p-4 bg-gray-50 rounded-lg">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <p className="font-medium text-gray-900">{exp.role}</p>
+                              <p className="text-sm text-gray-600">{exp.company}</p>
+                            </div>
+                            {exp.years && (
+                              <span className="text-sm text-gray-500">{exp.years}</span>
+                            )}
+                          </div>
+                          {exp.summary && (
+                            <p className="text-sm text-gray-600 mt-2">{exp.summary}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Projects */}
+                {parsedResume.projects && parsedResume.projects.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Projects</h4>
+                    <div className="space-y-3">
+                      {parsedResume.projects.map((project, idx) => (
+                        <div key={idx} className="p-4 bg-gray-50 rounded-lg">
+                          <p className="font-medium text-gray-900">{project.name}</p>
+                          {project.details && (
+                            <p className="text-sm text-gray-600 mt-1">{project.details}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Trainings & Certifications */}
+                {parsedResume.trainings && parsedResume.trainings.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Trainings & Certifications</h4>
+                    <div className="space-y-2">
+                      {parsedResume.trainings.map((training, idx) => (
+                        <div key={idx} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                          <GraduationCap className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm text-gray-700">{training.title}</span>
+                          {training.date && <span className="text-xs text-gray-400">({training.date})</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Raw Extracted Content */}
+                {candidate.resume?.raw_extracted_content && (
+                  <div className="mt-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Raw Extracted Content</h4>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <pre className="whitespace-pre-wrap text-xs text-gray-600 font-mono max-h-64 overflow-y-auto">
+                        {candidate.resume.raw_extracted_content}
+                      </pre>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
