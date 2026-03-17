@@ -69,6 +69,13 @@ function getParsedResumeData(resume: Resume | undefined): ResumeParsedData | nul
 // Available tags
 const AVAILABLE_TAGS = ['Priority', 'Referral', 'Follow-up', 'Top Pick', 'Fast Track', 'Interview Scheduled', 'Background Check', 'Offer Sent'];
 
+// Helper function to format timestamp from seconds to MM:SS
+const formatTimestamp = (seconds: number): string => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
+
 // Email templates
 const EMAIL_TEMPLATES = [
   { id: 'interview_invite', name: 'Interview Invitation', subject: 'Interview Invitation - {{position}}' },
@@ -790,7 +797,20 @@ export function ApplicantDetailModal({
                     {applicant.video.transcription && (
                       <div className="bg-gray-50 rounded-lg p-4 mt-4">
                         <h4 className="font-medium text-gray-900 mb-2">Transcription</h4>
-                        <p className="text-sm text-gray-600">{applicant.video.transcription}</p>
+                        {applicant.video.transcription_segments && applicant.video.transcription_segments.length > 0 ? (
+                          <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {applicant.video.transcription_segments.map((segment, index) => (
+                              <div key={index} className="flex gap-3 text-sm">
+                                <span className="text-blue-600 font-mono text-xs whitespace-nowrap min-w-[60px]">
+                                  {formatTimestamp(segment.start)}
+                                </span>
+                                <span className="text-gray-700">{segment.text}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-600">{applicant.video.transcription}</p>
+                        )}
                       </div>
                     )}
                   </div>
