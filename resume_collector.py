@@ -47,6 +47,14 @@ try:
 except ImportError:
     process_applicant_screening = None
 
+# Import duplicate detector for detecting duplicate applications
+try:
+    from duplicate_detector import process_new_applicant, check_duplicates, handle_duplicate
+except ImportError:
+    process_new_applicant = None
+    check_duplicates = None
+    handle_duplicate = None
+
 # Load environment variables from .env if present
 try:
     from dotenv import load_dotenv  # type: ignore
@@ -707,10 +715,32 @@ def process_emails():
                                         print(f"WARNING: Email was NOT sent! Error details may be in email service.")
                                 else:
                                     print(f"No matching job found for position: {position}, skipping screening")
-                            else:
-                                print("No resume text extracted, skipping screening")
-                        else:
-                            print("No resume found for applicant, skipping screening")
+                                
+                                # DUPLICATE DETECTION - Check for duplicate applications
+                                # Runs regardless of job match
+                                if process_new_applicant and uploaded_files:
+                                    try:
+                                        print(f"Running duplicate detection for {sender_name}...")
+                                        
+                                        # Wait a bit for the resume to be fully processed
+                                        import time
+                                        time.sleep(1)
+                                        
+                                        # Run duplicate detection
+                                        duplicate_result = process_new_applicant(
+                                            applicant_id=applicant_id,
+                                            job_title=job_title
+                                        )
+                                        
+                                        print(f"Duplicate detection: {duplicate_result.get('recommendation')}")
+                                        if duplicate_result.get('is_duplicate'):
+                                            print(f"  Reason: {duplicate_result.get('reason')}")
+                                            print(f"  Layer: {duplicate_result.get('layer')}")
+                                            if duplicate_result.get('matches'):
+                                                for match in duplicate_result.get('matches', [])[:3]:
+                                                    print(f"  Match: {match.get('name')} ({match.get('email')}) - {match.get('confidence')}%")
+                                    except Exception as dup_error:
+                                        print(f"Error during duplicate detection: {dup_error}")
                     except Exception as screening_error:
                         print(f"Error during automatic screening: {screening_error}")
                 # ============================================================

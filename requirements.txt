@@ -11,6 +11,9 @@ torch>=2.0.0
 pytest>=8.0.0
 openai>=1.0.0
 
+# Fuzzy matching for duplicate detection
+rapidfuzz>=3.0.0
+
 # Transcription dependencies (openai/whisper-small)
 librosa>=0.10.0
 soundfile>=0.12.0

@@ -635,6 +635,88 @@ def process_screening_decision(
         return "failed"
 
 
+def send_duplicate_rejection_notification(
+    applicant_name: str,
+    applicant_email: str,
+    job_title: str,
+    score: float = 0.0
+) -> bool:
+    """
+    Send notification to applicants whose application was rejected due to duplication.
+    
+    Args:
+        applicant_name: Full name of the applicant
+        applicant_email: Email address
+        job_title: Position applied for
+        score: Screening score (default 0.0 for duplicates)
+    
+    Returns:
+        True if sent successfully
+    """
+    subject = "Application Status Update - Duplicate Application Detected"
+    
+    body_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: #DC2626; color: white; padding: 20px; text-align: center; }}
+            .content {{ padding: 20px; background: #f9f9f9; }}
+            .status-box {{ background: #FEE2E2; border: 2px solid #DC2626; padding: 15px; 
+                         text-align: center; margin: 20px 0; border-radius: 8px; }}
+            .status-label {{ font-size: 14px; color: #991B1B; font-weight: bold; }}
+            .status-value {{ font-size: 20px; color: #DC2626; font-weight: bold; }}
+            .reason {{ background: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 15px 0; }}
+            .footer {{ text-align: center; padding: 20px; color: #666; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>⚠️ Application Status Update</h1>
+            </div>
+            <div class="content">
+                <p>Dear <strong>{applicant_name}</strong>,</p>
+                
+                <p>Thank you for your interest in applying.</p>
+                
+                <p>Our system has detected that an application with very similar identity information has already been submitted. 
+                To maintain fair evaluation and prevent duplicate entries, only one application per applicant is allowed.</p>
+                
+                <p>If you believe this detection was made in error, please contact our recruitment team.</p>
+                
+                <div class="status-box">
+                    <div class="status-label">Application Status</div>
+                    <div class="status-value">Rejected</div>
+                </div>
+                
+                <div class="reason">
+                    <strong>Reason:</strong> Duplicate Application Detected
+                </div>
+                
+                <p>Applied Position: <strong>{job_title}</strong></p>
+                
+                <p>Best regards,<br>
+                <strong>AutoIntel Recruitment Team</strong></p>
+            </div>
+            <div class="footer">
+                <p>This is an automated message. Please do not reply to this email.</p>
+                <p>© {datetime.now().year} AutoIntel. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return send_email(
+        to_email=applicant_email,
+        subject=subject,
+        body=body_html
+    )
+
+
 if __name__ == "__main__":
     # Test email sending (requires SMTP configuration in .env)
     print("Email Service for AutoIntel")
