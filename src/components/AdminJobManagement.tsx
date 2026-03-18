@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import { Briefcase, Plus, Search, Edit2, Power, PowerOff, Copy, X, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import { getSupabaseAdminClient, JobPosting, JobPostingFormData } from '../lib/supabase';
 import { TagInput } from './TagInput';
@@ -605,9 +605,8 @@ export function AdminJobManagement() {
                   </tr>
                 ) : (
                   filteredJobs.map((job) => (
-                    <>
+                    <Fragment key={job.job_id}>
                       <tr
-                        key={job.job_id}
                         className={`hover:bg-gray-50 ${!job.is_active ? 'bg-gray-50' : ''}`}
                       >
                         <td className="px-6 py-4">
@@ -788,7 +787,7 @@ export function AdminJobManagement() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   ))
                 )}
               </tbody>

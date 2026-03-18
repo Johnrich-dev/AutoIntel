@@ -16,18 +16,92 @@ This document provides comprehensive documentation for the scoring systems used 
 
 ## 1. Resume Screening Scoring
 
+> **IMPORTANT UPDATE (2026)**: The resume screening now uses **UNIFIED SCORING** for all applicants regardless of career level.
+
 ### Overview
 
-The AutoIntel resume screening system uses a **hybrid scoring approach** that combines semantic relevance with quantity-based scoring. The system automatically detects the applicant level (Fresh Graduate, Entry-Level, or Mid-Level) and applies the appropriate scoring profile.
+The AutoIntel resume screening system uses a **unified hybrid scoring approach** that applies the same scoring formula to ALL applicants regardless of their detected career level.
 
 ```
 FINAL SCORE = (Requirement Match Score × 0.6) + (Count Score × 0.4)
 ```
 
-### Scoring Flow
+### Key Changes
+
+1. **Single Scoring Profile**: All applicants (fresh graduate, entry-level, mid-level) are scored using the same weights, baselines, and thresholds.
+2. **Applicant Level Detection**: Still performed for display/categorization purposes - NOT used for scoring.
+3. **Simpler Configuration**: HR admins configure one set of weights and thresholds.
+
+### Unified Scoring Profile
+
+| Category | Weight | Baseline |
+|----------|--------|----------|
+| Experience | 28% | 2 |
+| Skills | 30% | 10 |
+| Education | 18% | 2 |
+| Projects | 14% | 2 |
+| Train/Cert | 6% | 2 |
+| Achievements | 4% | 1 |
+
+**Thresholds**: qualified = 78, review = 65
+
+---
+
+### Scoring Flow (Updated)
 
 ```
 Email with Resume
+       │
+       ▼
+┌─────────────────────────────────────────────────────┐
+│  1. RESUME PARSING                                  │
+│     - Extract text from PDF/DOCX                   │
+│     - GPT cleaning                                  │
+│     - BERT NER for entity extraction                │
+│     - Parse into structured JSON                   │
+└─────────────────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────┐
+│  2. JOB MATCHING                                    │
+│     - Match resume to job posting                   │
+│     - Get job requirements                           │
+└─────────────────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────┐
+│  3. APPLICANT LEVEL DETECTION (DISPLAY ONLY)        │
+│     - Detect: Fresh Graduate / Entry-Level / Mid-Level│
+│     - Store for display/categorization              │
+│     - NOT used for scoring                          │
+└─────────────────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────┐
+│  4. UNIFIED HYBRID SCORING                          │
+│     ┌──────────────────┐  ┌──────────────────┐    │
+│     │ Requirement Match │  │ Count Score      │    │
+│     │      (60%)        │  │     (40%)        │    │
+│     └──────────────────┘  └──────────────────┘    │
+│     (SAME FOR ALL APPLICANTS)                      │
+└─────────────────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────┐
+│  5. DECISION & NOTIFICATION                         │
+│     - qualified: score ≥ 78                         │
+│     - needs_review: 65 ≤ score < 78                │
+│     - not_recommended: score < 65                  │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+### Legacy: Job-Level Scoring Profiles (Deprecated)
+
+> The following job-level profiles are **DEPRECATED** and kept for reference only.
+
+### A. Fresh Graduate Profile (Deprecated)
        │
        ▼
 ┌─────────────────────────────────────────────────────┐

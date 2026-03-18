@@ -37,7 +37,10 @@ DEFAULT_COUNT_WEIGHTS = {
     'projects_weight': 10
 }
 
-# Job Level Presets for Hybrid Scoring (from SCORING_DOCUMENTATION.md)
+# Job Level Presets - KEPT FOR DISPLAY/CATEGORIZATION PURPOSES ONLY
+# These presets are retained for backward compatibility and for displaying
+# the detected job level in the UI, but are NOT used for scoring calculations.
+# The scoring system now uses UNIFIED_SCORING_PROFILE for all applicants.
 JOB_LEVEL_PRESETS = {
     'fresh_grad': {
         'weights': {
@@ -107,7 +110,7 @@ JOB_LEVEL_PRESETS = {
     }
 }
 
-# Default 6-category weights for hybrid scoring
+# Default 6-category weights for hybrid scoring (UNIFIED - used for all applicants)
 DEFAULT_HYBRID_WEIGHTS = {
     'experience_weight': 28,
     'skills_weight': 30,
@@ -117,7 +120,7 @@ DEFAULT_HYBRID_WEIGHTS = {
     'achievements_weight': 4
 }
 
-# Default baselines for hybrid scoring
+# Default baselines for hybrid scoring (UNIFIED - used for all applicants)
 DEFAULT_HYBRID_BASELINES = {
     'baseline_experience': 2,
     'baseline_skills': 10,
@@ -125,6 +128,17 @@ DEFAULT_HYBRID_BASELINES = {
     'baseline_projects': 2,
     'baseline_traincert': 2,
     'baseline_achievements': 1
+}
+
+# Unified scoring profile - used for ALL applicants regardless of career level
+# This replaces the previous level-based profiles (fresh_grad, entry_level, mid_level)
+UNIFIED_SCORING_PROFILE = {
+    'weights': DEFAULT_HYBRID_WEIGHTS.copy(),
+    'baselines': DEFAULT_HYBRID_BASELINES.copy(),
+    'thresholds': {
+        'qualified_threshold': 78,
+        'review_threshold': 65
+    }
 }
 
 # Model cache
@@ -2184,47 +2198,67 @@ def calculate_achievement_keyword_match(
     return round(match_percentage, 2)
 
 
-def get_job_level_preset(job_level: str) -> Dict[str, Any]:
+def get_job_level_preset(job_level: str = None) -> Dict[str, Any]:
     """
-    Get the preset weights, baselines, and thresholds for a job level.
+    Get the unified scoring profile for all applicants.
+    
+    NOTE: This function now always returns the UNIFIED_SCORING_PROFILE
+    regardless of the job_level parameter. The job_level parameter is kept
+    for backward compatibility but is ignored for scoring calculations.
+    
+    The applicant level detection is still performed and stored for
+    display/categorization purposes, but does not affect scoring.
     
     Args:
-        job_level: One of 'fresh_grad', 'entry_level', 'mid_level'
+        job_level: Deprecated parameter (kept for backward compatibility)
     
     Returns:
-        Dictionary with weights, baselines, and thresholds
+        Dictionary with unified weights, baselines, and thresholds
     """
-    if job_level not in JOB_LEVEL_PRESETS:
-        # Default to entry_level if not specified
-        job_level = 'entry_level'
+    # Always return unified scoring profile - no more level-based differentiation
+    return UNIFIED_SCORING_PROFILE
+
+
+def get_unified_scoring_profile() -> Dict[str, Any]:
+    """
+    Get the unified scoring profile directly.
     
-    return JOB_LEVEL_PRESETS[job_level]
+    This function provides direct access to the unified scoring profile
+    that is used for all applicants regardless of their detected career level.
+    
+    Returns:
+        Dictionary with weights, baselines, and thresholds for unified scoring
+    """
+    return UNIFIED_SCORING_PROFILE
 
 
 def calculate_requirement_match_score(
     parsed_resume_json: Dict,
     job_posting: Dict,
     weights: Optional[Dict[str, float]] = None,
-    job_level: str = 'entry_level'
+    job_level: str = None
 ) -> Dict[str, Any]:
     """
     Calculate the Requirement Match Score (60% of final score).
     This measures how well resume content aligns with job requirements
     across 6 categories: experience, skills, education, projects, traincert, achievements.
     
+    NOTE: This function now uses UNIFIED scoring for all applicants.
+    The job_level parameter is deprecated and ignored.
+    
     Args:
         parsed_resume_json: Parsed resume data
         job_posting: Job posting data with requirements
-        weights: Optional custom weights (if None, uses job level preset)
-        job_level: Job level for loading preset weights
+        weights: Optional custom weights (if None, uses unified profile)
+        job_level: Deprecated parameter - kept for backward compatibility only
     
     Returns:
         Dictionary with requirement_match_score and breakdown
     """
-    # Get preset weights if not provided
+    # Get unified weights if not provided
     if weights is None:
-        preset = get_job_level_preset(job_level)
-        weights = preset['weights']
+        unified_profile = get_unified_scoring_profile()
+        weights = unified_profile['weights']
     
     # Extract resume data
     resume_skills = parsed_resume_json.get('skills', {})
@@ -2280,25 +2314,28 @@ def calculate_requirement_match_score(
 def calculate_category_count_score(
     parsed_resume_json: Dict,
     baselines: Optional[Dict[str, float]] = None,
-    job_level: str = 'entry_level'
+    job_level: str = None
 ) -> Dict[str, Any]:
     """
     Calculate the Count Score (40% of final score).
     This measures whether the applicant meets the expected baseline quantity
     for each of the 6 categories.
     
+    NOTE: This function now uses UNIFIED scoring for all applicants.
+    The job_level parameter is deprecated and ignored.
+    
     Args:
         parsed_resume_json: Parsed resume data
-        baselines: Optional custom baselines (if None, uses job level preset)
-        job_level: Job level for loading preset baselines
+        baselines: Optional custom baselines (if None, uses unified profile)
+        job_level: Deprecated parameter - kept for backward compatibility only
     
     Returns:
         Dictionary with count_score and breakdown
     """
-    # Get preset baselines if not provided
+    # Get unified baselines if not provided
     if baselines is None:
-        preset = get_job_level_preset(job_level)
-        baselines = preset['baselines']
+        unified_profile = get_unified_scoring_profile()
+        baselines = unified_profile['baselines']
     
     # Get category counts from resume
     experience_list = parsed_resume_json.get('experience', [])
@@ -2386,91 +2423,82 @@ def calculate_category_count_score(
 def calculate_final_hybrid_score(
     parsed_resume_json: Dict,
     job_posting: Dict,
-    job_level: str = 'entry_level',
+    job_level: str = None,
     weights: Optional[Dict[str, float]] = None,
     baselines: Optional[Dict[str, float]] = None,
     requirement_weight: float = 0.6,
     count_weight: float = 0.4,
-    auto_detect_job_level: bool = True
+    auto_detect_job_level: bool = True,
+    qualified_threshold: Optional[float] = None,
+    review_threshold: Optional[float] = None
 ) -> Dict[str, Any]:
     """
-    Calculate the final hybrid score using the formula from SCORING_DOCUMENTATION.md:
+    Calculate the final hybrid score using unified scoring for ALL applicants.
     
     FINAL SCORE = (Requirement Match Score × 0.6) + (Count Score × 0.4)
+    
+    NOTE: This function now uses a SINGLE unified scoring profile for all applicants
+    regardless of their detected career level (fresh_grad, entry_level, mid_level).
+    The job_level parameter and auto-detection are retained for display/categorization
+    purposes only, but do NOT affect scoring.
     
     Args:
         parsed_resume_json: Parsed resume data
         job_posting: Job posting data
-        job_level: Job level ('fresh_grad', 'entry_level', 'mid_level'). If not provided or invalid,
-                   will be auto-detected from resume if auto_detect_job_level is True.
-        weights: Optional custom weights (overrides job level preset)
-        baselines: Optional custom baselines (overrides job level preset)
+        job_level: Deprecated parameter - kept for backward compatibility but ignored for scoring
+        weights: Optional custom weights (optional overrides)
+        baselines: Optional custom baselines (optional overrides)
         requirement_weight: Weight for requirement match (default 0.6)
         count_weight: Weight for count score (default 0.4)
-        auto_detect_job_level: If True, detect job level from resume when not provided
+        auto_detect_job_level: If True, detect job level for display purposes only
     
     Returns:
         Dictionary with final_score, requirement_match_score, count_score,
         decision, and detailed breakdown
     """
-    # Save original job_level to know if HR set it explicitly
-    original_job_level = job_level
+    # Always use unified scoring profile for ALL applicants
+    # The job_level parameter is kept only for display/categorization purposes
+    unified_profile = get_unified_scoring_profile()
     
-    # Validate job_level - if invalid or not provided, use default
-    valid_job_levels = ['fresh_grad', 'entry_level', 'mid_level']
-    if job_level not in valid_job_levels:
-        job_level = 'entry_level'  # Default
+    # Auto-detect job level ONLY for display purposes (not for scoring)
+    detected_job_level = 'entry_level'
+    if auto_detect_job_level and parsed_resume_json:
+        detected_job_level = detect_job_level_from_resume(parsed_resume_json)
+        print(f"[INFO] Detected job level (for display only): {detected_job_level}")
     
-    # Auto-detect job level from resume ONLY as fallback:
-    # - If HR has explicitly set a valid job_level in settings (original_job_level is valid),
-    #   use that as PRIMARY
-    # - Only auto-detect if:
-    #   1. HR didn't set a job_level (original not in valid list) OR
-    #   2. original_job_level was None/empty AND we have parsed resume data
-    if original_job_level not in valid_job_levels:
-        # HR didn't set a valid job level, try auto-detection
-        if parsed_resume_json:
-            detected_level = detect_job_level_from_resume(parsed_resume_json)
-            print(f"[INFO] Auto-detected job level: {detected_level} (resume analysis, no valid settings level)")
-            job_level = detected_level
-        else:
-            # No parsed data, use default
-            print("[INFO] Using default job level: entry_level (no parsed resume data)")
-    elif not original_job_level or str(original_job_level).strip() == '':
-        # HR set job_level but it's empty/None
-        if parsed_resume_json:
-            detected_level = detect_job_level_from_resume(parsed_resume_json)
-            print(f"[INFO] Auto-detected job level: {detected_level} (resume analysis, empty settings level)")
-            job_level = detected_level
-    # If HR set a valid job_level, keep it - don't auto-detect
-    
-    # Get thresholds from job level preset - but prefer HR-configured thresholds from database
-    preset = get_job_level_preset(job_level)
-    preset_thresholds = preset['thresholds']
-    
-    # Use HR-configured thresholds if provided in weights, otherwise use preset
-    qualified_threshold = weights.get('qualified_threshold') if weights else None
-    review_threshold = weights.get('review_threshold') if weights else None
-    
-    # Fall back to preset thresholds if not configured in HR settings
+    # Use unified thresholds from parameters, or fall back to hardcoded profile values
+    # These can be overridden by passing qualified_threshold and review_threshold parameters
     if qualified_threshold is None:
-        qualified_threshold = preset_thresholds.get('qualified_threshold', 78)
+        qualified_threshold = unified_profile['thresholds']['qualified_threshold']
     if review_threshold is None:
-        review_threshold = preset_thresholds.get('review_threshold', 65)
+        review_threshold = unified_profile['thresholds']['review_threshold']
+    
+    # Allow HR-configured thresholds to override unified defaults
+    if weights:
+        if weights.get('qualified_threshold') is not None:
+            qualified_threshold = weights['qualified_threshold']
+        if weights.get('review_threshold') is not None:
+            review_threshold = weights['review_threshold']
+    
+    # Use unified weights unless custom weights provided
+    scoring_weights = weights if weights else unified_profile['weights'].copy()
+    
+    # Use unified baselines unless custom baselines provided
+    scoring_baselines = baselines if baselines else unified_profile['baselines'].copy()
     
     # Calculate Requirement Match Score (60%)
     requirement_result = calculate_requirement_match_score(
         parsed_resume_json=parsed_resume_json,
         job_posting=job_posting,
-        weights=weights,
-        job_level=job_level
+        weights=scoring_weights,
+        job_level=None  # Always pass None to use unified scoring
     )
     
     # Calculate Count Score (40%)
     count_result = calculate_category_count_score(
         parsed_resume_json=parsed_resume_json,
-        baselines=baselines,
-        job_level=job_level
+        baselines=scoring_baselines,
+        job_level=None  # Always pass None to use unified scoring
     )
     
     # Calculate final score
@@ -2479,8 +2507,7 @@ def calculate_final_hybrid_score(
         count_result['count_score'] * count_weight
     )
     
-    # Determine decision based on thresholds (already computed above)
-    
+    # Determine decision based on unified thresholds
     if final_score >= qualified_threshold:
         decision = 'qualified'
     elif final_score >= review_threshold:
@@ -2499,7 +2526,8 @@ def calculate_final_hybrid_score(
             'qualified_threshold': qualified_threshold,
             'review_threshold': review_threshold
         },
-        'job_level': job_level,
+        'job_level': detected_job_level,  # Detected for display purposes only
+        'scoring_type': 'unified',  # Indicates unified scoring is being used
         'requirement_breakdown': requirement_result['breakdown'],
         'count_breakdown': count_result['breakdown'],
         'status': 'success'

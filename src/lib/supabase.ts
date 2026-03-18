@@ -214,7 +214,7 @@ export interface ScoringSettings {
   baseline_traincert: number;
   baseline_achievements: number;
   // Job level
-  job_level: 'fresh_grad' | 'entry_level' | 'mid_level';
+  job_level: 'fresh_grad' | 'entry_level' | 'mid_level' | 'unified';
   // Scoring type
   scoring_type: 'semantic' | 'hybrid';
   // Presets

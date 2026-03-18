@@ -2,9 +2,11 @@ import { useEffect, useState, useCallback } from 'react';
 import { Settings, Save, RotateCcw, AlertCircle, CheckCircle, Sliders, Target, GraduationCap, Briefcase, FolderGit2, Award, BookOpen } from 'lucide-react';
 import { getSupabaseAdminClient, ScoringSettings } from '../lib/supabase';
 
-// Default 6-category hybrid scoring settings for entry_level
+// Default unified scoring settings - used for ALL applicants
+// NOTE: The scoring system now uses a single unified profile for all applicants
 const DEFAULT_SETTINGS: {
-  job_level: 'fresh_grad' | 'entry_level' | 'mid_level';
+  // Job level is kept for backward compatibility - stored but not used for scoring
+  job_level: string;
   experience_weight: number;
   skills_weight: number;
   education_weight: number;
@@ -21,15 +23,15 @@ const DEFAULT_SETTINGS: {
   baseline_achievements: number;
   scoring_type: 'semantic' | 'hybrid';
 } = {
-  job_level: 'entry_level',
-  // Weights for 6 categories
+  job_level: 'unified',
+  // Unified weights for 6 categories (same for all applicants)
   experience_weight: 28,
   skills_weight: 30,
   education_weight: 18,
   projects_weight: 14,
   traincert_weight: 6,
   achievements_weight: 4,
-  // Thresholds
+  // Unified thresholds
   qualified_threshold: 78,
   review_threshold: 65,
   // Baselines for count scoring
@@ -43,7 +45,8 @@ const DEFAULT_SETTINGS: {
   scoring_type: 'hybrid',
 };
 
-// Job level presets from documentation
+// Job level presets - KEPT FOR DISPLAY/CATEGORIZATION PURPOSES ONLY
+// These are no longer used for scoring calculations
 const JOB_LEVEL_PRESETS = {
   fresh_grad: {
     experience_weight: 18,
@@ -277,100 +280,28 @@ export function AdminScoringSettings() {
       setSaveSuccess(false);
       const adminClient = getSupabaseAdminClient();
 
-      // Get the appropriate column names based on job level
-      const levelKey = formValues.job_level;
-      const qualifiedKey = `${levelKey}_qualified_threshold`;
-      const reviewKey = `${levelKey}_review_threshold`;
-      const weightsKey = `${levelKey}_weights`;
-
-      // Prepare the data to save - include both individual fields and job-level specific columns
+      // Simplified save data for unified scoring
+      // Only use base columns - not level-specific columns
       const saveData = {
-        job_level: formValues.job_level,
-        // Legacy columns (for backward compatibility)
+        job_level: 'unified',
+        // Base weights
         experience_weight: formValues.experience_weight,
         skills_weight: formValues.skills_weight,
         education_weight: formValues.education_weight,
         projects_weight: formValues.projects_weight,
         traincert_weight: formValues.traincert_weight,
         achievements_weight: formValues.achievements_weight,
+        // Base thresholds
         qualified_threshold: formValues.qualified_threshold,
         review_threshold: formValues.review_threshold,
+        // Baselines
         baseline_experience: formValues.baseline_experience,
         baseline_skills: formValues.baseline_skills,
         baseline_education: formValues.baseline_education,
         baseline_projects: formValues.baseline_projects,
         baseline_traincert: formValues.baseline_traincert,
         baseline_achievements: formValues.baseline_achievements,
-        scoring_type: formValues.scoring_type,
-        // New separate columns for each job level
-        [qualifiedKey]: formValues.qualified_threshold,
-        [reviewKey]: formValues.review_threshold,
-        [weightsKey]: {
-          experience_weight: formValues.experience_weight,
-          skills_weight: formValues.skills_weight,
-          education_weight: formValues.education_weight,
-          projects_weight: formValues.projects_weight,
-          traincert_weight: formValues.traincert_weight,
-          achievements_weight: formValues.achievements_weight,
-          baseline_experience: formValues.baseline_experience,
-          baseline_skills: formValues.baseline_skills,
-          baseline_education: formValues.baseline_education,
-          baseline_projects: formValues.baseline_projects,
-          baseline_traincert: formValues.baseline_traincert,
-          baseline_achievements: formValues.baseline_achievements,
-        },
-        // Also update weights_by_level JSONB with all job levels
-        weights_by_level: {
-          fresh_grad: formValues.job_level === 'fresh_grad' ? {
-            qualified_threshold: formValues.qualified_threshold,
-            review_threshold: formValues.review_threshold,
-            experience_weight: formValues.experience_weight,
-            skills_weight: formValues.skills_weight,
-            education_weight: formValues.education_weight,
-            projects_weight: formValues.projects_weight,
-            traincert_weight: formValues.traincert_weight,
-            achievements_weight: formValues.achievements_weight,
-            baseline_experience: formValues.baseline_experience,
-            baseline_skills: formValues.baseline_skills,
-            baseline_education: formValues.baseline_education,
-            baseline_projects: formValues.baseline_projects,
-            baseline_traincert: formValues.baseline_traincert,
-            baseline_achievements: formValues.baseline_achievements,
-          } : undefined,
-          entry_level: formValues.job_level === 'entry_level' ? {
-            qualified_threshold: formValues.qualified_threshold,
-            review_threshold: formValues.review_threshold,
-            experience_weight: formValues.experience_weight,
-            skills_weight: formValues.skills_weight,
-            education_weight: formValues.education_weight,
-            projects_weight: formValues.projects_weight,
-            traincert_weight: formValues.traincert_weight,
-            achievements_weight: formValues.achievements_weight,
-            baseline_experience: formValues.baseline_experience,
-            baseline_skills: formValues.baseline_skills,
-            baseline_education: formValues.baseline_education,
-            baseline_projects: formValues.baseline_projects,
-            baseline_traincert: formValues.baseline_traincert,
-            baseline_achievements: formValues.baseline_achievements,
-          } : undefined,
-          mid_level: formValues.job_level === 'mid_level' ? {
-            qualified_threshold: formValues.qualified_threshold,
-            review_threshold: formValues.review_threshold,
-            experience_weight: formValues.experience_weight,
-            skills_weight: formValues.skills_weight,
-            education_weight: formValues.education_weight,
-            projects_weight: formValues.projects_weight,
-            traincert_weight: formValues.traincert_weight,
-            achievements_weight: formValues.achievements_weight,
-            baseline_experience: formValues.baseline_experience,
-            baseline_skills: formValues.baseline_skills,
-            baseline_education: formValues.baseline_education,
-            baseline_projects: formValues.baseline_projects,
-            baseline_traincert: formValues.baseline_traincert,
-            baseline_achievements: formValues.baseline_achievements,
-          } : undefined,
-        },
-        updated_at: new Date().toISOString(),
+        scoring_type: 'hybrid',
       };
 
       if (settings) {
@@ -577,45 +508,16 @@ export function AdminScoringSettings() {
             Scoring Settings
           </h1>
           <p className="text-gray-600 mt-1">
-            Configure 6-category hybrid resume scoring weights and qualification thresholds
+            Configure unified scoring weights and thresholds for all applicants
           </p>
           
-          {/* Job Level Selector */}
-          <div className="mt-4 flex flex-wrap gap-2">
-            <span className="text-sm font-medium text-gray-700 py-2">Quick Presets:</span>
-            <button
-              onClick={() => applyJobLevelPreset('fresh_grad')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                formValues.job_level === 'fresh_grad'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Fresh Graduate
-            </button>
-            <button
-              onClick={() => applyJobLevelPreset('entry_level')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                formValues.job_level === 'entry_level'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Entry Level
-            </button>
-            <button
-              onClick={() => applyJobLevelPreset('mid_level')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                formValues.job_level === 'mid_level'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Mid Level
-            </button>
-            <span className="text-sm text-gray-500 py-2 ml-2">
-              Current: <span className="font-medium text-gray-900 capitalize">{formValues.job_level.replace('_', ' ')}</span>
-            </span>
+          {/* Unified Scoring Notice */}
+          <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center gap-2 text-blue-800 font-medium">
+              <Target className="w-5 h-5" />
+              Unified Scoring - Same for All Applicants
+            </div>
+
           </div>
         </div>
 

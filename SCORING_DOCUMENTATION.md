@@ -1,15 +1,46 @@
 # AutoIntel Resume Screening Scoring System
 
-## Overview
+> **IMPORTANT UPDATE**: The scoring system now uses **UNIFIED SCORING** for all applicants regardless of career level. See [Unified Scoring](#unified-scoring) below.
+
+## Unified Scoring
+
+The AutoIntel resume screening system now uses a **unified hybrid scoring approach** that applies the same scoring formula to ALL applicants.
+
+```text
+FINAL SCORE = (Requirement Match Score × 0.6) + (Count Score × 0.4)
+```
+
+### Key Changes (2026)
+
+1. **Single Scoring Profile**: All applicants (fresh graduate, entry-level, mid-level) are scored using the same weights, baselines, and thresholds.
+2. **Applicant Level Detection**: Still performed for display/categorization purposes - NOT used for scoring.
+3. **Simpler Configuration**: HR admins configure one set of weights and thresholds.
+
+### Unified Profile Defaults
+
+| Category | Weight | Baseline |
+|----------|--------|----------|
+| Experience | 28% | 2 |
+| Skills | 30% | 10 |
+| Education | 18% | 2 |
+| Projects | 14% | 2 |
+| Train/Cert | 6% | 2 |
+| Achievements | 4% | 1 |
+
+**Thresholds**: qualified = 78, review = 65
+
+---
+
+## Legacy: Multi-Level Scoring (Deprecated)
+
+> The previous system with separate profiles for Fresh Graduate, Entry-Level, and Mid-Level applicants is **DEPRECATED**. The documentation below is kept for reference only.
+
+## Overview (Legacy)
 
 The AutoIntel recruitment system uses a **hybrid scoring approach** that combines:
 
 1. **Requirement Match Score (60%)** - Measures how well the resume content aligns with the job requirements through category-based matching across experience, skills, education, projects, trainings/certifications, and achievements.
 2. **Count Score (40%)** - Measures whether the applicant meets the expected baseline quantity for the same categories using HR-admin configurable category weights.
-
-```text
-FINAL SCORE = (Requirement Match Score × 0.6) + (Count Score × 0.4)
-```
 
 The scoring is designed for **Fresh Graduate**, **Entry-Level**, and **Mid-Level** hiring. Instead of requiring HR to manually choose the applicant level for each screening, the company configures separate scoring profiles in the settings for fresh graduate, entry-level, and mid-level applicants. During screening, the system automatically detects the applicant level from the parsed resume, then loads the corresponding scoring profile and applies the configured weights, baselines, and thresholds.
 

@@ -356,7 +356,7 @@ export function ApplicantDetailModal({
                     <div className={`w-10 h-10 mx-auto mb-2 rounded-lg bg-${item.color}-100 flex items-center justify-center`}>
                       <item.icon className={`w-5 h-5 text-${item.color}-600`} />
                     </div>
-                    <p className="text-2xl font-bold text-gray-900">{item.score || '-'}</p>
+                    <p className="text-2xl font-bold text-gray-900">{item.score ? Math.round(item.score) : '-'}</p>
                     <p className="text-xs text-gray-500">{item.label}</p>
                   </div>
                 ))}

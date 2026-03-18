@@ -128,7 +128,7 @@ const DEFAULT_SCORING_SETTINGS: ScoringSettings = {
 function calculateResumeScore(applicant?: ApplicantWithDetails, settings?: ScoringSettings | null): number {
   // Use backend screening_score if available (combined semantic + count)
   if (applicant?.screening_score !== undefined && applicant?.screening_score !== null) {
-    return applicant.screening_score;
+    return Math.round(applicant.screening_score);
   }
   
   // Fallback to count-based calculation if no screening_score
