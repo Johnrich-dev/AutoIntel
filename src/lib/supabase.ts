@@ -158,9 +158,20 @@ export interface PersonalityTest {
   id: string;
   applicant_id: string;
   answers: Array<{ question: number; answer: number }>;
+  essay: string | null;
   status: string;
   submitted_at: string | null;
   created_at: string;
+  // Semantic scoring fields
+  semantic_score?: number;
+  dimension_scores?: any;
+  role_family?: string;
+  strong_areas?: string[];
+  moderate_areas?: string[];
+  development_areas?: string[];
+  essay_insights?: string;
+  scoring_method?: string;
+  scored_at?: string;
 }
 
 export interface AdminAction {

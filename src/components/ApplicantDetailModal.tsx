@@ -877,34 +877,6 @@ export function ApplicantDetailModal({
                             </div>
                           </div>
 
-                          {/* Areas Summary */}
-                          <div className="grid grid-cols-3 gap-4">
-                            <div className="bg-green-50 rounded-lg p-4">
-                              <p className="text-green-700 font-medium mb-2">Strong Areas</p>
-                              <p className="text-sm text-green-600">
-                                {result.strongAreas.length > 0 
-                                  ? result.strongAreas.map(d => DIMENSION_LABELS[d]).join(', ') 
-                                  : 'None'}
-                              </p>
-                            </div>
-                            <div className="bg-amber-50 rounded-lg p-4">
-                              <p className="text-amber-700 font-medium mb-2">Moderate Areas</p>
-                              <p className="text-sm text-amber-600">
-                                {result.moderateAreas.length > 0 
-                                  ? result.moderateAreas.map(d => DIMENSION_LABELS[d]).join(', ') 
-                                  : 'None'}
-                              </p>
-                            </div>
-                            <div className="bg-red-50 rounded-lg p-4">
-                              <p className="text-red-700 font-medium mb-2">Development Areas</p>
-                              <p className="text-sm text-red-600">
-                                {result.developmentAreas.length > 0 
-                                  ? result.developmentAreas.map(d => DIMENSION_LABELS[d]).join(', ') 
-                                  : 'None'}
-                              </p>
-                            </div>
-                          </div>
-
                           {/* Submission Info */}
                           <div className="grid grid-cols-2 gap-4 text-sm">
                             <div className="bg-blue-50 rounded-lg p-4">
@@ -922,6 +894,31 @@ export function ApplicantDetailModal({
                               </p>
                             </div>
                           </div>
+
+                          {/* Essay Answer & Insights */}
+                          {(applicant.test.essay || (applicant.test as any).essay_insights) && (
+                            <div className="space-y-4">
+                              {/* Applicant's Essay Answer */}
+                              {applicant.test.essay && (
+                                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                                  <p className="text-gray-700 font-medium mb-2">Essay Response</p>
+                                  <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                                    {applicant.test.essay}
+                                  </p>
+                                </div>
+                              )}
+                              
+                              {/* GPT Essay Insights */}
+                              {(applicant.test as any).essay_insights && (
+                                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                                  <p className="text-indigo-700 font-medium mb-2">AI Analysis Insights</p>
+                                  <p className="text-sm text-indigo-600 whitespace-pre-wrap">
+                                    {(applicant.test as any).essay_insights}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </>
                       );
                     })()}

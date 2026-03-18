@@ -606,6 +606,237 @@ def schedule_interview():
         }), 500
 
 
+# Import work style scorer
+try:
+    import work_style_scorer
+    WORK_STYLE_SCORER_AVAILABLE = True
+except ImportError as e:
+    print(f"WARNING: Could not import work_style_scorer: {e}")
+    WORK_STYLE_SCORER_AVAILABLE = False
+
+
+@app.route('/api/workstyle/score', methods=['POST'])
+def score_work_style():
+    """
+    Score Work Style Assessment using semantic scoring
+    
+    This endpoint uses a hybrid approach:
+    - Sentence embeddings (all-MiniLM-L6-v2) for structured Likert responses
+    - GPT-4o Mini for essay evaluation (if essay provided)
+    - Combined scoring with role-based alignment
+    
+    Request Body:
+    {
+        "answers": [               // Required: Array of {question: int, answer: int}
+            {"question": 1, "answer": 5},
+            {"question": 2, "answer": 3},
+            ... (20 questions)
+        ],
+        "essay": "string",        // Optional: Essay response for question 21
+        "job_title": "string",    // Required: Job title for role detection
+        "use_gpt": true           // Optional: Whether to use GPT for essay (default: true)
+    }
+    
+    Response:
+    {
+        "overall_alignment_score": 82.5,
+        "dimension_scores": [
+            {
+                "dimension": "collaboration",
+                "likert_score": 85.0,
+                "embedding_score": 88.2,
+                "essay_score": null,
+                "hybrid_score": 86.4,
+                "reasoning": ""
+            },
+            ... (15 dimensions)
+        ],
+        "matched_role_family": "development",
+        "matched_role_display_name": "Software Development",
+        "strong_areas": ["collaboration", "problem_solving", ...],
+        "moderate_areas": [...],
+        "development_areas": [...],
+        "essay_insights": "Narrative summary from essay...",
+        "scoring_method": "semantic" | "hybrid",
+        "timestamp": "2026-03-18T12:00:00.000000",
+        "status": "success"
+    }
+    """
+    if not WORK_STYLE_SCORER_AVAILABLE:
+        return jsonify({
+            "error": "Work style scorer not available. Please install required dependencies.",
+            "status": "error"
+        }), 500
+    
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        # Extract parameters
+        answers = data.get('answers', [])
+        essay = data.get('essay', '')
+        job_title = data.get('job_title', 'Software Developer')
+        use_gpt = data.get('use_gpt', True)
+        
+        # Validate required fields
+        if not answers:
+            return jsonify({"error": "answers is required"}), 400
+        if not job_title:
+            return jsonify({"error": "job_title is required"}), 400
+        
+        # Check answer format
+        if not isinstance(answers, list):
+            return jsonify({"error": "answers must be an array"}), 400
+        
+        # Skip GPT if disabled or no essay provided
+        if not use_gpt or not essay:
+            essay = None
+        
+        # Score the assessment
+        result = work_style_scorer.score_work_style(
+            answers=answers,
+            essay=essay,
+            job_title=job_title
+        )
+        
+        result['status'] = 'success'
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+
+@app.route('/api/workstyle/role-families', methods=['GET'])
+def get_role_families():
+    """
+    Get available role families and their dimension weight profiles
+    
+    Response:
+    {
+        "role_families": [
+            {
+                "key": "development",
+                "displayName": "Software Development",
+                "description": "Software development and engineering roles",
+                "weights": {
+                    "collaboration": "medium",
+                    "independence": "medium_high",
+                    ...
+                }
+            },
+            ...
+        ],
+        "status": "success"
+    }
+    """
+    # Import the config
+    try:
+        import sys
+        import os
+        # We can't import TypeScript, so we'll return the Python config
+        from work_style_scorer import ROLE_FAMILY_WEIGHTS
+        
+        role_family_info = {
+            "development": {"displayName": "Software Development", "description": "Software development and engineering roles"},
+            "data": {"displayName": "Data & AI", "description": "Data analysis, science and AI/ML roles"},
+            "design": {"displayName": "Design", "description": "UI/UX and graphic design roles"},
+            "security": {"displayName": "Cybersecurity", "description": "Security and information assurance roles"},
+            "network": {"displayName": "Network & Infrastructure", "description": "Network and IT infrastructure roles"},
+            "cloud": {"displayName": "Cloud & DevOps", "description": "Cloud engineering and DevOps roles"},
+            "marketing": {"displayName": "Marketing & Content", "description": "Marketing, content and digital media roles"},
+            "business": {"displayName": "Business & Product", "description": "Business analysis and product roles"},
+            "qa": {"displayName": "Quality Assurance", "description": "QA, testing and quality roles"},
+            "default": {"displayName": "General", "description": "Default profile for unmatched roles"}
+        }
+        
+        role_families = []
+        for key, info in role_family_info.items():
+            weights = ROLE_FAMILY_WEIGHTS.get(key, ROLE_FAMILY_WEIGHTS["default"])
+            
+            # Convert numeric weights to labels
+            weight_labels = {}
+            for dim, w in weights.items():
+                if w >= 1.0:
+                    weight_labels[dim] = "high"
+                elif w >= 0.85:
+                    weight_labels[dim] = "medium_high"
+                elif w >= 0.7:
+                    weight_labels[dim] = "medium"
+                elif w >= 0.55:
+                    weight_labels[dim] = "low_medium"
+                else:
+                    weight_labels[dim] = "low"
+            
+            role_families.append({
+                "key": key,
+                "displayName": info["displayName"],
+                "description": info["description"],
+                "weights": weight_labels
+            })
+        
+        return jsonify({
+            "role_families": role_families,
+            "status": "success"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+
+@app.route('/api/workstyle/detect-role', methods=['POST'])
+def detect_role():
+    """
+    Detect role family from job title
+    
+    Request Body:
+    {
+        "job_title": "string"  // Required: Job title to analyze
+    }
+    
+    Response:
+    {
+        "role_family": "development",
+        "display_name": "Software Development",
+        "status": "success"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        job_title = data.get('job_title', '')
+        
+        if not job_title:
+            return jsonify({"error": "job_title is required"}), 400
+        
+        # Use the scorer to detect role
+        scorer = work_style_scorer.WorkStyleScorer()
+        role_family, display_name = scorer._detect_role_family(job_title)
+        
+        return jsonify({
+            "role_family": role_family,
+            "display_name": display_name,
+            "status": "success"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors."""

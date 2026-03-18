@@ -2,13 +2,16 @@
  * Work Style Assessment Configuration
  * 
  * This module contains all configurations for the Work Style Assessment:
- * - Question definitions with updated work-behavior wording
+ * - 20 Question definitions with reverse coding support
+ * - Essay question configuration
  * - Dimension mapping for each question
  * - Role family profiles with dimension weights
  * - Auto-detection of role family from job title
  * 
- * The system uses keyword matching to automatically detect which role family
- * a job title belongs to, making it easy to extend without code changes.
+ * Updated for semantic scoring with:
+ * - 20 Likert scale questions + 1 essay question
+ * - Reverse coding support
+ * - Hybrid scoring (embeddings + GPT)
  */
 
 // Dimension types based on the 15 work-style dimensions
@@ -60,91 +63,153 @@ export const DIMENSION_LABELS: Record<WorkStyleDimension, string> = {
   work_preference_balance: 'Work Preference Balance',
 };
 
-// Question structure with dimension mapping
+// Question structure with dimension mapping and reverse coding
 export interface WorkStyleQuestion {
   id: number;
   text: string;
   dimension: WorkStyleDimension;
+  isReverseCoded: boolean;
 }
 
-// Updated questions - work-behavior based wording
+// 20 Likert Scale Questions (as specified in requirements)
 export const WORK_STYLE_QUESTIONS: WorkStyleQuestion[] = [
   {
     id: 1,
-    text: "I enjoy working in team environments and collaborating with others on shared goals.",
+    text: "I work effectively with others to achieve shared goals.",
     dimension: 'collaboration',
+    isReverseCoded: false,
   },
   {
     id: 2,
-    text: "I prefer to work independently and manage my own schedule without much supervision.",
-    dimension: 'independence',
+    text: "I find it difficult to collaborate with people who have different working styles.",
+    dimension: 'collaboration',
+    isReverseCoded: true,
   },
   {
     id: 3,
-    text: "I am comfortable taking on leadership roles when needed to guide a team toward its goals.",
-    dimension: 'leadership_readiness',
+    text: "I can manage my work responsibilities without constant supervision.",
+    dimension: 'independence',
+    isReverseCoded: false,
   },
   {
     id: 4,
-    text: "I adapt quickly to changing priorities and new challenges in my work environment.",
-    dimension: 'adaptability',
+    text: "I struggle to stay productive when working independently.",
+    dimension: 'independence',
+    isReverseCoded: true,
   },
   {
     id: 5,
-    text: "I pay close attention to details and ensure accuracy in my work deliverables.",
-    dimension: 'attention_to_detail',
+    text: "I am willing to take responsibility when leading tasks or projects.",
+    dimension: 'leadership_readiness',
+    isReverseCoded: false,
   },
   {
     id: 6,
-    text: "I am motivated by complex problems that require creative thinking to solve.",
-    dimension: 'problem_solving',
+    text: "I adapt quickly when priorities or requirements change.",
+    dimension: 'adaptability',
+    isReverseCoded: false,
   },
   {
     id: 7,
-    text: "I communicate clearly and effectively with team members and stakeholders.",
-    dimension: 'communication',
+    text: "I feel uncomfortable when my work environment changes suddenly.",
+    dimension: 'adaptability',
+    isReverseCoded: true,
   },
   {
     id: 8,
-    text: "I remain calm and focused when working under pressure or tight deadlines.",
-    dimension: 'stress_tolerance',
+    text: "I carefully review my work to ensure accuracy.",
+    dimension: 'attention_to_detail',
+    isReverseCoded: false,
   },
   {
     id: 9,
-    text: "I actively seek feedback from others to improve my performance and skills.",
-    dimension: 'feedback_receptiveness',
+    text: "I often overlook small details in my work.",
+    dimension: 'attention_to_detail',
+    isReverseCoded: true,
   },
   {
     id: 10,
-    text: "I am comfortable with ambiguity and can make decisions even with incomplete information.",
-    dimension: 'ambiguity_tolerance',
+    text: "I enjoy solving complex problems that require critical thinking.",
+    dimension: 'problem_solving',
+    isReverseCoded: false,
   },
   {
     id: 11,
-    text: "I take initiative and act proactively without waiting for explicit direction.",
-    dimension: 'initiative',
+    text: "I clearly express my ideas when communicating with others.",
+    dimension: 'communication',
+    isReverseCoded: false,
   },
   {
     id: 12,
-    text: "I prioritize building and maintaining strong professional relationships.",
-    dimension: 'relationship_building',
+    text: "I find it hard to explain my thoughts in a clear and structured way.",
+    dimension: 'communication',
+    isReverseCoded: true,
   },
   {
     id: 13,
-    text: "I am passionate about continuous learning and developing new skills.",
-    dimension: 'learning_orientation',
+    text: "I remain calm and productive under pressure.",
+    dimension: 'stress_tolerance',
+    isReverseCoded: false,
   },
   {
     id: 14,
-    text: "I approach conflicts constructively and work to resolve disagreements professionally.",
-    dimension: 'conflict_management',
+    text: "I feel overwhelmed when working under tight deadlines.",
+    dimension: 'stress_tolerance',
+    isReverseCoded: true,
   },
   {
     id: 15,
-    text: "I value maintaining a healthy balance between work responsibilities and personal well-being.",
-    dimension: 'work_preference_balance',
+    text: "I actively seek feedback to improve my performance.",
+    dimension: 'feedback_receptiveness',
+    isReverseCoded: false,
+  },
+  {
+    id: 16,
+    text: "I can make decisions even when information is incomplete.",
+    dimension: 'ambiguity_tolerance',
+    isReverseCoded: false,
+  },
+  {
+    id: 17,
+    text: "I take initiative without waiting to be told what to do.",
+    dimension: 'initiative',
+    isReverseCoded: false,
+  },
+  {
+    id: 18,
+    text: "I build and maintain positive working relationships with others.",
+    dimension: 'relationship_building',
+    isReverseCoded: false,
+  },
+  {
+    id: 19,
+    text: "I continuously look for opportunities to learn new skills.",
+    dimension: 'learning_orientation',
+    isReverseCoded: false,
+  },
+  {
+    id: 20,
+    text: "I avoid addressing conflicts even when they affect work outcomes.",
+    dimension: 'conflict_management',
+    isReverseCoded: true,
   },
 ];
+
+// Essay question configuration
+export const ESSAY_QUESTION = {
+  id: 21,
+  text: "Describe a situation where you faced a challenging work problem or conflict. How did you handle it, and what was the outcome? What did you learn from the experience?",
+  dimensions: [
+    'problem_solving',
+    'communication',
+    'conflict_management',
+    'stress_tolerance',
+    'learning_orientation',
+    'initiative',
+    'adaptability',
+    'relationship_building'
+  ] as WorkStyleDimension[]
+};
 
 // Scale labels for the 5-point Likert scale
 export const SCALE_LABELS = [
@@ -168,16 +233,7 @@ export type RoleFamily =
   | 'qa'
   | 'default';
 
-// Role family profiles with dimension weights
-export interface RoleFamilyProfile {
-  name: string;
-  displayName: string;
-  description: string;
-  weights: Record<WorkStyleDimension, WeightLevel>;
-}
-
 // Role family keyword mapping - EASY TO EXTEND
-// Add new keywords here to automatically match new job titles
 export const ROLE_FAMILY_KEYWORDS: Record<RoleFamily, string[]> = {
   development: [
     'developer', 'engineer', 'programmer', 'software', 
@@ -220,6 +276,14 @@ export const ROLE_FAMILY_KEYWORDS: Record<RoleFamily, string[]> = {
   ],
   default: ['default']
 };
+
+// Role family profiles with dimension weights
+export interface RoleFamilyProfile {
+  name: string;
+  displayName: string;
+  description: string;
+  weights: Record<WorkStyleDimension, WeightLevel>;
+}
 
 // Role family profiles
 export const ROLE_FAMILY_PROFILES: Record<RoleFamily, RoleFamilyProfile> = {
@@ -449,19 +513,27 @@ export const ROLE_FAMILY_PROFILES: Record<RoleFamily, RoleFamilyProfile> = {
 export function detectRoleFamily(jobTitle: string): RoleFamily {
   const titleLower = jobTitle.toLowerCase();
   
-  // Check each role family's keywords
+  // Collect all matches with their keyword length (longer = more specific = higher priority)
+  const matches: Array<{family: string, keywordLength: number}> = [];
+  
   for (const [family, keywords] of Object.entries(ROLE_FAMILY_KEYWORDS)) {
-    // Skip the default family in this check
     if (family === 'default') continue;
     
     for (const keyword of keywords) {
       if (titleLower.includes(keyword.toLowerCase())) {
-        return family as RoleFamily;
+        matches.push({ family, keywordLength: keyword.length });
       }
     }
   }
   
-  // Return default if no match
+  // Sort by keyword length (longest first) to prioritize more specific matches
+  matches.sort((a, b) => b.keywordLength - a.keywordLength);
+  
+  // Return the best match if any
+  if (matches.length > 0) {
+    return matches[0].family as RoleFamily;
+  }
+  
   return 'default';
 }
 
@@ -473,20 +545,26 @@ export const AVAILABLE_ROLE_FAMILIES = Object.keys(ROLE_FAMILY_PROFILES)
     ...ROLE_FAMILY_PROFILES[key as RoleFamily]
   }));
 
-// Answer structure from database
+// Answer structure from database (Likert only)
 export interface WorkStyleAnswer {
   question: number;
   answer: number;
 }
 
-// Dimension scores structure
+// Essay answer structure
+export interface EssayAnswer {
+  question: number;
+  essay: string;
+}
+
+// Legacy dimension scores (for backward compatibility)
 export interface DimensionScores {
   dimension: WorkStyleDimension;
   score: number;
   rawAnswers: number[];
 }
 
-// Work style assessment result
+// Work style assessment result (legacy format)
 export interface WorkStyleResult {
   dimensionScores: DimensionScores[];
   overallAlignmentScore: number;
@@ -497,27 +575,45 @@ export interface WorkStyleResult {
   developmentAreas: WorkStyleDimension[];
 }
 
-// Scoring utility functions
+// Reverse code a Likert answer value
+export function reverseCodeAnswer(answer: number): number {
+  // 1 -> 5, 2 -> 4, 3 -> 3, 4 -> 2, 5 -> 1
+  return 6 - answer;
+}
+
+// Process answers with reverse coding
+export function processAnswers(answers: WorkStyleAnswer[]): WorkStyleAnswer[] {
+  return answers.map(answer => {
+    const question = WORK_STYLE_QUESTIONS.find(q => q.id === answer.question);
+    if (question?.isReverseCoded) {
+      return {
+        ...answer,
+        answer: reverseCodeAnswer(answer.answer)
+      };
+    }
+    return answer;
+  });
+}
+
 /**
- * Calculate dimension scores from raw answers
+ * Calculate dimension scores from raw answers (legacy method)
  */
 export function calculateDimensionScores(answers: WorkStyleAnswer[]): DimensionScores[] {
   const dimensionMap = new Map<WorkStyleDimension, number[]>();
   
-  // Initialize dimension map
   WORK_STYLE_QUESTIONS.forEach(q => {
     dimensionMap.set(q.dimension, []);
   });
   
-  // Group answers by dimension
-  answers.forEach(answer => {
+  const processedAnswers = processAnswers(answers);
+  
+  processedAnswers.forEach(answer => {
     const question = WORK_STYLE_QUESTIONS.find(q => q.id === answer.question);
     if (question && dimensionMap.has(question.dimension)) {
       dimensionMap.get(question.dimension)!.push(answer.answer);
     }
   });
   
-  // Calculate average score per dimension
   const results: DimensionScores[] = [];
   dimensionMap.forEach((rawAnswers, dimension) => {
     const score = rawAnswers.length > 0
@@ -530,13 +626,12 @@ export function calculateDimensionScores(answers: WorkStyleAnswer[]): DimensionS
 }
 
 /**
- * Calculate Work Style Alignment Score for a specific role family
+ * Calculate Work Style Alignment Score for a specific role family (legacy method)
  */
 export function calculateAlignmentScore(
   dimensionScores: DimensionScores[],
   jobTitle: string
 ): { score: number; breakdown: Record<string, number>; matchedFamily: RoleFamily } {
-  // Auto-detect role family from job title
   const roleFamily = detectRoleFamily(jobTitle);
   const profile = ROLE_FAMILY_PROFILES[roleFamily];
   
@@ -547,8 +642,6 @@ export function calculateAlignmentScore(
   dimensionScores.forEach(ds => {
     const weightLevel = profile.weights[ds.dimension];
     const weight = WEIGHT_VALUES[weightLevel];
-    
-    // Normalize score to 0-100 (since answers are 1-5)
     const normalizedScore = (ds.score / 5) * 100;
     
     weightedSum += normalizedScore * weight;
@@ -591,7 +684,7 @@ export function categorizeDimensions(dimensionScores: DimensionScores[]): {
 }
 
 /**
- * Get full work style result for a job title
+ * Get full work style result for a job title (legacy method)
  */
 export function getWorkStyleResult(
   answers: WorkStyleAnswer[],

@@ -1168,7 +1168,7 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
                 const [resumeResult, videoResult, testResult] = await Promise.all([
                   supabase.from('resumes').select('*').eq('applicant_id', applicant.id).maybeSingle(),
                   supabase.from('video_assessments').select('*').eq('applicant_id', applicant.id).maybeSingle(),
-                  supabase.from('personality_tests').select('*').eq('applicant_id', applicant.id).maybeSingle(),
+                  supabase.from('work_style_assessments').select('*').eq('applicant_id', applicant.id).maybeSingle(),
                 ]);
 
                 return {
