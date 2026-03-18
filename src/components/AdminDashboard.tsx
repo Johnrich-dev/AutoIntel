@@ -682,7 +682,7 @@ export function AdminDashboard() {
                 <div className="border border-gray-200 rounded-lg p-4">
                   <div className="flex items-center gap-3 mb-3">
                     <ClipboardList className="w-5 h-5 text-gray-600" />
-                    <h3 className="text-lg font-semibold text-gray-900">Personality Test</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">Work Profiling Test</h3>
                     {getStatusBadge(selectedApplicant.test?.status)}
                   </div>
                   <div className="bg-gray-50 rounded p-4 mb-3">
@@ -705,7 +705,7 @@ export function AdminDashboard() {
                         handleAction(
                           selectedApplicant.id,
                           'sent_test_invite',
-                          'Sent personality test invitation'
+                          'Sent work profiling test invitation'
                         )
                       }
                       className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"

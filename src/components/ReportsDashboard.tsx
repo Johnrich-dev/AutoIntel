@@ -98,7 +98,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
       { stage: 'Applied', count: filteredApplicants.length, color: 'bg-blue-500' },
       { stage: 'Resume Review', count: filteredApplicants.filter(a => a.resume?.status).length, color: 'bg-emerald-500' },
       { stage: 'Video Assessment', count: filteredApplicants.filter(a => a.video?.status === 'completed').length, color: 'bg-purple-500' },
-      { stage: 'Personality Test', count: filteredApplicants.filter(a => a.test?.status === 'completed').length, color: 'bg-orange-500' },
+      { stage: 'Work Profiling Test', count: filteredApplicants.filter(a => a.test?.status === 'completed').length, color: 'bg-orange-500' },
       { stage: 'Hired', count: Math.floor(filteredApplicants.filter(a => a.test?.status === 'completed').length * 0.3), color: 'bg-green-500' },
     ];
   }, [filteredApplicants]);
@@ -376,7 +376,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                       icon: Video
                     },
                     { 
-                      stage: 'Personality Test', 
+                      stage: 'Work Profiling Test', 
                       count: filteredApplicants.filter(a => a.test?.status === 'completed').length,
                       desc: 'Test completed',
                       color: 'bg-orange-500',

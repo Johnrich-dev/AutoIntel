@@ -320,7 +320,7 @@ export function ApplicantDetailModal({
               { id: 'overview', label: 'Overview', icon: User },
               { id: 'resume', label: 'Resume', icon: FileText },
               { id: 'video', label: 'Video Assessment', icon: Video },
-              { id: 'test', label: 'Personality Test', icon: ClipboardCheck },
+              { id: 'test', label: 'Work Profiling Test', icon: ClipboardCheck },
               { id: 'notes', label: `Notes (${notes.length})`, icon: MessageSquare },
               { id: 'emails', label: `Emails (${emails.length})`, icon: Mail },
             ].map(tab => (
@@ -467,7 +467,7 @@ export function ApplicantDetailModal({
                         type: 'test',
                         icon: <ClipboardCheck className="w-4 h-4" />,
                         color: 'text-orange-500',
-                        title: 'Personality test started',
+                        title: 'Work Profiling test started',
                         date: applicant.test.created_at
                       });
                     }
@@ -478,7 +478,7 @@ export function ApplicantDetailModal({
                         type: 'test',
                         icon: <ClipboardCheck className="w-4 h-4" />,
                         color: 'text-orange-500',
-                        title: applicant.test.status === 'completed' ? 'Personality test completed' : 'Personality test submitted',
+                        title: applicant.test.status === 'completed' ? 'Work Profiling test completed' : 'Work Profiling test submitted',
                         date: applicant.test.submitted_at
                       });
                     }
