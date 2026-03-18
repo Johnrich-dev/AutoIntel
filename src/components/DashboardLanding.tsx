@@ -75,7 +75,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
       textColor: 'text-purple-600',
     },
     {
-      title: 'Personality Test',
+      title: 'Work Profiling Test',
       value: testStages.completed,
       subValue: `${testStages.notStarted} pending`,
       icon: ClipboardCheck,
@@ -203,7 +203,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
         if (testTime) {
           activities.push({
             type: 'test_completed' as const,
-            message: 'Completed personality test',
+            message: 'Completed work profiling test',
             time: testTime,
             applicantName: applicant.name,
           });
@@ -553,7 +553,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
             <div>
               <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
                 <ClipboardCheck className="w-4 h-4 text-orange-500" />
-                Personality Test
+                Work Profiling Test
               </h3>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
