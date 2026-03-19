@@ -76,10 +76,6 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
         };
       }
 
-      // Get job title from applicant (if available)
-      // We'll use a default for now - in production this would come from the applicant's job application
-      const jobTitle = "Software Developer"; // This would be dynamic in production
-
       // First, save the raw answers to the database
       const { data: existingTest } = await client
         .from('work_style_assessments')
@@ -201,7 +197,7 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
             <p className="text-blue-100 mt-1">
               {isEssayQuestion 
                 ? 'Final Question: Share your experience' 
-                : `${questions.length} questions about your work style and preferences`}
+                : `${questions.length} likert scale questions and one short essay to help evaluate your work preferences, behaviors, and role alignment.`}
             </p>
 
             <div className="mt-4">
@@ -223,7 +219,7 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
             {!isEssayQuestion && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
                 <p className="text-amber-900 text-sm">
-                  <strong>Instructions:</strong> Please answer honestly based on how you usually behave in academic, internship, or work-related situations. There are no right or wrong answers.
+                  <strong>Instructions:</strong> Please answer honestly based on how you typically behave in academic, internship, or work-related situations. For each statement, select the option that best reflects your level of agreement. There are no right or wrong answers. After completing the multiple-choice section, you will be asked to answer a short essay question to further describe your work approach.
                 </p>
               </div>
             )}

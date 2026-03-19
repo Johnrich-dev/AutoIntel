@@ -275,7 +275,7 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
                         Work Style and Job Preference Assessment
                       </h3>
                       <p className="text-gray-600 text-sm mb-3">
-                        Complete a 15-question work style assessment to help us understand your preferences.
+                        Complete a 20-question Likert-scale assessment and one short essay to help evaluate your work preferences, behaviors, and role alignment.
                       </p>
                       {testCompleted ? (
                         <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
