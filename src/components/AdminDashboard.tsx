@@ -27,18 +27,30 @@ function getParsedResumeData(resume: Resume | undefined): ResumeParsedData | nul
   }
 }
 
-// Navigation menu items
+// Navigation menu items organized by category
 const menuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'applicants', label: 'Applicants', icon: Users },
-  { id: 'shortlisted', label: 'Shortlisted', icon: CheckCircle },
-  { id: 'job-management', label: 'Job Management', icon: Briefcase },
-  { id: 'scoring-settings', label: 'Scoring Settings', icon: Sliders },
-  { id: 'reports', label: 'Reports', icon: BarChart3 },
-  { id: 'settings', label: 'Settings', icon: Settings },
+  // RECRUITMENT Section
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, category: 'RECRUITMENT' },
+  { id: 'applicants', label: 'Applicants', icon: Users, category: 'RECRUITMENT' },
+  { id: 'shortlisted', label: 'Shortlisted', icon: CheckCircle, category: 'RECRUITMENT' },
+  { id: 'job-management', label: 'Job Management', icon: Briefcase, category: 'RECRUITMENT' },
+  // ANALYTICS Section
+  { id: 'reports', label: 'Reports', icon: BarChart3, category: 'ANALYTICS' },
+  { id: 'scoring-settings', label: 'Scoring Settings', icon: Sliders, category: 'ANALYTICS' },
+  // SYSTEM Section
+  { id: 'settings', label: 'Settings', icon: Settings, category: 'SYSTEM' },
 ];
 
 type MenuId = typeof menuItems[number]['id'];
+
+// Group menu items by category
+const groupedMenuItems = menuItems.reduce((acc, item) => {
+  if (!acc[item.category]) {
+    acc[item.category] = [];
+  }
+  acc[item.category].push(item);
+  return acc;
+}, {} as Record<string, typeof menuItems>);
 
 export function AdminDashboard() {
   const { adminLogout, isAdminAuthenticated } = useAuth();
@@ -162,70 +174,112 @@ export function AdminDashboard() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 bg-slate-900 text-white flex flex-col shadow-xl ${sidebarCollapsed ? 'w-20' : 'w-64'} ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} transition-all duration-300 ease-in-out`}
+        className={`fixed inset-y-0 left-0 z-50 bg-slate-950 text-white flex flex-col border-r border-white/5 ${sidebarCollapsed ? 'w-20' : 'w-64'} ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} transition-all duration-300 ease-in-out`}
       >
         {/* Sidebar Header - Branding */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-4 border-b border-white/5 flex items-center justify-between">
           <div className={`flex items-center gap-3 ${sidebarCollapsed ? 'lg:justify-center lg:w-full' : ''}`}>
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Shield className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 bg-blue-600/20 border border-blue-500/30 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Shield className="w-5 h-5 text-blue-400" />
             </div>
             {!sidebarCollapsed && (
               <div className="overflow-hidden whitespace-nowrap">
-                <h1 className="text-lg font-bold text-white">AutoIntel</h1>
-                <p className="text-xs text-slate-400">Admin Dashboard</p>
+                <h1 className="text-lg font-semibold text-white">AutoIntel</h1>
+                <p className="text-xs text-slate-500">Admin Dashboard</p>
               </div>
             )}
           </div>
           {/* Collapse/Expand Button - Desktop Only */}
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="hidden lg:flex p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+            className="hidden lg:flex p-1.5 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
             title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
-            {sidebarCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+            {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </button>
         </div>
 
         {/* Navigation Menu */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3">
-          <ul className="space-y-1">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <li key={item.id}>
-                  <button
-                    onClick={() => {
-                      setActiveMenu(item.id);
-                      setSidebarOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      activeMenu === item.id
-                        ? 'bg-blue-600 text-white'
-                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    } ${sidebarCollapsed ? 'lg:justify-center' : ''}`}
-                    title={sidebarCollapsed ? item.label : undefined}
-                  >
-                    <Icon className="w-5 h-5 flex-shrink-0" />
-                    {!sidebarCollapsed && <span className="whitespace-nowrap overflow-hidden">{item.label}</span>}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+        <nav className="flex-1 overflow-y-auto py-4 px-2">
+          {!sidebarCollapsed && Object.entries(groupedMenuItems).map(([category, items]) => (
+            <div key={category} className="mb-6">
+              <h3 className="px-3 mb-2 text-[10px] font-medium uppercase tracking-widest text-slate-500">{category}</h3>
+              <ul className="space-y-0.5">
+                {items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeMenu === item.id;
+                  return (
+                    <li key={item.id}>
+                      <button
+                        onClick={() => {
+                          setActiveMenu(item.id);
+                          setSidebarOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative ${
+                          isActive
+                            ? 'bg-blue-500/10 text-white'
+                            : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                        }`}
+                        title={sidebarCollapsed ? item.label : undefined}
+                      >
+                        {/* Active indicator - 3px blue vertical accent line */}
+                        {isActive && (
+                          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-blue-500 rounded-r-full" />
+                        )}
+                        <Icon className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive ? 'text-blue-400' : 'text-slate-500 group-hover:translate-x-0.5'}`} />
+                        {!sidebarCollapsed && <span className="whitespace-nowrap overflow-hidden">{item.label}</span>}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+          
+          {/* Collapsed view - show icons only */}
+          {sidebarCollapsed && (
+            <ul className="space-y-0.5">
+              {menuItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeMenu === item.id;
+                return (
+                  <li key={item.id}>
+                    <button
+                      onClick={() => {
+                        setActiveMenu(item.id);
+                        setSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative ${
+                        isActive
+                          ? 'bg-blue-500/10 text-white'
+                          : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                      }`}
+                      title={item.label}
+                    >
+                      {/* Active indicator - 3px blue vertical accent line */}
+                      {isActive && (
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-blue-500 rounded-r-full" />
+                      )}
+                      <Icon className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive ? 'text-blue-400' : 'text-slate-500 group-hover:translate-x-0.5'}`} />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </nav>
 
         {/* Logout Section - Bottom of Sidebar */}
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-white/5">
           <button
             onClick={() => {
               adminLogout();
               window.location.href = '/?loggedout=true';
             }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors ${sidebarCollapsed ? 'lg:justify-center' : ''}`}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-all duration-200 group ${sidebarCollapsed ? 'lg:justify-center' : ''}`}
             title={sidebarCollapsed ? 'Logout' : undefined}
           >
-            <LogOut className="w-5 h-5 flex-shrink-0" />
+            <LogOut className="w-4 h-4 flex-shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 text-slate-500" />
             {!sidebarCollapsed && <span className="whitespace-nowrap overflow-hidden">Logout</span>}
           </button>
         </div>
@@ -912,3 +966,4 @@ export function AdminDashboard() {
     </div>
   );
 }
+
