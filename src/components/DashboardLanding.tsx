@@ -54,7 +54,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
     { name: 'Applications', count: applicants.length, gradient: 'from-blue-400 to-blue-500' },
     { name: 'Reviewed', count: resumeStages.suitable + resumeStages.notSuitable, gradient: 'from-indigo-400 to-indigo-500' },
     { name: 'Shortlisted', count: resumeStages.suitable, gradient: 'from-green-400 to-emerald-500' },
-    { name: 'Video Done', count: videoStages.completed, gradient: 'from-purple-400 to-violet-500' },
+    { name: 'Video', count: videoStages.completed, gradient: 'from-purple-400 to-violet-500' },
     { name: 'Completed', count: testStages.completed, gradient: 'from-orange-400 to-amber-500' },
   ];
 
@@ -192,26 +192,33 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
         <div className="grid grid-cols-3 gap-6">
           {/* Left - 2/3 width */}
           <div className="col-span-2 space-y-6">
-            {/* Hiring Funnel - Gradients with BLACK numbers */}
+            {/* Recent Activity - Gradients */}
             <div className="bg-white rounded-xl p-5 shadow-lg">
-              <h2 className="text-sm font-bold text-slate-900 mb-4">Hiring Pipeline</h2>
-              <div className="flex items-center gap-2">
-                {funnelStages.map((stage, idx) => {
-                  const pct = maxFunnelCount > 0 ? Math.round((stage.count / maxFunnelCount) * 100) : 0;
+              <h2 className="text-sm font-bold text-slate-900 mb-4">Recent Activity</h2>
+              <div className="space-y-3">
+                {recentActivity.length > 0 ? recentActivity.map((activity, idx) => {
+                  const icons: Record<string, typeof UserPlus> = { new_applicant: UserPlus, resume_reviewed: FileCheck, video_submitted: Video, test_completed: ClipboardCheck };
+                  const gradients: Record<string, string> = {
+                    new_applicant: 'from-blue-400 to-blue-500',
+                    resume_reviewed: 'from-green-400 to-emerald-500',
+                    video_submitted: 'from-purple-400 to-violet-500',
+                    test_completed: 'from-orange-400 to-amber-500',
+                  };
+                  const Icon = icons[activity.type] || UserPlus;
                   return (
-                    <div key={idx} className="flex-1">
-                      <div className="text-center mb-2">
-                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stage.gradient} flex items-center justify-center mx-auto mb-2 shadow-lg`}>
-                          <span className="text-black font-black text-lg">{stage.count}</span>
-                        </div>
-                        <p className="text-xs font-bold text-slate-800">{stage.name}</p>
+                    <div key={idx} className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50 transition-colors">
+                      <div className={`p-2 rounded-lg bg-gradient-to-br ${gradients[activity.type]} shadow-md`}>
+                        <Icon className="w-3.5 h-3.5 text-white" />
                       </div>
-                      <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                        <div className={`h-full bg-gradient-to-r ${stage.gradient} rounded-full`} style={{ width: `${pct}%` }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-900 truncate">{activity.applicantName} {activity.message}</p>
+                        <p className="text-xs text-slate-400">{getRelativeTime(activity.time)}</p>
                       </div>
                     </div>
                   );
-                })}
+                }) : (
+                  <p className="text-xs text-slate-400 text-center py-2">No activity yet</p>
+                )}
               </div>
             </div>
 
@@ -313,33 +320,26 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
               </div>
             </div>
 
-            {/* Recent Activity - Gradients */}
-            <div className="bg-white rounded-xl p-5 shadow-lg">
-              <h2 className="text-sm font-bold text-slate-900 mb-4">Recent Activity</h2>
-              <div className="space-y-3">
-                {recentActivity.length > 0 ? recentActivity.map((activity, idx) => {
-                  const icons: Record<string, typeof UserPlus> = { new_applicant: UserPlus, resume_reviewed: FileCheck, video_submitted: Video, test_completed: ClipboardCheck };
-                  const gradients: Record<string, string> = {
-                    new_applicant: 'from-blue-400 to-blue-500',
-                    resume_reviewed: 'from-green-400 to-emerald-500',
-                    video_submitted: 'from-purple-400 to-violet-500',
-                    test_completed: 'from-orange-400 to-amber-500',
-                  };
-                  const Icon = icons[activity.type] || UserPlus;
+            {/* Hiring Funnel - Gradients with BLACK numbers - Compact for narrow column */}
+            <div className="bg-white rounded-xl p-4 shadow-lg">
+              <h2 className="text-sm font-bold text-slate-900 mb-3">Hiring Pipeline</h2>
+              <div className="flex items-center gap-1">
+                {funnelStages.map((stage, idx) => {
+                  const pct = maxFunnelCount > 0 ? Math.round((stage.count / maxFunnelCount) * 100) : 0;
                   return (
-                    <div key={idx} className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50 transition-colors">
-                      <div className={`p-2 rounded-lg bg-gradient-to-br ${gradients[activity.type]} shadow-md`}>
-                        <Icon className="w-3.5 h-3.5 text-white" />
+                    <div key={idx} className="flex-1">
+                      <div className="text-center mb-1.5">
+                        <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${stage.gradient} flex items-center justify-center mx-auto mb-1 shadow-md`}>
+                          <span className="text-black font-black text-sm">{stage.count}</span>
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-700">{stage.name}</p>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-slate-900 truncate">{activity.applicantName} {activity.message}</p>
-                        <p className="text-xs text-slate-400">{getRelativeTime(activity.time)}</p>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={`h-full bg-gradient-to-r ${stage.gradient} rounded-full`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
-                }) : (
-                  <p className="text-xs text-slate-400 text-center py-2">No activity yet</p>
-                )}
+                })}
               </div>
             </div>
           </div>
