@@ -14,7 +14,6 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  Eye,
   ChevronLeft,
   ChevronRight,
   ArrowUpDown,
@@ -63,7 +62,10 @@ interface ApplicantWithDetails extends Applicant {
   profileFit?: number;
   overall?: number;
   status?: string;
-  recommendation?: 'highly_recommended' | 'recommended' | 'needs_review';
+  recommendation?: 'highly_recommended' | 'recommended' | 'needs_review' | 'pending';
+  // Explicit recommendation - set by user, not auto-calculated
+  // Includes 'pending' for candidates moved to Final Interview
+  explicitRecommendation?: 'highly_recommended' | 'recommended' | 'needs_review' | 'pending' | null;
   notes?: CandidateNote[];
 }
 
@@ -210,9 +212,13 @@ function calculateOverallScore(resumeScore: number, videoScore: number, profileF
   return Math.round(score);
 }
 
-function getRecommendation(overall: number, resumeScore: number): 'highly_recommended' | 'recommended' | 'needs_review' {
-  if (overall >= 85 && resumeScore >= 80) return 'highly_recommended';
-  if (overall >= 70) return 'recommended';
+// Note: Recommendation is now user-assigned, not auto-calculated
+// Default is 'needs_review' unless explicitly set by user
+function getUserRecommendation(explicitRecommendation?: string | null): string {
+  // Return explicit recommendation if set, otherwise default to 'needs_review'
+  if (explicitRecommendation && ['highly_recommended', 'recommended', 'pending'].includes(explicitRecommendation)) {
+    return explicitRecommendation;
+  }
   return 'needs_review';
 }
 
@@ -222,6 +228,8 @@ function getRecommendationLabel(recommendation: string): { text: string; color: 
       return { text: 'Highly Recommended', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: Star };
     case 'recommended':
       return { text: 'Recommended', color: 'bg-blue-100 text-blue-700 border-blue-200', icon: ThumbsUp };
+    case 'pending':
+      return { text: 'Pending', color: 'bg-purple-100 text-purple-700 border-purple-200', icon: Clock };
     default:
       return { text: 'Needs Review', color: 'bg-amber-100 text-amber-700 border-amber-200', icon: Clock };
   }
@@ -273,7 +281,7 @@ function StatusBadge({ status }: { status: string }) {
 function RecommendationBadge({ recommendation }: { recommendation: string }) {
   const { text, color, icon: Icon } = getRecommendationLabel(recommendation);
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${color}`}>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${color} cursor-default`}>
       <Icon className="w-3.5 h-3.5" />
       {text}
     </span>
@@ -290,14 +298,16 @@ interface QuickProfilePanelProps {
   onClose: () => void;
   onStatusChange: (id: string, status: string) => void;
   onAddNote: (id: string, note: string) => void;
+  onRecommendationChange: (id: string, recommendation: 'highly_recommended' | 'recommended' | 'needs_review' | 'pending') => void;
 }
 
-function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNote }: QuickProfilePanelProps) {
+function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNote, onRecommendationChange }: QuickProfilePanelProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'resume' | 'video' | 'notes'>('overview');
   const [newNote, setNewNote] = useState('');
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [showTranscriptModal, setShowTranscriptModal] = useState(false);
   const [showFullResumeModal, setShowFullResumeModal] = useState(false);
+  const [showRecommendationDropdown, setShowRecommendationDropdown] = useState(false);
 
   if (!candidate || !isOpen) return null;
 
@@ -380,7 +390,74 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
               </div>
             </div>
           </div>
-          <RecommendationBadge recommendation={candidate.recommendation || 'needs_review'} />
+          {/* Clickable Recommendation Badge with Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowRecommendationDropdown(!showRecommendationDropdown)}
+              className="focus:outline-none"
+            >
+              <RecommendationBadge recommendation={getUserRecommendation(candidate.explicitRecommendation)} />
+            </button>
+            {/* Dropdown Menu */}
+            {showRecommendationDropdown && (
+              <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                  Set Recommendation
+                </div>
+                <button
+                  onClick={() => {
+                    onRecommendationChange(candidate.id, 'highly_recommended');
+                    setShowRecommendationDropdown(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                    candidate.explicitRecommendation === 'highly_recommended'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <Star className="w-4 h-4 text-emerald-500" />
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium">Highly Recommended</span>
+                    <span className="text-xs text-gray-500">Top candidate for the role</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
+                    onRecommendationChange(candidate.id, 'recommended');
+                    setShowRecommendationDropdown(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                    candidate.explicitRecommendation === 'recommended'
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <ThumbsUp className="w-4 h-4 text-blue-500" />
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium">Recommended</span>
+                    <span className="text-xs text-gray-500">Good fit for the role</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
+                    onRecommendationChange(candidate.id, 'needs_review');
+                    setShowRecommendationDropdown(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                    !candidate.explicitRecommendation || candidate.explicitRecommendation === 'needs_review'
+                      ? 'bg-amber-50 text-amber-700'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <Clock className="w-4 h-4 text-amber-500" />
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium">Needs Review</span>
+                    <span className="text-xs text-gray-500">Requires further evaluation</span>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -910,6 +987,7 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
           <XCircle className="w-4 h-4" />
         </button>
       </div>
+
     </div>
   );
 }
@@ -982,7 +1060,7 @@ function ComparisonModal({ candidates, isOpen, onClose }: ComparisonModalProps) 
                 </div>
 
                 <div className="pt-2">
-                  <RecommendationBadge recommendation={candidate.recommendation || 'needs_review'} />
+                  <RecommendationBadge recommendation={getUserRecommendation(candidate.explicitRecommendation)} />
                 </div>
               </div>
             ))}
@@ -1132,6 +1210,14 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(false);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setOpenDropdownId(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
   const [scoringSettings, setScoringSettings] = useState<ScoringSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const itemsPerPage = 10;
@@ -1199,7 +1285,11 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
       const videoScore = calculateVideoScore(applicant.video);
       const profileFit = calculateProfileFit(applicant.test, applicant.position);
       const overall = calculateOverallScore(resumeScore, videoScore, profileFit);
-      const recommendation = getRecommendation(overall, resumeScore);
+      
+      // Use explicit recommendation if set, otherwise default to 'needs_review'
+      // Recommendation is user-assigned, not auto-calculated
+      const recommendation: 'highly_recommended' | 'recommended' | 'needs_review' | 'pending' = 
+        getUserRecommendation(applicant.explicitRecommendation) as 'highly_recommended' | 'recommended' | 'needs_review' | 'pending';
       
       // Default to shortlisted status if not set
       let status = applicant.status || 'shortlisted';
@@ -1239,9 +1329,16 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
       result = result.filter((a) => a.status === statusFilter);
     }
 
-    // Recommendation filter
+    // Recommendation filter - use explicitRecommendation if available, otherwise filter by calculated recommendation
     if (recommendationFilter !== 'all') {
-      result = result.filter((a) => a.recommendation === recommendationFilter);
+      result = result.filter((a) => {
+        // If explicit recommendation is set, use it
+        if (a.explicitRecommendation) {
+          return a.explicitRecommendation === recommendationFilter;
+        }
+        // Otherwise filter by the default 'needs_review'
+        return recommendationFilter === 'needs_review';
+      });
     }
 
     // Sort
@@ -1311,9 +1408,42 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
 
   const handleStatusChange = useCallback((id: string, newStatus: string) => {
     setApplicants((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: newStatus } : a))
+      prev.map((a) => {
+        if (a.id !== id) return a;
+        
+        // When moving to Final Interview, set recommendation to 'pending' if not already explicitly set
+        if (newStatus === 'final_interview' && !a.explicitRecommendation) {
+          return { ...a, status: newStatus, explicitRecommendation: 'pending' as const };
+        }
+        
+        return { ...a, status: newStatus };
+      })
     );
-  }, []);
+    
+    // Update selected candidate as well if it's the same one
+    if (selectedCandidate?.id === id) {
+      setSelectedCandidate((prev) => {
+        if (!prev) return null;
+        if (newStatus === 'final_interview' && !prev.explicitRecommendation) {
+          return { ...prev, status: newStatus, explicitRecommendation: 'pending' as const };
+        }
+        return { ...prev, status: newStatus };
+      });
+    }
+  }, [selectedCandidate]);
+
+  const handleRecommendationChange = useCallback((id: string, recommendation: 'highly_recommended' | 'recommended' | 'needs_review' | 'pending') => {
+    setApplicants((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, explicitRecommendation: recommendation } : a))
+    );
+    
+    // Update selected candidate as well if it's the same one
+    if (selectedCandidate?.id === id) {
+      setSelectedCandidate((prev) =>
+        prev ? { ...prev, explicitRecommendation: recommendation } : null
+      );
+    }
+  }, [selectedCandidate]);
 
   const handleAddNote = useCallback((id: string, noteText: string) => {
     const newNote: CandidateNote = {
@@ -1493,12 +1623,13 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {[
           { label: 'Total Shortlisted', value: processedApplicants.length, icon: Users, color: 'blue' },
-          { label: 'Highly Recommended', value: processedApplicants.filter((a) => a.recommendation === 'highly_recommended').length, icon: Star, color: 'emerald' },
-          { label: 'Final Interview', value: processedApplicants.filter((a) => a.status === 'final_interview').length, icon: CheckCircle, color: 'green' },
-          { label: 'Avg. Overall Score', value: processedApplicants.length ? Math.round(processedApplicants.reduce((sum, a) => sum + (a.overall || 0), 0) / processedApplicants.length) : 0, icon: TrendingUp, color: 'purple' },
+          { label: 'Needs Review', value: processedApplicants.filter((a) => !a.explicitRecommendation || a.explicitRecommendation === 'needs_review').length, icon: Clock, color: 'amber' },
+          { label: 'Highly Recommended', value: processedApplicants.filter((a) => a.explicitRecommendation === 'highly_recommended').length, icon: Star, color: 'emerald' },
+          { label: 'Recommended', value: processedApplicants.filter((a) => a.explicitRecommendation === 'recommended').length, icon: ThumbsUp, color: 'blue' },
+          { label: 'Pending (Final Int.)', value: processedApplicants.filter((a) => a.explicitRecommendation === 'pending' || a.status === 'final_interview').length, icon: CheckCircle, color: 'purple' },
         ].map((stat, idx) => (
           <div key={idx} className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
             <div className="flex items-center justify-between">
@@ -1512,6 +1643,110 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Quick Filter Tabs */}
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+        <button
+          onClick={() => {
+            setRecommendationFilter('all');
+            setCurrentPage(1);
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            recommendationFilter === 'all'
+              ? 'bg-gray-900 text-white'
+              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          All
+          <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+            recommendationFilter === 'all'
+              ? 'bg-white/20 text-white'
+              : 'bg-gray-100 text-gray-600'
+          }`}>
+            {processedApplicants.length}
+          </span>
+        </button>
+        <button
+          onClick={() => {
+            setRecommendationFilter('needs_review');
+            setCurrentPage(1);
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            recommendationFilter === 'needs_review'
+              ? 'bg-amber-600 text-white'
+              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          Needs Review
+          <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+            recommendationFilter === 'needs_review'
+              ? 'bg-white/20 text-white'
+              : 'bg-gray-100 text-gray-600'
+          }`}>
+            {processedApplicants.filter(a => !a.explicitRecommendation || a.explicitRecommendation === 'needs_review').length}
+          </span>
+        </button>
+        <button
+          onClick={() => {
+            setRecommendationFilter('highly_recommended');
+            setCurrentPage(1);
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            recommendationFilter === 'highly_recommended'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          Highly Recommended
+          <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+            recommendationFilter === 'highly_recommended'
+              ? 'bg-white/20 text-white'
+              : 'bg-gray-100 text-gray-600'
+          }`}>
+            {processedApplicants.filter(a => a.explicitRecommendation === 'highly_recommended').length}
+          </span>
+        </button>
+        <button
+          onClick={() => {
+            setRecommendationFilter('recommended');
+            setCurrentPage(1);
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            recommendationFilter === 'recommended'
+              ? 'bg-blue-600 text-white'
+              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          Recommended
+          <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+            recommendationFilter === 'recommended'
+              ? 'bg-white/20 text-white'
+              : 'bg-gray-100 text-gray-600'
+          }`}>
+            {processedApplicants.filter(a => a.explicitRecommendation === 'recommended').length}
+          </span>
+        </button>
+        <button
+          onClick={() => {
+            setRecommendationFilter('pending');
+            setCurrentPage(1);
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            recommendationFilter === 'pending'
+              ? 'bg-purple-600 text-white'
+              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          Pending
+          <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+            recommendationFilter === 'pending'
+              ? 'bg-white/20 text-white'
+              : 'bg-gray-100 text-gray-600'
+          }`}>
+            {processedApplicants.filter(a => a.explicitRecommendation === 'pending' || a.status === 'final_interview').length}
+          </span>
+        </button>
       </div>
 
       {/* Filters Bar */}
@@ -1533,7 +1768,10 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
           <div className="flex flex-wrap gap-3">
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
               className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
             >
               <option value="all">All Statuses</option>
@@ -1542,16 +1780,7 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
               <option value="rejected">Rejected</option>
             </select>
 
-            <select
-              value={recommendationFilter}
-              onChange={(e) => setRecommendationFilter(e.target.value)}
-              className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-            >
-              <option value="all">All Recommendations</option>
-              <option value="highly_recommended">Highly Recommended</option>
-              <option value="recommended">Recommended</option>
-              <option value="needs_review">Needs Review</option>
-            </select>
+            {/* Recommendation filter is now handled by quick filter tabs above */}
           </div>
         </div>
       </div>
@@ -1644,9 +1873,10 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
               {paginatedApplicants.map((applicant) => (
                 <tr
                   key={applicant.id}
-                  className="hover:bg-gray-50 transition-colors"
+                  className="hover:bg-blue-50 cursor-pointer transition-colors"
+                  onClick={() => openProfilePanel(applicant)}
                 >
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => toggleSelection(applicant.id)}
                       className="text-gray-400 hover:text-gray-600"
@@ -1695,57 +1925,96 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
                     <StatusBadge status={applicant.status || 'shortlisted'} />
                   </td>
                   <td className="px-4 py-4 text-center">
-                    <RecommendationBadge recommendation={applicant.recommendation || 'needs_review'} />
+                    <RecommendationBadge recommendation={getUserRecommendation(applicant.explicitRecommendation)} />
                   </td>
-                  <td className="px-4 py-4">
+                  <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => openProfilePanel(applicant)}
-                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="View Profile"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <div className="relative group">
-                        <button className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                      {/* Action Dropdown - State-based toggle */}
+                      <div className="relative">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenDropdownId(openDropdownId === applicant.id ? null : applicant.id);
+                          }}
+                          className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        >
                           <MoreHorizontal className="w-4 h-4" />
                         </button>
-                        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 hidden group-hover:block z-10">
-                          <button
-                            onClick={() => handleStatusChange(applicant.id, 'final_interview')}
-                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                          >
-                            <CheckCircle className="w-4 h-4 text-emerald-600" />
-                            Move to Final Interview
-                          </button>
-                          <button
-                            onClick={() => handleStatusChange(applicant.id, 'shortlisted')}
-                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                          >
-                            <Star className="w-4 h-4 text-purple-600" />
-                            Keep in Shortlist
-                          </button>
-                          <button
-                            onClick={() => handleStatusChange(applicant.id, 'rejected')}
-                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                          >
-                            <XCircle className="w-4 h-4 text-red-600" />
-                            Reject Candidate
-                          </button>
-                          <hr className="my-1 border-gray-200" />
-                          <button className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                            <FileText className="w-4 h-4" />
-                            View Resume
-                          </button>
-                          <button className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                            <Video className="w-4 h-4" />
-                            Watch Interview
-                          </button>
-                          <button className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                            <ClipboardList className="w-4 h-4" />
-                            View Transcript
-                          </button>
-                        </div>
+                        {/* Floating Dropdown Menu */}
+                        {openDropdownId === applicant.id && (
+                          <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 overflow-visible">
+                            <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                              Actions
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStatusChange(applicant.id, 'final_interview');
+                                setOpenDropdownId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
+                            >
+                              <CheckCircle className="w-4 h-4 text-emerald-600" />
+                              Move to Final Interview
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStatusChange(applicant.id, 'shortlisted');
+                                setOpenDropdownId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
+                            >
+                              <Star className="w-4 h-4 text-purple-600" />
+                              Keep in Shortlist
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStatusChange(applicant.id, 'rejected');
+                                setOpenDropdownId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50"
+                            >
+                              <XCircle className="w-4 h-4 text-red-600" />
+                              Reject Candidate
+                            </button>
+                            <div className="my-1 border-t border-gray-200" />
+                            <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                              Quick View
+                            </div>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenDropdownId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
+                            >
+                              <FileText className="w-4 h-4" />
+                              View Resume
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenDropdownId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
+                            >
+                              <Video className="w-4 h-4" />
+                              Watch Interview
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenDropdownId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
+                            >
+                              <ClipboardList className="w-4 h-4" />
+                              View Transcript
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -1817,6 +2086,7 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
           onClose={() => setIsProfilePanelOpen(false)}
           onStatusChange={handleStatusChange}
           onAddNote={handleAddNote}
+          onRecommendationChange={handleRecommendationChange}
         />
       )}
 

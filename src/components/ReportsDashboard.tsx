@@ -553,10 +553,10 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                 <div className="relative flex justify-between">
                   {[
                     { label: 'Applied', day: 'Day 0', icon: Mail },
-                    { label: 'Resume Review', day: 'Day 2', icon: FileText },
-                    { label: 'Video Invite', day: 'Day 3', icon: Video },
-                    { label: 'Video Complete', day: 'Day 7', icon: CheckCircle },
-                    { label: 'Test Complete', day: 'Day 10', icon: Award },
+                    { label: 'Resume Review', day: 'Day 1', icon: FileText },
+                    { label: 'Video Invite', day: 'Day 1', icon: Video },
+                    { label: 'Video Complete', day: 'Day 2', icon: CheckCircle },
+                    { label: 'Test Complete', day: 'Day 2', icon: Award },
                   ].map((step, idx) => (
                     <div key={idx} className="flex flex-col items-center bg-white px-2">
                       <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white mb-2">
