@@ -489,14 +489,14 @@ export function AdminJobManagement() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-gray-600 text-lg">Loading jobs...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
+    <div className="min-h-screen bg-slate-50 p-8 lg:p-10">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">

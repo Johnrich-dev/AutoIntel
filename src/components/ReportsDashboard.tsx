@@ -146,7 +146,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-8 lg:p-10 space-y-6 bg-slate-50 min-h-screen">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>

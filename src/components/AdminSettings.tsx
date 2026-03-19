@@ -145,7 +145,7 @@ export function AdminSettings({}: AdminSettingsProps) {
   );
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-8 lg:p-10 space-y-6 bg-slate-50 min-h-screen">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
@@ -172,7 +172,7 @@ export function AdminSettings({}: AdminSettingsProps) {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Sidebar Navigation */}
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden sticky top-4">
             {sections.map((section) => (
               <button
                 key={section.id}
@@ -206,7 +206,7 @@ export function AdminSettings({}: AdminSettingsProps) {
 
         {/* Settings Content */}
         <div className="lg:col-span-3">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200">
             {/* General Settings */}
             {activeSection === 'general' && (
               <div className="p-6">
