@@ -329,7 +329,6 @@ def calculate_final_hybrid():
             "preferred_achievements": ["Dean\'s List"],
             "min_years_experience": 5
         },
-        "job_level": "entry_level",           // Optional: fresh_grad, entry_level, mid_level
         "weights": {                          // Optional: custom weights (overrides job_level)
             "experience_weight": 28,
             "skills_weight": 30,
@@ -391,8 +390,6 @@ def calculate_final_hybrid():
         # Extract parameters
         parsed_resume_json = data.get('parsed_resume_json')
         job_posting = data.get('job_posting')
-        job_level = data.get('job_level', 'entry_level')
-        auto_detect_job_level = data.get('auto_detect_job_level', True)  # Default to True
         weights = data.get('weights')
         baselines = data.get('baselines')
         requirement_weight = data.get('requirement_weight', 0.6)
@@ -404,16 +401,14 @@ def calculate_final_hybrid():
         if not job_posting:
             return jsonify({"error": "job_posting is required"}), 400
         
-        # Calculate final hybrid score
+        # Calculate final hybrid score using unified scoring for all applicants
         result = job_alignment.calculate_final_hybrid_score(
             parsed_resume_json=parsed_resume_json,
             job_posting=job_posting,
-            job_level=job_level,
             weights=weights,
             baselines=baselines,
             requirement_weight=requirement_weight,
-            count_weight=count_weight,
-            auto_detect_job_level=auto_detect_job_level
+            count_weight=count_weight
         )
         
         return jsonify(result), 200
@@ -428,23 +423,17 @@ def calculate_final_hybrid():
 @app.route('/api/get-job-level-presets', methods=['GET'])
 def get_job_level_presets():
     """
-    Get the preset weights, baselines, and thresholds for all job levels.
+    Get the unified scoring profile (used for all applicants).
     
     Response:
     {
-        "fresh_grad": {
-            "weights": {...},
-            "baselines": {...},
-            "thresholds": {...}
-        },
-        "entry_level": {...},
-        "mid_level": {...},
+        "presets": UNIFIED_SCORING_PROFILE,
         "status": "success"
     }
     """
     try:
         return jsonify({
-            "presets": job_alignment.JOB_LEVEL_PRESETS,
+            "presets": job_alignment.UNIFIED_SCORING_PROFILE,
             "status": "success"
         }), 200
     except Exception as e:

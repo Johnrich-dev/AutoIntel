@@ -46,7 +46,6 @@ DEFAULT_SCORING_SETTINGS = {
     "baseline_projects": 2,
     "baseline_traincert": 2,
     "baseline_achievements": 1,
-    "job_level": "unified",
     "scoring_type": "hybrid"
 }
 
@@ -69,72 +68,29 @@ def load_scoring_settings(supabase_client: Any) -> Dict[str, Any]:
             settings = result.data[0]
             print(f"Loaded scoring settings from database: {settings}")
             
-            # Get the job_level from settings
-            job_level = settings.get("job_level", "unified")
-            print(f"[DEBUG] job_level from DB: {job_level}")
+            # Always use unified scoring - no special treatment based on job level
+            qualified_threshold = settings.get("qualified_threshold")
+            review_threshold = settings.get("review_threshold")
             
-            # For unified scoring, ALWAYS use the base columns (qualified_threshold, review_threshold)
-            # These are the columns that the admin configures in the UI
-            if job_level == "unified":
-                qualified_threshold = settings.get("qualified_threshold")
-                review_threshold = settings.get("review_threshold")
-                print(f"[DEBUG] UNIFIED: Using base columns - qualified_threshold={qualified_threshold}, review_threshold={review_threshold}")
-            elif job_level == "fresh_grad":
-                qualified_threshold = settings.get("fresh_grad_qualified_threshold")
-                review_threshold = settings.get("fresh_grad_review_threshold")
-            elif job_level == "mid_level":
-                qualified_threshold = settings.get("mid_level_qualified_threshold")
-                review_threshold = settings.get("mid_level_review_threshold")
-            else:  # entry_level (default) or legacy
-                qualified_threshold = settings.get("entry_level_qualified_threshold")
-                review_threshold = settings.get("entry_level_review_threshold")
+            print(f"[DEBUG] UNIFIED: Using base columns - qualified_threshold={qualified_threshold}, review_threshold={review_threshold}")
             
-            print(f"[DEBUG] Final thresholds after job_level check: qualified_threshold={qualified_threshold}, review_threshold={review_threshold}")
-            
-            # Get weights - for unified, use base columns
-            if job_level == "unified":
-                weights_json = {}
-            elif job_level == "fresh_grad":
-                weights_json = settings.get("fresh_grad_weights") or {}
-            elif job_level == "mid_level":
-                weights_json = settings.get("mid_level_weights") or {}
-            else:
-                weights_json = settings.get("entry_level_weights") or {}
-            
-            print(f"[DEBUG] Using job_level: {job_level}, qualified_threshold: {qualified_threshold}, review_threshold: {review_threshold}")
-            print(f"[DEBUG] Using weights: {weights_json}")
-            
-            # Use values from the new columns, fall back to old columns or defaults
-            # Also include all job-level specific keys for auto-detection later
+            # Use base weights from settings
             return {
-                "experience_weight": weights_json.get("experience_weight") or settings.get("experience_weight", 28),
-                "skills_weight": weights_json.get("skills_weight") or settings.get("skills_weight", 30),
-                "education_weight": weights_json.get("education_weight") or settings.get("education_weight", 18),
-                "projects_weight": weights_json.get("projects_weight") or settings.get("projects_weight", 14),
-                "traincert_weight": weights_json.get("traincert_weight") or settings.get("traincert_weight", 6),
-                "achievements_weight": weights_json.get("achievements_weight") or settings.get("achievements_weight", 4),
+                "experience_weight": settings.get("experience_weight", 28),
+                "skills_weight": settings.get("skills_weight", 30),
+                "education_weight": settings.get("education_weight", 18),
+                "projects_weight": settings.get("projects_weight", 14),
+                "traincert_weight": settings.get("traincert_weight", 6),
+                "achievements_weight": settings.get("achievements_weight", 4),
                 "qualified_threshold": qualified_threshold if qualified_threshold is not None else 78,
                 "review_threshold": review_threshold if review_threshold is not None else 65,
-                "baseline_experience": weights_json.get("baseline_experience") or settings.get("baseline_experience", 2),
-                "baseline_skills": weights_json.get("baseline_skills") or settings.get("baseline_skills", 10),
-                "baseline_education": weights_json.get("baseline_education") or settings.get("baseline_education", 2),
-                "baseline_projects": weights_json.get("baseline_projects") or settings.get("baseline_projects", 2),
-                "baseline_traincert": weights_json.get("baseline_traincert") or settings.get("baseline_traincert", 2),
-                "baseline_achievements": weights_json.get("baseline_achievements") or settings.get("baseline_achievements", 1),
-                "job_level": job_level,
+                "baseline_experience": settings.get("baseline_experience", 2),
+                "baseline_skills": settings.get("baseline_skills", 10),
+                "baseline_education": settings.get("baseline_education", 2),
+                "baseline_projects": settings.get("baseline_projects", 2),
+                "baseline_traincert": settings.get("baseline_traincert", 2),
+                "baseline_achievements": settings.get("baseline_achievements", 1),
                 "scoring_type": settings.get("scoring_type", "hybrid"),
-                # Include all job-level specific thresholds for auto-detection
-                "weights_by_level": settings.get("weights_by_level"),
-                "baselines_by_level": settings.get("baselines_by_level"),
-                "fresh_grad_qualified_threshold": settings.get("fresh_grad_qualified_threshold"),
-                "fresh_grad_review_threshold": settings.get("fresh_grad_review_threshold"),
-                "mid_level_qualified_threshold": settings.get("mid_level_qualified_threshold"),
-                "mid_level_review_threshold": settings.get("mid_level_review_threshold"),
-                "entry_level_qualified_threshold": settings.get("entry_level_qualified_threshold"),
-                "entry_level_review_threshold": settings.get("entry_level_review_threshold"),
-                "fresh_grad_weights": settings.get("fresh_grad_weights"),
-                "mid_level_weights": settings.get("mid_level_weights"),
-                "entry_level_weights": settings.get("entry_level_weights"),
             }
     except Exception as e:
         print(f"Warning: Could not load scoring settings from database: {e}")
@@ -240,9 +196,6 @@ def process_applicant_screening(
             scoring_settings.update(db_settings)
             print(f"Using scoring settings: weights={scoring_settings}")
         
-        # Get job level
-        job_level = scoring_settings.get("job_level", "unified")
-        
         # Use provided thresholds or fall back to settings
         if pass_threshold is None:
             pass_threshold = scoring_settings.get("qualified_threshold", 78)
@@ -252,46 +205,7 @@ def process_applicant_screening(
         # Step 1: Calculate job fit score using 6-category hybrid scoring
         print(f"Calculating 6-category hybrid job fit score for applicant {applicant_id}...")
         
-        # Prepare weights for 6-category hybrid scoring
-        weights = {
-            "experience_weight": scoring_settings.get("experience_weight", 28),
-            "skills_weight": scoring_settings.get("skills_weight", 30),
-            "education_weight": scoring_settings.get("education_weight", 18),
-            "projects_weight": scoring_settings.get("projects_weight", 14),
-            "traincert_weight": scoring_settings.get("traincert_weight", 6),
-            "achievements_weight": scoring_settings.get("achievements_weight", 4)
-        }
-        
-        # Prepare baselines
-        baselines = {
-            "baseline_experience": scoring_settings.get("baseline_experience", 2),
-            "baseline_skills": scoring_settings.get("baseline_skills", 10),
-            "baseline_education": scoring_settings.get("baseline_education", 2),
-            "baseline_projects": scoring_settings.get("baseline_projects", 2),
-            "baseline_traincert": scoring_settings.get("baseline_traincert", 2),
-            "baseline_achievements": scoring_settings.get("baseline_achievements", 1)
-        }
-        
-        # Always auto-detect applicant level from resume FOR DISPLAY PURPOSES ONLY
-        # Scoring now uses unified profile for all applicants
-        detected_job_level = 'entry_level'  # Default
-        
-        # Try to auto-detect from parsed resume first
-        if parsed_resume_json:
-            # Use parsed resume to detect job level (for display only)
-            detected_level = job_alignment.detect_job_level_from_resume(parsed_resume_json)
-            print(f"[INFO] Auto-detected applicant level (for display only): {detected_level}")
-            detected_job_level = detected_level
-        elif resume_text:
-            # Use raw resume text to detect job level (when NER not complete)
-            detected_level = job_alignment.detect_job_level_from_raw_text(resume_text)
-            print(f"[INFO] Auto-detected applicant level from raw text (for display only): {detected_level}")
-            detected_job_level = detected_level
-        else:
-            print(f"[WARNING] No resume data available, using default entry_level")
-        
-        # Use unified scoring for ALL applicants regardless of detected level
-        # The scoring_settings may still have level-specific settings but they are ignored
+        # Always use unified scoring for all applicants - no special treatment
         unified_profile = job_alignment.get_unified_scoring_profile()
         
         # Get unified weights
@@ -325,7 +239,6 @@ def process_applicant_screening(
             review_threshold = review_threshold
         
         print(f"[DEBUG] Using UNIFIED scoring for all applicants")
-        print(f"[DEBUG] Detected job level (for display): {detected_job_level}")
         print(f"[DEBUG] Using qualified_threshold: {qualified_threshold}, review_threshold: {review_threshold}")
         print(f"[DEBUG] Using weights: {weights}")
         print(f"[DEBUG] Using baselines: {baselines}")
@@ -339,19 +252,15 @@ def process_applicant_screening(
         if parsed_resume_json and job_posting:
             # Calculate final hybrid score using UNIFIED scoring for all applicants
             # Formula: FINAL SCORE = (Requirement Match Score × 0.6) + (Count Score × 0.4)
-            # Note: job_level is passed for display purposes only, not for scoring
-            # Pass qualified_threshold and review_threshold from database settings
             hybrid_result = job_alignment.calculate_final_hybrid_score(
                 parsed_resume_json=parsed_resume_json,
                 job_posting=job_posting,
-                job_level=detected_job_level,  # For display purposes only
                 weights=weights,
                 baselines=baselines,
                 requirement_weight=0.6,
                 count_weight=0.4,
-                auto_detect_job_level=False,  # Already detected above
-                qualified_threshold=qualified_threshold,  # From database settings
-                review_threshold=review_threshold  # From database settings
+                qualified_threshold=qualified_threshold,
+                review_threshold=review_threshold
             )
             
             # Use final_score as the main score
@@ -366,7 +275,6 @@ def process_applicant_screening(
             }
             
             print(f"Scoring Type: {hybrid_result.get('scoring_type', 'unified')}")
-            print(f"Detected Job Level (for display): {hybrid_result.get('job_level', 'N/A')}")
             print(f"Requirement Match Score: {requirement_match_score}")
             print(f"Count Score: {count_score}")
             print(f"Final Score: {score} (60% requirement + 40% count)")
