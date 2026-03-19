@@ -156,14 +156,14 @@ export function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-gray-600 text-lg">Loading dashboard...</div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-500 text-lg">Loading dashboard...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-gray-50 flex">
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div 
@@ -174,25 +174,25 @@ export function AdminDashboard() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 bg-slate-950 text-white flex flex-col border-r border-white/5 ${sidebarCollapsed ? 'w-20' : 'w-64'} ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} transition-all duration-300 ease-in-out`}
+        className={`fixed inset-y-0 left-0 z-50 bg-white text-gray-700 flex flex-col border-r border-gray-100 ${sidebarCollapsed ? 'w-20' : 'w-64'} ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} transition-all duration-300 ease-in-out shadow-sm`}
       >
         {/* Sidebar Header - Branding */}
-        <div className="p-4 border-b border-white/5 flex items-center justify-between">
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           <div className={`flex items-center gap-3 ${sidebarCollapsed ? 'lg:justify-center lg:w-full' : ''}`}>
-            <div className="w-10 h-10 bg-blue-600/20 border border-blue-500/30 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Shield className="w-5 h-5 text-blue-400" />
+            <div className="w-10 h-10 bg-blue-100 border border-blue-200 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Shield className="w-5 h-5 text-blue-500" />
             </div>
             {!sidebarCollapsed && (
               <div className="overflow-hidden whitespace-nowrap">
-                <h1 className="text-lg font-semibold text-white">AutoIntel</h1>
-                <p className="text-xs text-slate-500">Admin Dashboard</p>
+                <h1 className="text-lg font-semibold text-gray-900">AutoIntel</h1>
+                <p className="text-xs text-gray-500">Admin Dashboard</p>
               </div>
             )}
           </div>
           {/* Collapse/Expand Button - Desktop Only */}
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="hidden lg:flex p-1.5 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+            className="hidden lg:flex p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
@@ -203,7 +203,7 @@ export function AdminDashboard() {
         <nav className="flex-1 overflow-y-auto py-4 px-2">
           {!sidebarCollapsed && Object.entries(groupedMenuItems).map(([category, items]) => (
             <div key={category} className="mb-6">
-              <h3 className="px-3 mb-2 text-[10px] font-medium uppercase tracking-widest text-slate-500">{category}</h3>
+              <h3 className="px-3 mb-2 text-[10px] font-medium uppercase tracking-widest text-gray-400">{category}</h3>
               <ul className="space-y-0.5">
                 {items.map((item) => {
                   const Icon = item.icon;
@@ -217,8 +217,8 @@ export function AdminDashboard() {
                         }}
                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative ${
                           isActive
-                            ? 'bg-blue-500/10 text-white'
-                            : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                            ? 'bg-blue-50 text-blue-600'
+                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
                         }`}
                         title={sidebarCollapsed ? item.label : undefined}
                       >
@@ -226,7 +226,7 @@ export function AdminDashboard() {
                         {isActive && (
                           <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-blue-500 rounded-r-full" />
                         )}
-                        <Icon className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive ? 'text-blue-400' : 'text-slate-500 group-hover:translate-x-0.5'}`} />
+                        <Icon className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive ? 'text-blue-500' : 'text-gray-500 group-hover:translate-x-0.5'}`} />
                         {!sidebarCollapsed && <span className="whitespace-nowrap overflow-hidden">{item.label}</span>}
                       </button>
                     </li>
@@ -251,8 +251,8 @@ export function AdminDashboard() {
                       }}
                       className={`w-full flex items-center justify-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative ${
                         isActive
-                          ? 'bg-blue-500/10 text-white'
-                          : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                          ? 'bg-blue-50 text-blue-600'
+                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
                       }`}
                       title={item.label}
                     >
@@ -260,7 +260,7 @@ export function AdminDashboard() {
                       {isActive && (
                         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-blue-500 rounded-r-full" />
                       )}
-                      <Icon className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive ? 'text-blue-400' : 'text-slate-500 group-hover:translate-x-0.5'}`} />
+                      <Icon className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive ? 'text-blue-500' : 'text-gray-500 group-hover:translate-x-0.5'}`} />
                     </button>
                   </li>
                 );
@@ -270,16 +270,16 @@ export function AdminDashboard() {
         </nav>
 
         {/* Logout Section - Bottom of Sidebar */}
-        <div className="p-4 border-t border-white/5">
+        <div className="p-4 border-t border-gray-200">
           <button
             onClick={() => {
               adminLogout();
               window.location.href = '/?loggedout=true';
             }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-all duration-200 group ${sidebarCollapsed ? 'lg:justify-center' : ''}`}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-all duration-200 group ${sidebarCollapsed ? 'lg:justify-center' : ''}`}
             title={sidebarCollapsed ? 'Logout' : undefined}
           >
-            <LogOut className="w-4 h-4 flex-shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 text-slate-500" />
+            <LogOut className="w-4 h-4 flex-shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 text-gray-500" />
             {!sidebarCollapsed && <span className="whitespace-nowrap overflow-hidden">Logout</span>}
           </button>
         </div>
@@ -288,23 +288,23 @@ export function AdminDashboard() {
       {/* Main Content Area */}
       <main className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'} pt-16 lg:pt-0`}>
         {/* Mobile Header with Hamburger */}
-        <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm">
+        <div className="lg:hidden bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Shield className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+              <Shield className="w-4 h-4 text-blue-500" />
             </div>
-            <span className="font-bold text-gray-900">AutoIntel</span>
+            <span className="font-bold text-gray-800">AutoIntel</span>
           </div>
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+            className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
           >
             <Menu className="w-6 h-6" />
           </button>
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 overflow-y-auto bg-slate-50">
+        <div className="flex-1 overflow-y-auto bg-gray-50">
           {activeMenu === 'dashboard' && <DashboardLanding applicants={applicants} onMenuChange={setActiveMenu} />}
           {activeMenu === 'applicants' && <ApplicantsList applicants={applicants} />}
           {activeMenu === 'reports' && <ReportsDashboard applicants={applicants} />}
