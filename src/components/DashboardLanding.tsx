@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Users, FileText, Video, ClipboardCheck, TrendingUp, CheckCircle, Clock, AlertCircle, Zap, Eye, Mail, Filter, ArrowRight, Briefcase, BarChart3, UserPlus, FileCheck } from 'lucide-react';
+import { Users, FileText, Video, ClipboardCheck, TrendingUp, CheckCircle, Briefcase, UserPlus, FileCheck } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest } from '../lib/supabase';
 
 interface ApplicantWithDetails extends Applicant {
@@ -14,30 +14,25 @@ interface DashboardLandingProps {
 }
 
 export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingProps) {
-  // Calculate statistics
   const totalApplicants = applicants.length;
 
-  // Resume stage breakdown
   const resumeStages = {
     pending: applicants.filter(a => !a.resume || a.resume.status === 'pending').length,
     suitable: applicants.filter(a => a.resume?.status === 'suitable').length,
     notSuitable: applicants.filter(a => a.resume?.status === 'not_suitable').length,
   };
 
-  // Video assessment breakdown
   const videoStages = {
     notStarted: applicants.filter(a => a.resume?.status === 'suitable' && (!a.video || a.video.status === 'pending')).length,
     submitted: applicants.filter(a => a.video?.status === 'submitted').length,
     completed: applicants.filter(a => a.video?.status === 'completed').length,
   };
 
-  // Personality test breakdown
   const testStages = {
     notStarted: applicants.filter(a => a.video?.status === 'completed' && (!a.test || a.test.status === 'pending')).length,
     completed: applicants.filter(a => a.test?.status === 'completed').length,
   };
 
-  // Overall progress calculation
   const fullyCompleted = applicants.filter(a => 
     a.resume?.status === 'suitable' && 
     a.video?.status === 'completed' && 
@@ -46,95 +41,33 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
 
   const completionRate = totalApplicants > 0 ? Math.round((fullyCompleted / totalApplicants) * 100) : 0;
 
-  // Stats cards data
+  // Stats cards - Gradient backgrounds
   const statsCards = [
-    {
-      title: 'Total Applicants',
-      value: totalApplicants,
-      icon: Users,
-      color: 'bg-blue-500',
-      lightColor: 'bg-blue-100',
-      textColor: 'text-blue-600',
-    },
-    {
-      title: 'Resume Review',
-      value: resumeStages.suitable + resumeStages.notSuitable,
-      subValue: `${resumeStages.suitable} suitable`,
-      icon: FileText,
-      color: 'bg-emerald-500',
-      lightColor: 'bg-emerald-100',
-      textColor: 'text-emerald-600',
-    },
-    {
-      title: 'Video Assessment',
-      value: videoStages.submitted + videoStages.completed,
-      subValue: `${videoStages.completed} completed`,
-      icon: Video,
-      color: 'bg-purple-500',
-      lightColor: 'bg-purple-100',
-      textColor: 'text-purple-600',
-    },
-    {
-      title: 'Work Profiling Test',
-      value: testStages.completed,
-      subValue: `${testStages.notStarted} pending`,
-      icon: ClipboardCheck,
-      color: 'bg-orange-500',
-      lightColor: 'bg-orange-100',
-      textColor: 'text-orange-600',
-    },
+    { title: 'Total Applicants', value: totalApplicants, icon: Users, gradient: 'from-blue-500 to-blue-600' },
+    { title: 'Resume Reviewed', value: resumeStages.suitable + resumeStages.notSuitable, subValue: `${resumeStages.suitable} suitable`, icon: FileText, gradient: 'from-green-500 to-emerald-600' },
+    { title: 'Video Completed', value: videoStages.completed, subValue: `${videoStages.submitted} pending`, icon: Video, gradient: 'from-purple-500 to-violet-600' },
+    { title: 'Tests Done', value: testStages.completed, subValue: `${testStages.notStarted} pending`, icon: ClipboardCheck, gradient: 'from-orange-500 to-amber-500' },
   ];
 
-  // Hiring funnel stages
+  // Hiring funnel - Gradients with black numbers
   const funnelStages = [
-    {
-      name: 'Resume Submitted',
-      count: applicants.filter(a => a.resume?.status).length,
-      icon: FileText,
-      color: 'from-blue-500 to-blue-600',
-    },
-    {
-      name: 'Resume Suitable',
-      count: resumeStages.suitable,
-      icon: CheckCircle,
-      color: 'from-emerald-500 to-emerald-600',
-    },
-    {
-      name: 'Video Submitted',
-      count: videoStages.submitted + videoStages.completed,
-      icon: Video,
-      color: 'from-purple-500 to-purple-600',
-    },
-    {
-      name: 'Video Completed',
-      count: videoStages.completed,
-      icon: CheckCircle,
-      color: 'from-violet-500 to-violet-600',
-    },
-    {
-      name: 'Test Completed',
-      count: testStages.completed,
-      icon: ClipboardCheck,
-      color: 'from-orange-500 to-orange-600',
-    },
+    { name: 'Applications', count: applicants.length, gradient: 'from-blue-400 to-blue-500' },
+    { name: 'Reviewed', count: resumeStages.suitable + resumeStages.notSuitable, gradient: 'from-indigo-400 to-indigo-500' },
+    { name: 'Shortlisted', count: resumeStages.suitable, gradient: 'from-green-400 to-emerald-500' },
+    { name: 'Video Done', count: videoStages.completed, gradient: 'from-purple-400 to-violet-500' },
+    { name: 'Completed', count: testStages.completed, gradient: 'from-orange-400 to-amber-500' },
   ];
 
   const maxFunnelCount = Math.max(...funnelStages.map(s => s.count), 1);
 
-  // Job performance - calculate applicants per position
   const jobPerformance = useMemo(() => {
     const jobCounts: Record<string, { count: number; suitable: number }> = {};
     applicants.forEach(app => {
       const position = app.position || 'Unknown';
-      if (!jobCounts[position]) {
-        jobCounts[position] = { count: 0, suitable: 0 };
-      }
+      if (!jobCounts[position]) jobCounts[position] = { count: 0, suitable: 0 };
       jobCounts[position].count++;
-      if (app.resume?.status === 'suitable') {
-        jobCounts[position].suitable++;
-      }
+      if (app.resume?.status === 'suitable') jobCounts[position].suitable++;
     });
-    
     return Object.entries(jobCounts)
       .map(([position, data]) => ({
         position,
@@ -147,9 +80,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
   }, [applicants]);
 
   const totalJobs = jobPerformance.length;
-  const totalApplications = applicants.length;
 
-  // Generate recent activity from applicants data
   const generateRecentActivity = () => {
     const activities: Array<{
       type: 'new_applicant' | 'resume_reviewed' | 'video_submitted' | 'test_completed';
@@ -158,76 +89,36 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
       applicantName: string;
     }> = [];
 
-    // Sort applicants by created_at (newest first) - take last 5
     const recentApplicants = [...applicants]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5);
 
     recentApplicants.forEach(applicant => {
-      // Only add if created_at exists and is valid
-      if (applicant.created_at) {
-        activities.push({
-          type: 'new_applicant' as const,
-          message: `New applicant applied for ${applicant.position}`,
-          time: applicant.created_at,
-          applicantName: applicant.name,
-        });
-      }
-
+      if (applicant.created_at) activities.push({ type: 'new_applicant', message: `applied for ${applicant.position}`, time: applicant.created_at, applicantName: applicant.name });
       if (applicant.resume?.status === 'suitable' || applicant.resume?.status === 'not_suitable') {
         const resumeTime = applicant.resume?.uploaded_at;
-        if (resumeTime) {
-          activities.push({
-            type: 'resume_reviewed' as const,
-            message: `Resume marked as ${applicant.resume.status.replace('_', ' ')}`,
-            time: resumeTime,
-            applicantName: applicant.name,
-          });
-        }
+        if (resumeTime) activities.push({ type: 'resume_reviewed', message: `resume ${applicant.resume.status}`, time: resumeTime, applicantName: applicant.name });
       }
-
       if (applicant.video?.status === 'submitted' || applicant.video?.status === 'completed') {
         const videoTime = applicant.video.submitted_at || applicant.video.created_at;
-        if (videoTime) {
-          activities.push({
-            type: 'video_submitted' as const,
-            message: `Video assessment ${applicant.video.status}`,
-            time: videoTime,
-            applicantName: applicant.name,
-          });
-        }
+        if (videoTime) activities.push({ type: 'video_submitted', message: `video ${applicant.video.status}`, time: videoTime, applicantName: applicant.name });
       }
-
       if (applicant.test?.status === 'completed') {
         const testTime = applicant.test.submitted_at || applicant.test.created_at;
-        if (testTime) {
-          activities.push({
-            type: 'test_completed' as const,
-            message: 'Completed work profiling test',
-            time: testTime,
-            applicantName: applicant.name,
-          });
-        }
+        if (testTime) activities.push({ type: 'test_completed', message: 'test completed', time: testTime, applicantName: applicant.name });
       }
     });
-
-    // Sort by time and take top 8
-    return activities
-      .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
-      .slice(0, 8);
+    return activities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 6);
   };
 
   const recentActivity = generateRecentActivity();
 
-  // Format relative time with validation
   const getRelativeTime = (dateString: string | null | undefined): string => {
     if (!dateString) return 'Unknown';
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return 'Unknown';
-    
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
     if (diffInHours < 1) return 'Just now';
     if (diffInHours < 24) return `${diffInHours}h ago`;
     const diffInDays = Math.floor(diffInHours / 24);
@@ -235,408 +126,226 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
     return date.toLocaleDateString();
   };
 
-  // Quick actions data
+  // Gradient quick actions
   const quickActions = [
-    {
-      label: 'Review Pending Resumes',
-      count: resumeStages.pending,
-      icon: FileText,
-      color: 'bg-emerald-500',
-      action: () => onMenuChange?.('applicants'),
-      filter: 'unfiltered',
-    },
-    {
-      label: 'View Shortlisted',
-      count: resumeStages.suitable,
-      icon: CheckCircle,
-      color: 'bg-blue-500',
-      action: () => onMenuChange?.('shortlisted'),
-    },
-    {
-      label: 'Pending Videos',
-      count: videoStages.notStarted,
-      icon: Video,
-      color: 'bg-purple-500',
-      action: () => onMenuChange?.('applicants'),
-      filter: 'video_pending',
-    },
-    {
-      label: 'Pending Tests',
-      count: testStages.notStarted,
-      icon: ClipboardCheck,
-      color: 'bg-orange-500',
-      action: () => onMenuChange?.('applicants'),
-      filter: 'test_pending',
-    },
+    { label: 'Pending Reviews', count: resumeStages.pending, action: () => onMenuChange?.('applicants'), gradient: 'from-blue-500 to-blue-600' },
+    { label: 'Shortlisted', count: resumeStages.suitable, action: () => onMenuChange?.('shortlisted'), gradient: 'from-green-500 to-emerald-600' },
+    { label: 'Pending Videos', count: videoStages.notStarted, action: () => onMenuChange?.('applicants'), gradient: 'from-purple-500 to-violet-600' },
+    { label: 'All Jobs', count: totalJobs, action: () => onMenuChange?.('job-management'), gradient: 'from-cyan-500 to-teal-600' },
   ];
 
   return (
-    <div className="p-8 lg:p-10 space-y-8 bg-slate-50 min-h-screen">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard Overview</h1>
-          <p className="text-gray-600 mt-1">Track your recruitment pipeline and hiring progress</p>
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+            <p className="text-slate-500 text-sm mt-0.5">Recruitment overview</p>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg shadow-lg">
+            <TrendingUp className="w-4 h-4 text-white" />
+            <span className="text-sm font-bold text-white">{completionRate}%</span>
+            <span className="text-sm text-white/80">complete</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border border-gray-200 shadow-sm">
-          <TrendingUp className="w-5 h-5 text-green-500" />
-          <span className="text-sm font-medium text-gray-700">Completion Rate:</span>
-          <span className="text-lg font-bold text-green-600">{completionRate}%</span>
-        </div>
-      </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-        {statsCards.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <div
-              key={index}
-              className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition-shadow"
+        {/* Quick Actions - Gradient buttons */}
+        <div className="flex gap-3">
+          {quickActions.map((action, idx) => (
+            <button
+              key={idx}
+              onClick={action.action}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-white text-sm font-semibold shadow-lg hover:shadow-xl transition-all bg-gradient-to-r ${action.gradient}`}
             >
-              <div className="flex items-start justify-between">
-                <div className={`p-3 rounded-lg ${stat.lightColor}`}>
-                  <Icon className={`w-6 h-6 ${stat.textColor}`} />
+              <span>{action.label}</span>
+              <span className="opacity-90">({action.count})</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Stats Cards - Gradient icons */}
+        <div className="grid grid-cols-4 gap-4">
+          {statsCards.map((stat, idx) => {
+            const Icon = stat.icon;
+            return (
+              <div key={idx} className="bg-white rounded-xl p-4 shadow-lg border-t-4" style={{ borderColor: stat.gradient.includes('blue') ? '#3b82f6' : stat.gradient.includes('green') ? '#22c55e' : stat.gradient.includes('purple') ? '#a855f7' : '#f97316' }}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-3 rounded-xl bg-gradient-to-br ${stat.gradient} shadow-md`}>
+                    <Icon className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-3xl font-black text-slate-900">{stat.value}</p>
+                    <p className="text-xs text-slate-500 font-medium">{stat.title}</p>
+                  </div>
                 </div>
                 {stat.subValue && (
-                  <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                    {stat.subValue}
-                  </span>
+                  <p className="text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">{stat.subValue}</p>
                 )}
               </div>
-              <div className="mt-4">
-                <h3 className="text-3xl font-bold text-gray-900">{stat.value}</h3>
-                <p className="text-sm text-gray-500 mt-1">{stat.title}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Job Performance Section */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-100 rounded-lg">
-              <BarChart3 className="w-5 h-5 text-indigo-600" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">Job Performance</h2>
-              <p className="text-sm text-gray-500">Applicant stats by position</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4 text-sm">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">{totalJobs}</p>
-              <p className="text-gray-500">Active Jobs</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">{totalApplications}</p>
-              <p className="text-gray-500">Total Applications</p>
-            </div>
-          </div>
+            );
+          })}
         </div>
 
-        {jobPerformance.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {jobPerformance.map((job, index) => (
-              <div key={index} className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
-                      <Briefcase className="w-4 h-4 text-indigo-600" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{job.position}</p>
-                      <p className="text-xs text-gray-500">{job.applicants} applicants</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-500" />
-                    <span className="text-sm font-medium text-emerald-600">{job.suitable} suitable</span>
-                  </div>
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                    job.conversionRate >= 50 ? 'bg-green-100 text-green-700' :
-                    job.conversionRate >= 25 ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-red-100 text-red-700'
-                  }`}>
-                    {job.conversionRate}% rate
-                  </span>
-                </div>
-                <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-indigo-500 rounded-full transition-all duration-500"
-                    style={{ width: `${job.conversionRate}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-8">
-            <Briefcase className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No job data available yet</p>
-            <p className="text-sm text-gray-400">Job performance will appear here</p>
-          </div>
-        )}
-      </div>
-
-      {/* Hiring Progress Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Hiring Funnel & Quick Actions */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Hiring Funnel */}
-          <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-gray-900">Hiring Funnel</h2>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <TrendingUp className="w-4 h-4" />
-                <span>Progress tracking</span>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {funnelStages.map((stage, index) => {
-                const Icon = stage.icon;
-                const percentage = maxFunnelCount > 0 ? (stage.count / maxFunnelCount) * 100 : 0;
-                const prevCount = index > 0 ? funnelStages[index - 1].count : stage.count;
-                const conversionRate = prevCount > 0 ? Math.round((stage.count / prevCount) * 100) : 100;
-
-                return (
-                  <div key={index} className="relative">
-                    <div className="flex items-center gap-4">
-                      {/* Icon */}
-                      <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${stage.color} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-                        <Icon className="w-5 h-5 text-white" />
-                      </div>
-
-                      {/* Progress Bar */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-gray-900">{stage.name}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-gray-900">{stage.count}</span>
-                            {index > 0 && (
-                              <span className={`text-xs font-medium ${conversionRate >= 70 ? 'text-green-600' : conversionRate >= 40 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                {conversionRate}% conversion
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full bg-gradient-to-r ${stage.color} rounded-full transition-all duration-500`}
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Quick Actions Panel */}
-          <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Zap className="w-5 h-5 text-blue-600" />
-              </div>
-              <h2 className="text-lg font-bold text-gray-900">Quick Actions</h2>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {quickActions.map((action, index) => {
-                const Icon = action.icon;
-                return (
-                  <button
-                    key={index}
-                    onClick={action.action}
-                    className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all text-left group"
-                  >
-                    <div className={`w-9 h-9 rounded-lg ${action.color} flex items-center justify-center flex-shrink-0`}>
-                      <Icon className="w-4 h-4 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 group-hover:text-blue-700 truncate">{action.label}</p>
-                      <p className="text-xs text-gray-500">{action.count} pending</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Recruitment Status Banner */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
-            <div className="flex items-start gap-4">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <AlertCircle className="w-6 h-6 text-blue-600" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900">Recruitment Status</h3>
-                <p className="text-gray-600 mt-1">
-                  You have <span className="font-semibold text-blue-600">{resumeStages.pending}</span> resumes pending review and{' '}
-                  <span className="font-semibold text-orange-600">{testStages.notStarted}</span> candidates waiting to complete their assessments.
-                </p>
-              </div>
-              {resumeStages.pending > 0 && (
-                <button
-                  onClick={() => onMenuChange?.('applicants')}
-                  className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <Eye className="w-4 h-4" />
-                  Review Now
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column - Stage Breakdown & Recent Activity */}
-        <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
-          <h2 className="text-lg font-bold text-gray-900 mb-6">Stage Breakdown</h2>
-
-          <div className="space-y-6">
-            {/* Resume Stage */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-emerald-500" />
-                Resume Review
-              </h3>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Suitable</span>
-                  <span className="font-medium text-emerald-600">{resumeStages.suitable}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Not Suitable</span>
-                  <span className="font-medium text-red-600">{resumeStages.notSuitable}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Pending</span>
-                  <span className="font-medium text-yellow-600">{resumeStages.pending}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100" />
-
-            {/* Video Stage */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-                <Video className="w-4 h-4 text-purple-500" />
-                Video Assessment
-              </h3>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Completed</span>
-                  <span className="font-medium text-purple-600">{videoStages.completed}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Submitted</span>
-                  <span className="font-medium text-blue-600">{videoStages.submitted}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Not Started</span>
-                  <span className="font-medium text-gray-500">{videoStages.notStarted}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100" />
-
-            {/* Test Stage */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-                <ClipboardCheck className="w-4 h-4 text-orange-500" />
-                Work Profiling Test
-              </h3>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Completed</span>
-                  <span className="font-medium text-orange-600">{testStages.completed}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Pending</span>
-                  <span className="font-medium text-gray-500">{testStages.notStarted}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Summary */}
-          <div className="mt-6 pt-6 border-t border-gray-100">
-            <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-              <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-green-900">{fullyCompleted} Fully Qualified</p>
-                <p className="text-xs text-green-700">Completed all stages</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Activity Feed */}
-          <div className="mt-6 pt-6 border-t border-gray-100">
-            <div className="flex items-center justify-between mb-4">
+        {/* Two Column Layout */}
+        <div className="grid grid-cols-3 gap-6">
+          {/* Left - 2/3 width */}
+          <div className="col-span-2 space-y-6">
+            {/* Hiring Funnel - Gradients with BLACK numbers */}
+            <div className="bg-white rounded-xl p-5 shadow-lg">
+              <h2 className="text-sm font-bold text-slate-900 mb-4">Hiring Pipeline</h2>
               <div className="flex items-center gap-2">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Clock className="w-4 h-4 text-purple-600" />
-                </div>
-                <h3 className="text-sm font-bold text-gray-900">Recent Activity</h3>
-              </div>
-              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                Last 24h
-              </span>
-            </div>
-
-            <div className="space-y-3 max-h-[200px] overflow-y-auto pr-1">
-              {recentActivity.length > 0 ? (
-                recentActivity.map((activity, index) => {
-                  const activityIcons = {
-                    new_applicant: UserPlus,
-                    resume_reviewed: FileCheck,
-                    video_submitted: Video,
-                    test_completed: ClipboardCheck,
-                  };
-                  const activityColors = {
-                    new_applicant: 'bg-blue-100 text-blue-600',
-                    resume_reviewed: 'bg-emerald-100 text-emerald-600',
-                    video_submitted: 'bg-purple-100 text-purple-600',
-                    test_completed: 'bg-orange-100 text-orange-600',
-                  };
-                  const Icon = activityIcons[activity.type];
-
+                {funnelStages.map((stage, idx) => {
+                  const pct = maxFunnelCount > 0 ? Math.round((stage.count / maxFunnelCount) * 100) : 0;
                   return (
-                    <div key={index} className="flex items-start gap-3">
-                      <div className={`p-2 rounded-lg flex-shrink-0 ${activityColors[activity.type]}`}>
-                        <Icon className="w-4 h-4" />
+                    <div key={idx} className="flex-1">
+                      <div className="text-center mb-2">
+                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stage.gradient} flex items-center justify-center mx-auto mb-2 shadow-lg`}>
+                          <span className="text-black font-black text-lg">{stage.count}</span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-800">{stage.name}</p>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-900">
-                          <span className="font-medium">{activity.applicantName}</span>{' '}
-                          <span className="text-gray-600">{activity.message}</span>
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">{getRelativeTime(activity.time)}</p>
+                      <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={`h-full bg-gradient-to-r ${stage.gradient} rounded-full`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
-                })
-              ) : (
-                <div className="text-center py-6">
-                  <Clock className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">No recent activity</p>
-                  <p className="text-xs text-gray-400">Check back later for updates</p>
+                })}
+              </div>
+            </div>
+
+            {/* Job Performance - Gradients */}
+            <div className="bg-white rounded-xl p-5 shadow-lg">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-bold text-slate-900">Job Performance</h2>
+                <div className="flex gap-4 text-xs font-medium">
+                  <span className="text-blue-600">{totalJobs} jobs</span>
+                  <span className="text-purple-600">{totalApplicants} apps</span>
                 </div>
-              )}
+              </div>
+              <div className="space-y-3">
+                {jobPerformance.length > 0 ? jobPerformance.map((job, idx) => {
+                  const barColor = job.conversionRate >= 50 ? 'from-green-400 to-emerald-500' : job.conversionRate >= 25 ? 'from-yellow-400 to-orange-500' : 'from-red-400 to-rose-500';
+                  const iconColor = job.conversionRate >= 50 ? 'from-green-500 to-emerald-600' : job.conversionRate >= 25 ? 'from-yellow-500 to-orange-600' : 'from-red-500 to-rose-600';
+                  return (
+                    <div key={idx} className="flex items-center gap-3 p-3 bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl">
+                      <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${iconColor} flex items-center justify-center shadow-md`}>
+                        <Briefcase className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-900 truncate">{job.position}</p>
+                        <p className="text-xs text-slate-500">{job.applicants} applicants</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-green-600">{job.suitable}</p>
+                        <p className="text-xs text-slate-400">{job.conversionRate}%</p>
+                      </div>
+                      <div className="w-20 h-3 bg-slate-200 rounded-full overflow-hidden">
+                        <div className={`h-full bg-gradient-to-r ${barColor} rounded-full`} style={{ width: `${job.conversionRate}%` }} />
+                      </div>
+                    </div>
+                  );
+                }) : (
+                  <p className="text-sm text-slate-400 text-center py-4">No data yet</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right - 1/3 width */}
+          <div className="space-y-6">
+            {/* Stage Breakdown - Gradients */}
+            <div className="bg-white rounded-xl p-5 shadow-lg">
+              <h2 className="text-sm font-bold text-slate-900 mb-4">Stage Breakdown</h2>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-400 to-blue-500" />
+                      <span className="text-sm font-semibold text-slate-700">Resume</span>
+                    </div>
+                    <span className="text-sm font-bold text-blue-600">{resumeStages.suitable}/{resumeStages.suitable + resumeStages.notSuitable}</span>
+                  </div>
+                  <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-400 to-blue-500 rounded-full" style={{ width: `${totalApplicants > 0 ? Math.round(((resumeStages.suitable + resumeStages.notSuitable) / totalApplicants) * 100) : 0}%` }} />
+                  </div>
+                </div>
+                
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-400 to-violet-500" />
+                      <span className="text-sm font-semibold text-slate-700">Video</span>
+                    </div>
+                    <span className="text-sm font-bold text-violet-600">{videoStages.completed}/{resumeStages.suitable}</span>
+                  </div>
+                  <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-purple-400 to-violet-500 rounded-full" style={{ width: `${resumeStages.suitable > 0 ? Math.round((videoStages.completed / resumeStages.suitable) * 100) : 0}%` }} />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-gradient-to-r from-orange-400 to-amber-500" />
+                      <span className="text-sm font-semibold text-slate-700">Test</span>
+                    </div>
+                    <span className="text-sm font-bold text-orange-600">{testStages.completed}/{videoStages.completed}</span>
+                  </div>
+                  <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-orange-400 to-amber-500 rounded-full" style={{ width: `${videoStages.completed > 0 ? Math.round((testStages.completed / videoStages.completed) * 100) : 0}%` }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary box - Gradient */}
+              <div className="mt-5 pt-4 border-t border-slate-100">
+                <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
+                  <div className="p-2 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg shadow-md">
+                    <CheckCircle className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-green-800">{fullyCompleted} fully qualified</p>
+                    <p className="text-xs text-green-600">Completed all stages</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Activity - Gradients */}
+            <div className="bg-white rounded-xl p-5 shadow-lg">
+              <h2 className="text-sm font-bold text-slate-900 mb-4">Recent Activity</h2>
+              <div className="space-y-3">
+                {recentActivity.length > 0 ? recentActivity.map((activity, idx) => {
+                  const icons: Record<string, typeof UserPlus> = { new_applicant: UserPlus, resume_reviewed: FileCheck, video_submitted: Video, test_completed: ClipboardCheck };
+                  const gradients: Record<string, string> = {
+                    new_applicant: 'from-blue-400 to-blue-500',
+                    resume_reviewed: 'from-green-400 to-emerald-500',
+                    video_submitted: 'from-purple-400 to-violet-500',
+                    test_completed: 'from-orange-400 to-amber-500',
+                  };
+                  const Icon = icons[activity.type] || UserPlus;
+                  return (
+                    <div key={idx} className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50 transition-colors">
+                      <div className={`p-2 rounded-lg bg-gradient-to-br ${gradients[activity.type]} shadow-md`}>
+                        <Icon className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-900 truncate">{activity.applicantName} {activity.message}</p>
+                        <p className="text-xs text-slate-400">{getRelativeTime(activity.time)}</p>
+                      </div>
+                    </div>
+                  );
+                }) : (
+                  <p className="text-xs text-slate-400 text-center py-2">No activity yet</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
+      </div>
     </div>
   );
 }
