@@ -72,12 +72,14 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
 
   // Funnel stages - Custom colors
   const funnelStages = useMemo(() => {
+    const interviewCount = kpis.passed > 0 ? Math.floor(kpis.passed * 0.6) : 0;
+    const hiredCount = interviewCount > 0 ? Math.floor(interviewCount * 0.5) : 0;
     return [
       { name: 'Applicants', count: kpis.total, color: '#B4D3D9' },
       { name: 'Screened', count: kpis.passed + kpis.failed, color: '#BDA6CE' },
       { name: 'Shortlisted', count: kpis.passed, color: '#FACE68' },
-      { name: 'Interview', count: Math.floor(kpis.passed * 0.6), color: '#FAAC68' },
-      { name: 'Hired', count: Math.floor(kpis.passed * 0.3), color: '#B4D3D9' },
+      { name: 'Interview', count: interviewCount, color: '#FAAC68' },
+      { name: 'Hired', count: hiredCount, color: '#98D8AA' },
     ];
   }, [kpis]);
 
@@ -187,7 +189,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
         </div>
 
         {/* KPI Cards - Custom Colors */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Total Applicants - Teal */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center gap-4">
@@ -251,9 +253,9 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
         </div>
 
         {/* Two Column Layout */}
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left - 2/3 width */}
-          <div className="col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-6">
 
 
             {/* Needs Review Panel - High Priority */}
@@ -443,9 +445,11 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold text-gray-700">{stage.name}</span>
                         <span className="text-xs text-gray-400">
-                          {idx === 0 ? '100%' : idx === 1 ? `${kpis.total > 0 ? Math.round(((kpis.passed + kpis.failed) / kpis.total) * 100) : 0}%` : 
+                          {idx === 0 ? '100%' : 
+                           idx === 1 ? `${kpis.total > 0 ? Math.round(((kpis.passed + kpis.failed) / kpis.total) * 100) : 0}%` : 
                            idx === 2 ? `${kpis.passed + kpis.failed > 0 ? Math.round((kpis.passed / (kpis.passed + kpis.failed)) * 100) : 0}%` :
-                           idx === 3 ? '60%' : '30%'}
+                           idx === 3 ? `${kpis.passed > 0 ? Math.round((Math.floor(kpis.passed * 0.6) / kpis.passed) * 100) : 0}%` : 
+                           `${kpis.passed > 0 ? Math.round((Math.floor(Math.floor(kpis.passed * 0.6) * 0.5) / kpis.passed) * 100) : 0}%`}
                         </span>
                       </div>
                       <div className="h-2 bg-gray-100 rounded-full mt-1 overflow-hidden">
@@ -456,7 +460,8 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
                             width: idx === 0 ? '100%' : 
                             idx === 1 ? (kpis.total > 0 ? Math.round(((kpis.passed + kpis.failed) / kpis.total) * 100) : 0) + '%' : 
                             idx === 2 ? (kpis.passed + kpis.failed > 0 ? Math.round((kpis.passed / (kpis.passed + kpis.failed)) * 100) : 0) + '%' :
-                            idx === 3 ? '60%' : '30%'
+                            idx === 3 ? (kpis.passed > 0 ? Math.round((Math.floor(kpis.passed * 0.6) / kpis.passed) * 100) : 0) + '%' : 
+                            (kpis.passed > 0 ? Math.round((Math.floor(Math.floor(kpis.passed * 0.6) * 0.5) / kpis.passed) * 100) : 0) + '%'
                           }}
                         />
                       </div>
