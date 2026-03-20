@@ -1,4 +1,4 @@
-import { Calendar, CheckCircle, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, XCircle, Briefcase, BarChart3, Sliders, ChevronLeft, ChevronRight, ClipboardList } from 'lucide-react';
+import { Calendar, CheckCircle, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, XCircle, Briefcase, BarChart3, Sliders, ChevronLeft, ChevronRight, ClipboardList, Plus, FolderOpen, Archive, UserCheck, Search, Eye, ListChecks, CalendarDays, Award, TrendingUp } from 'lucide-react';
 import { AdminJobManagement } from './AdminJobManagement';
 import { AdminScoringSettings } from './AdminScoringSettings';
 import { DashboardLanding } from './DashboardLanding';
@@ -27,21 +27,49 @@ function getParsedResumeData(resume: Resume | undefined): ResumeParsedData | nul
   }
 }
 
-// Navigation menu items organized by category
+// Navigation menu items organized by category with nested structure
 const menuItems = [
-  // RECRUITMENT Section
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, category: 'RECRUITMENT' },
-  { id: 'applicants', label: 'Applicants', icon: Users, category: 'RECRUITMENT' },
-  { id: 'shortlisted', label: 'Shortlisted', icon: CheckCircle, category: 'RECRUITMENT' },
-  { id: 'job-management', label: 'Job Management', icon: Briefcase, category: 'RECRUITMENT' },
+  // MAIN Section
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, category: 'MAIN' },
+  
+  // JOB POSTINGS Section
+  { 
+    id: 'job-postings', 
+    label: 'Job Postings', 
+    icon: Briefcase, 
+    category: 'JOB_POSTINGS',
+    children: [
+      { id: 'create-job', label: 'Create Job', icon: Plus },
+      { id: 'active-jobs', label: 'Active Jobs', icon: FolderOpen },
+      { id: 'closed-jobs', label: 'Closed Jobs', icon: Archive },
+    ]
+  },
+  
+  // RECRUITMENT PIPELINE Section
+  { 
+    id: 'recruitment-pipeline', 
+    label: 'Recruitment Pipeline', 
+    icon: UserCheck, 
+    category: 'RECRUITMENT_PIPELINE',
+    children: [
+      { id: 'applications', label: 'Applications', icon: Users },
+      { id: 'screening-results', label: 'Screening Results', icon: Search },
+      { id: 'needs-review', label: 'Needs Review', icon: Eye },
+      { id: 'shortlisted', label: 'Shortlisted', icon: ListChecks },
+      { id: 'interview-scheduling', label: 'Interview Scheduling', icon: CalendarDays },
+      { id: 'final-decisions', label: 'Final Decisions', icon: Award },
+    ]
+  },
+  
   // ANALYTICS Section
-  { id: 'reports', label: 'Reports', icon: BarChart3, category: 'ANALYTICS' },
-  { id: 'scoring-settings', label: 'Scoring Settings', icon: Sliders, category: 'ANALYTICS' },
+  { id: 'analytics-reports', label: 'Analytics & Reports', icon: TrendingUp, category: 'ANALYTICS' },
+  { id: 'scoring-config', label: 'Scoring Configuration', icon: Sliders, category: 'ANALYTICS' },
+  
   // SYSTEM Section
-  { id: 'settings', label: 'Settings', icon: Settings, category: 'SYSTEM' },
+  { id: 'system-settings', label: 'System Settings', icon: Settings, category: 'SYSTEM' },
 ];
 
-type MenuId = typeof menuItems[number]['id'];
+type MenuId = string;
 
 // Group menu items by category
 const groupedMenuItems = menuItems.reduce((acc, item) => {
@@ -51,6 +79,14 @@ const groupedMenuItems = menuItems.reduce((acc, item) => {
   acc[item.category].push(item);
   return acc;
 }, {} as Record<string, typeof menuItems>);
+
+// Flatten all items (including children) for lookup
+const allMenuItems = menuItems.flatMap(item => {
+  if (item.children) {
+    return [item, ...item.children];
+  }
+  return [item];
+});
 
 export function AdminDashboard() {
   const { adminLogout, isAdminAuthenticated } = useAuth();
@@ -63,6 +99,7 @@ export function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeMenu, setActiveMenu] = useState<MenuId>('dashboard');
+  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(['job-postings', 'recruitment-pipeline']));
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
@@ -191,8 +228,12 @@ export function AdminDashboard() {
           </div>
           {/* Collapse/Expand Button - Desktop Only */}
           <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="hidden lg:flex p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSidebarCollapsed(!sidebarCollapsed);
+            }}
+            className="hidden lg:flex p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
             title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
@@ -202,33 +243,88 @@ export function AdminDashboard() {
         {/* Navigation Menu */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
           {!sidebarCollapsed && Object.entries(groupedMenuItems).map(([category, items]) => (
-            <div key={category} className="mb-6">
-              <h3 className="px-3 mb-2 text-[10px] font-medium uppercase tracking-widest text-gray-400">{category}</h3>
+            <div key={category} className="mb-4">
+              {/* Category headers hidden - showing flat menu structure */}
               <ul className="space-y-0.5">
                 {items.map((item) => {
                   const Icon = item.icon;
                   const isActive = activeMenu === item.id;
+                  const hasChildren = item.children && item.children.length > 0;
+                  const isExpanded = expandedMenus.has(item.id);
+                  
                   return (
                     <li key={item.id}>
                       <button
                         onClick={() => {
-                          setActiveMenu(item.id);
-                          setSidebarOpen(false);
+                          if (hasChildren) {
+                            setExpandedMenus(prev => {
+                              const newSet = new Set(prev);
+                              if (newSet.has(item.id)) {
+                                newSet.delete(item.id);
+                              } else {
+                                newSet.add(item.id);
+                              }
+                              return newSet;
+                            });
+                          } else {
+                            setActiveMenu(item.id);
+                            setSidebarOpen(false);
+                          }
                         }}
                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative ${
-                          isActive
+                          isActive && !hasChildren
                             ? 'bg-blue-50 text-blue-600'
+                            : hasChildren
+                            ? 'text-gray-700 hover:bg-gray-100'
                             : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
                         }`}
                         title={sidebarCollapsed ? item.label : undefined}
                       >
                         {/* Active indicator - 3px blue vertical accent line */}
-                        {isActive && (
+                        {isActive && !hasChildren && (
                           <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-blue-500 rounded-r-full" />
                         )}
-                        <Icon className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive ? 'text-blue-500' : 'text-gray-500 group-hover:translate-x-0.5'}`} />
-                        {!sidebarCollapsed && <span className="whitespace-nowrap overflow-hidden">{item.label}</span>}
+                        <Icon className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive && !hasChildren ? 'text-blue-500' : 'text-gray-500 group-hover:translate-x-0.5'}`} />
+                        {!sidebarCollapsed && (
+                          <>
+                            <span className="whitespace-nowrap overflow-hidden flex-1 text-left">{item.label}</span>
+                            {hasChildren && (
+                              <ChevronRight className={`w-3 h-3 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+                            )}
+                          </>
+                        )}
                       </button>
+                      
+                      {/* Nested children */}
+                      {hasChildren && isExpanded && !sidebarCollapsed && (
+                        <ul className="ml-4 mt-1 space-y-0.5">
+                          {item.children!.map((child) => {
+                            const ChildIcon = child.icon;
+                            const isChildActive = activeMenu === child.id;
+                            return (
+                              <li key={child.id}>
+                                <button
+                                  onClick={() => {
+                                    setActiveMenu(child.id);
+                                    setSidebarOpen(false);
+                                  }}
+                                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 group relative ${
+                                    isChildActive
+                                      ? 'bg-blue-50 text-blue-600'
+                                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                                  }`}
+                                >
+                                  {isChildActive && (
+                                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-blue-500 rounded-r-full" />
+                                  )}
+                                  <ChildIcon className={`w-3.5 h-3.5 flex-shrink-0 transition-transform duration-200 ${isChildActive ? 'text-blue-500' : 'text-gray-400 group-hover:translate-x-0.5'}`} />
+                                  <span className="whitespace-nowrap overflow-hidden">{child.label}</span>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
                     </li>
                   );
                 })}
@@ -242,26 +338,72 @@ export function AdminDashboard() {
               {menuItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeMenu === item.id;
+                const hasChildren = item.children && item.children.length > 0;
+                const isExpanded = expandedMenus.has(item.id);
+                
                 return (
                   <li key={item.id}>
                     <button
                       onClick={() => {
-                        setActiveMenu(item.id);
-                        setSidebarOpen(false);
+                        if (hasChildren) {
+                          setExpandedMenus(prev => {
+                            const newSet = new Set(prev);
+                            if (newSet.has(item.id)) {
+                              newSet.delete(item.id);
+                            } else {
+                              newSet.add(item.id);
+                            }
+                            return newSet;
+                          });
+                        } else {
+                          setActiveMenu(item.id);
+                          setSidebarOpen(false);
+                        }
                       }}
                       className={`w-full flex items-center justify-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative ${
-                        isActive
+                        isActive && !hasChildren
                           ? 'bg-blue-50 text-blue-600'
                           : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
                       }`}
                       title={item.label}
                     >
                       {/* Active indicator - 3px blue vertical accent line */}
-                      {isActive && (
+                      {isActive && !hasChildren && (
                         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-blue-500 rounded-r-full" />
                       )}
-                      <Icon className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive ? 'text-blue-500' : 'text-gray-500 group-hover:translate-x-0.5'}`} />
+                      <Icon className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive && !hasChildren ? 'text-blue-500' : 'text-gray-500 group-hover:translate-x-0.5'}`} />
                     </button>
+                    
+                    {/* Show children when expanded in collapsed view */}
+                    {hasChildren && isExpanded && (
+                      <ul className="ml-2 mt-1 space-y-0.5 border-l-2 border-gray-200 pl-2">
+                        {item.children!.map((child) => {
+                          const ChildIcon = child.icon;
+                          const isChildActive = activeMenu === child.id;
+                          return (
+                            <li key={child.id}>
+                              <button
+                                onClick={() => {
+                                  setActiveMenu(child.id);
+                                  setSidebarOpen(false);
+                                }}
+                                className={`w-full flex items-center justify-center gap-2 px-2 py-2 rounded-lg text-xs font-medium transition-all duration-200 group relative ${
+                                  isChildActive
+                                    ? 'bg-blue-50 text-blue-600'
+                                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                                }`}
+                                title={child.label}
+                              >
+                                {isChildActive && (
+                                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 bg-blue-500 rounded-r-full" />
+                                )}
+                                <ChildIcon className={`w-3.5 h-3.5 flex-shrink-0 ${isChildActive ? 'text-blue-500' : 'text-gray-500'}`} />
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
                   </li>
                 );
               })}
@@ -306,12 +448,26 @@ export function AdminDashboard() {
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto bg-gray-50 p-8 lg:p-10 space-y-6 min-h-screen">
           {activeMenu === 'dashboard' && <DashboardLanding applicants={applicants} onMenuChange={setActiveMenu} />}
-          {activeMenu === 'applicants' && <ApplicantsList applicants={applicants} />}
-          {activeMenu === 'reports' && <ReportsDashboard applicants={applicants} />}
-          {activeMenu === 'settings' && <AdminSettings />}
-          {activeMenu === 'job-management' && <AdminJobManagement />}
-          {activeMenu === 'scoring-settings' && <AdminScoringSettings />}
-          {activeMenu === 'shortlisted' && <ShortlistedCandidates applicants={applicants} />}
+          
+          {/* Job Postings - Uses AdminJobManagement */}
+          {(activeMenu === 'create-job' || activeMenu === 'active-jobs' || activeMenu === 'closed-jobs' || activeMenu === 'job-postings') && 
+            <AdminJobManagement />}
+          
+          {/* Recruitment Pipeline - All pipeline views use ApplicantsList or ShortlistedCandidates */}
+          {(activeMenu === 'applications' || activeMenu === 'screening-results' || activeMenu === 'needs-review' || activeMenu === 'interview-scheduling') && 
+            <ApplicantsList applicants={applicants} />}
+          
+          {/* Shortlisted and Final Decisions use ShortlistedCandidates */}
+          {(activeMenu === 'shortlisted' || activeMenu === 'final-decisions') && <ShortlistedCandidates applicants={applicants} />}
+          
+          {/* Analytics & Reports */}
+          {activeMenu === 'analytics-reports' && <ReportsDashboard applicants={applicants} />}
+          
+          {/* Scoring Configuration */}
+          {activeMenu === 'scoring-config' && <AdminScoringSettings />}
+          
+          {/* System Settings */}
+          {activeMenu === 'system-settings' && <AdminSettings />}
         </div>
       </main>
 
