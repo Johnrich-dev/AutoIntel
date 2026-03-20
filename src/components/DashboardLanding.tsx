@@ -70,14 +70,14 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
     return { total, passed, needsReview, failed };
   }, [filteredApplicants]);
 
-  // Funnel stages - Pastel colors
+  // Funnel stages - Custom colors
   const funnelStages = useMemo(() => {
     return [
-      { name: 'Applicants', count: kpis.total, color: 'bg-blue-200', textColor: 'text-blue-600' },
-      { name: 'Screened', count: kpis.passed + kpis.failed, color: 'bg-indigo-200', textColor: 'text-indigo-600' },
-      { name: 'Shortlisted', count: kpis.passed, color: 'bg-green-200', textColor: 'text-green-600' },
-      { name: 'Interview', count: Math.floor(kpis.passed * 0.6), color: 'bg-amber-200', textColor: 'text-amber-600' },
-      { name: 'Hired', count: Math.floor(kpis.passed * 0.3), color: 'bg-emerald-200', textColor: 'text-emerald-600' },
+      { name: 'Applicants', count: kpis.total, color: '#B4D3D9' },
+      { name: 'Screened', count: kpis.passed + kpis.failed, color: '#BDA6CE' },
+      { name: 'Shortlisted', count: kpis.passed, color: '#FACE68' },
+      { name: 'Interview', count: Math.floor(kpis.passed * 0.6), color: '#FAAC68' },
+      { name: 'Hired', count: Math.floor(kpis.passed * 0.3), color: '#B4D3D9' },
     ];
   }, [kpis]);
 
@@ -96,15 +96,15 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
       .slice(0, 10);
   }, [filteredApplicants]);
 
-  // Get status info - Pastel colors
+  // Get status info - Custom colors
   const getStatusInfo = (applicant: ApplicantWithDetails) => {
     if (!applicant.resume || applicant.resume.status === 'pending') {
-      return { label: 'Needs Review', color: 'bg-yellow-200 text-yellow-700', icon: AlertCircle };
+      return { label: 'Needs Review', bgColor: '#FEEAC9', icon: AlertCircle };
     }
     if (applicant.resume.status === 'suitable') {
-      return { label: 'Passed', color: 'bg-green-200 text-green-700', icon: CheckCircle };
+      return { label: 'Passed', bgColor: '#BDA6CE', icon: CheckCircle };
     }
-    return { label: 'Failed', color: 'bg-red-200 text-red-700', icon: XCircle };
+    return { label: 'Failed', bgColor: '#FFCDC9', icon: XCircle };
   };
 
   const getRelativeTime = (dateString: string | null | undefined): string => {
@@ -186,13 +186,13 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
           </div>
         </div>
 
-        {/* KPI Cards - Pastel */}
+        {/* KPI Cards - Custom Colors */}
         <div className="grid grid-cols-4 gap-4">
-          {/* Total Applicants */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg hover:shadow-blue-100/50 transition-all duration-300 group">
+          {/* Total Applicants - Teal */}
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-blue-100 group-hover:bg-blue-200 transition-colors">
-                <Users className="w-6 h-6 text-blue-600" />
+              <div className="p-3 rounded-xl" style={{ backgroundColor: '#B4D3D9' }}>
+                <Users className="w-6 h-6 text-gray-700" />
               </div>
               <div>
                 <p className="text-3xl font-bold text-gray-800">{kpis.total}</p>
@@ -201,49 +201,49 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
             </div>
           </div>
 
-          {/* Passed */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg hover:shadow-green-100/50 transition-all duration-300 group">
+          {/* Passed - Purple */}
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-green-100 group-hover:bg-green-200 transition-colors">
-                <CheckCircle className="w-6 h-6 text-green-600" />
+              <div className="p-3 rounded-xl" style={{ backgroundColor: '#BDA6CE' }}>
+                <CheckCircle className="w-6 h-6 text-gray-700" />
               </div>
               <div>
                 <p className="text-3xl font-bold text-gray-800">{kpis.passed}</p>
                 <p className="text-sm text-gray-500 font-medium">Passed</p>
                 {kpis.total > 0 && (
-                  <p className="text-xs text-green-600 font-medium">{Math.round((kpis.passed / kpis.total) * 100)}%</p>
+                  <p className="text-xs font-medium" style={{ color: '#BDA6CE' }}>{Math.round((kpis.passed / kpis.total) * 100)}%</p>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Needs Review */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg hover:shadow-yellow-100/50 transition-all duration-300 group">
+          {/* Needs Review - Yellow */}
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-yellow-100 group-hover:bg-yellow-200 transition-colors">
-                <AlertCircle className="w-6 h-6 text-yellow-600" />
+              <div className="p-3 rounded-xl" style={{ backgroundColor: '#FEEAC9' }}>
+                <AlertCircle className="w-6 h-6 text-gray-700" />
               </div>
               <div>
                 <p className="text-3xl font-bold text-gray-800">{kpis.needsReview}</p>
                 <p className="text-sm text-gray-500 font-medium">Needs Review</p>
                 {kpis.total > 0 && (
-                  <p className="text-xs text-yellow-600 font-medium">{Math.round((kpis.needsReview / kpis.total) * 100)}%</p>
+                  <p className="text-xs font-medium" style={{ color: '#FACE68' }}>{Math.round((kpis.needsReview / kpis.total) * 100)}%</p>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Failed */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg hover:shadow-red-100/50 transition-all duration-300 group">
+          {/* Failed - Pink */}
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-red-100 group-hover:bg-red-200 transition-colors">
-                <XCircle className="w-6 h-6 text-red-600" />
+              <div className="p-3 rounded-xl" style={{ backgroundColor: '#FFCDC9' }}>
+                <XCircle className="w-6 h-6 text-gray-700" />
               </div>
               <div>
                 <p className="text-3xl font-bold text-gray-800">{kpis.failed}</p>
                 <p className="text-sm text-gray-500 font-medium">Failed</p>
                 {kpis.total > 0 && (
-                  <p className="text-xs text-red-600 font-medium">{Math.round((kpis.failed / kpis.total) * 100)}%</p>
+                  <p className="text-xs font-medium" style={{ color: '#FFCDC9' }}>{Math.round((kpis.failed / kpis.total) * 100)}%</p>
                 )}
               </div>
             </div>
@@ -261,7 +261,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
                   <h2 className="text-lg font-bold text-gray-800">Needs Review</h2>
-                  <span className="px-2.5 py-1 bg-yellow-200 text-yellow-700 text-xs font-bold rounded-full">
+                  <span className="px-2.5 py-1 text-xs font-bold rounded-full" style={{ backgroundColor: '#FEEAC9', color: '#666' }}>
                     {needsReviewApplicants.length}
                   </span>
                 </div>
@@ -280,11 +280,12 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
                     return (
                       <div 
                         key={applicant.id}
-                        className="flex items-center justify-between p-4 bg-yellow-50 rounded-xl hover:bg-yellow-100 transition-colors group"
+                        className="flex items-center justify-between p-4 rounded-xl hover:opacity-90 transition-opacity"
+                        style={{ backgroundColor: '#FEEAC9' }}
                       >
                         <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 bg-yellow-200 rounded-full flex items-center justify-center">
-                            <UserPlus className="w-5 h-5 text-yellow-700" />
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: '#FAAC68' }}>
+                            <UserPlus className="w-5 h-5 text-gray-700" />
                           </div>
                           <div>
                             <p className="text-sm font-bold text-gray-800">{applicant.name}</p>
@@ -295,7 +296,8 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
                           <span className="text-xs text-gray-400">{getRelativeTime(applicant.created_at)}</span>
                           <button
                             onClick={() => onMenuChange?.('applicants')}
-                            className="px-3 py-1.5 bg-yellow-400 text-yellow-900 text-xs font-semibold rounded-lg hover:bg-yellow-500 transition-colors"
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors"
+                            style={{ backgroundColor: '#FAAC68', color: '#333' }}
                           >
                             Review
                           </button>
@@ -374,7 +376,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
                               <span className="text-sm text-gray-600">{applicant.position}</span>
                             </td>
                             <td className="py-3">
-                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${status.color}`}>
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold text-gray-700" style={{ backgroundColor: status.bgColor }}>
                                 <StatusIcon className="w-3.5 h-3.5" />
                                 {status.label}
                               </span>
@@ -396,46 +398,46 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
 
           {/* Right - 1/3 width */}
           <div className="space-y-6">
-            {/* Quick Stats - Compact - Pastel */}
-            <div className="bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all duration-300">
+            {/* Quick Stats - Compact - Custom Colors */}
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg transition-all duration-300">
               <h2 className="text-sm font-bold text-gray-800 mb-3">Quick Stats</h2>
               <div className="space-y-2">
-                <div className="flex items-center justify-between py-2 px-3 bg-blue-50 rounded-lg">
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ backgroundColor: '#B4D3D9' }}>
                   <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-400" />
-                    <span className="text-xs font-medium text-blue-600">Resume</span>
+                    <FileText className="w-4 h-4 text-gray-700" />
+                    <span className="text-xs font-medium text-gray-700">Resume</span>
                   </div>
-                  <span className="text-xs font-bold text-blue-600">{kpis.passed + kpis.failed}</span>
+                  <span className="text-xs font-bold text-gray-700">{kpis.passed + kpis.failed}</span>
                 </div>
-                <div className="flex items-center justify-between py-2 px-3 bg-violet-50 rounded-lg">
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ backgroundColor: '#BDA6CE' }}>
                   <div className="flex items-center gap-2">
-                    <Video className="w-4 h-4 text-violet-400" />
-                    <span className="text-xs font-medium text-violet-600">Video</span>
+                    <Video className="w-4 h-4 text-gray-700" />
+                    <span className="text-xs font-medium text-gray-700">Video</span>
                   </div>
-                  <span className="text-xs font-bold text-violet-600">
+                  <span className="text-xs font-bold text-gray-700">
                     {filteredApplicants.filter(a => a.video?.status === 'completed').length}
                   </span>
                 </div>
-                <div className="flex items-center justify-between py-2 px-3 bg-green-50 rounded-lg">
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ backgroundColor: '#FACE68' }}>
                   <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-green-400" />
-                    <span className="text-xs font-medium text-green-600">Success</span>
+                    <TrendingUp className="w-4 h-4 text-gray-700" />
+                    <span className="text-xs font-medium text-gray-700">Success</span>
                   </div>
-                  <span className="text-xs font-bold text-green-600">
+                  <span className="text-xs font-bold text-gray-700">
                     {kpis.total > 0 ? Math.round((kpis.passed / kpis.total) * 100) : 0}%
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Recruitment Funnel - Vertical Graph - Pastel */}
-            <div className="bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all duration-300">
+            {/* Recruitment Funnel - Vertical Graph - Custom Colors */}
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg transition-all duration-300">
               <h2 className="text-sm font-bold text-gray-800 mb-3">Recruitment Funnel</h2>
               <div className="space-y-2">
                 {funnelStages.map((stage, idx) => (
                   <div key={stage.name} className="flex items-center gap-3">
-                    <div className={`w-10 h-10 ${stage.color} rounded-lg flex items-center justify-center shadow-sm`}>
-                      <span className={`${stage.textColor} font-bold text-sm`}>{stage.count}</span>
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center shadow-sm" style={{ backgroundColor: stage.color }}>
+                      <span className="text-gray-700 font-bold text-sm">{stage.count}</span>
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
@@ -448,8 +450,9 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
                       </div>
                       <div className="h-2 bg-gray-100 rounded-full mt-1 overflow-hidden">
                         <div 
-                          className={`h-full ${stage.color} rounded-full`} 
+                          className="h-full rounded-full" 
                           style={{ 
+                            backgroundColor: stage.color,
                             width: idx === 0 ? '100%' : 
                             idx === 1 ? (kpis.total > 0 ? Math.round(((kpis.passed + kpis.failed) / kpis.total) * 100) : 0) + '%' : 
                             idx === 2 ? (kpis.passed + kpis.failed > 0 ? Math.round((kpis.passed / (kpis.passed + kpis.failed)) * 100) : 0) + '%' :
