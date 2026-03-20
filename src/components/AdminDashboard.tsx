@@ -193,7 +193,7 @@ export function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-30 flex items-center justify-center">
         <div className="text-gray-500 text-lg">Loading dashboard...</div>
       </div>
     );
@@ -446,7 +446,7 @@ export function AdminDashboard() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 overflow-y-auto bg-gray-50 p-8 lg:p-10 space-y-6 min-h-screen">
+        <div className="flex-1 overflow-y-auto bg-gray-50 p-4 lg:p-4 space-y-6 min-h-screen">
           {activeMenu === 'dashboard' && <DashboardLanding applicants={applicants} onMenuChange={setActiveMenu} />}
           
           {/* Job Postings - Uses AdminJobManagement */}
