@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Users, FileText, Video, ClipboardCheck, TrendingUp, CheckCircle, Briefcase, UserPlus, FileCheck } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Users, FileText, Video, TrendingUp, CheckCircle, AlertCircle, XCircle, Calendar, ChevronDown, Search, UserPlus } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest } from '../lib/supabase';
 
 interface ApplicantWithDetails extends Applicant {
@@ -13,105 +13,99 @@ interface DashboardLandingProps {
   onMenuChange?: (menuId: string) => void;
 }
 
+// Loading skeleton component
+function Skeleton({ className }: { className?: string }) {
+  return (
+    <div className={`animate-pulse bg-gray-200 rounded ${className}`} />
+  );
+}
+
+// Empty state component
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+      <Users className="w-12 h-12 mb-3 opacity-50" />
+      <p className="text-sm font-medium">{message}</p>
+    </div>
+  );
+}
+
 export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingProps) {
-  const totalApplicants = applicants.length;
+  const [selectedJob, setSelectedJob] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  const resumeStages = {
-    pending: applicants.filter(a => !a.resume || a.resume.status === 'pending').length,
-    suitable: applicants.filter(a => a.resume?.status === 'suitable').length,
-    notSuitable: applicants.filter(a => a.resume?.status === 'not_suitable').length,
-  };
-
-  const videoStages = {
-    notStarted: applicants.filter(a => a.resume?.status === 'suitable' && (!a.video || a.video.status === 'pending')).length,
-    submitted: applicants.filter(a => a.video?.status === 'submitted').length,
-    completed: applicants.filter(a => a.video?.status === 'completed').length,
-  };
-
-  const testStages = {
-    notStarted: applicants.filter(a => a.video?.status === 'completed' && (!a.test || a.test.status === 'pending')).length,
-    completed: applicants.filter(a => a.test?.status === 'completed').length,
-  };
-
-  const fullyCompleted = applicants.filter(a => 
-    a.resume?.status === 'suitable' && 
-    a.video?.status === 'completed' && 
-    a.test?.status === 'completed'
-  ).length;
-
-  const completionRate = totalApplicants > 0 ? Math.round((fullyCompleted / totalApplicants) * 100) : 0;
-
-  // Stats cards - Pastel backgrounds
-  const statsCards = [
-    { title: 'Total Applicants', value: totalApplicants, icon: Users, gradient: 'from-blue-200 to-blue-300', iconBg: 'bg-blue-100' },
-    { title: 'Resume Reviewed', value: resumeStages.suitable + resumeStages.notSuitable, subValue: `${resumeStages.suitable} suitable`, icon: FileText, gradient: 'from-green-200 to-green-300', iconBg: 'bg-green-100' },
-    { title: 'Video Completed', value: videoStages.completed, subValue: `${videoStages.submitted} pending`, icon: Video, gradient: 'from-violet-200 to-violet-300', iconBg: 'bg-violet-100' },
-    { title: 'Tests Done', value: testStages.completed, subValue: `${testStages.notStarted} pending`, icon: ClipboardCheck, gradient: 'from-amber-200 to-amber-300', iconBg: 'bg-amber-100' },
-  ];
-
-  // Hiring funnel - Pastel colors
-  const funnelStages = [
-    { name: 'Applications', count: applicants.length, gradient: 'from-blue-200 to-blue-300' },
-    { name: 'Reviewed', count: resumeStages.suitable + resumeStages.notSuitable, gradient: 'from-indigo-200 to-indigo-300' },
-    { name: 'Shortlisted', count: resumeStages.suitable, gradient: 'from-green-200 to-green-300' },
-    { name: 'Video', count: videoStages.completed, gradient: 'from-violet-200 to-violet-300' },
-    { name: 'Completed', count: testStages.completed, gradient: 'from-amber-200 to-amber-300' },
-  ];
-
-  const maxFunnelCount = Math.max(...funnelStages.map(s => s.count), 1);
-
-  const jobPerformance = useMemo(() => {
-    const jobCounts: Record<string, { count: number; suitable: number }> = {};
-    applicants.forEach(app => {
-      const position = app.position || 'Unknown';
-      if (!jobCounts[position]) jobCounts[position] = { count: 0, suitable: 0 };
-      jobCounts[position].count++;
-      if (app.resume?.status === 'suitable') jobCounts[position].suitable++;
-    });
-    return Object.entries(jobCounts)
-      .map(([position, data]) => ({
-        position,
-        applicants: data.count,
-        suitable: data.suitable,
-        conversionRate: data.count > 0 ? Math.round((data.suitable / data.count) * 100) : 0,
-      }))
-      .sort((a, b) => b.applicants - a.applicants)
-      .slice(0, 5);
+  // Get unique jobs for dropdown
+  const jobs = useMemo(() => {
+    const jobSet = new Set(applicants.map(a => a.position).filter(Boolean));
+    return ['all', ...Array.from(jobSet)];
   }, [applicants]);
 
-  const totalJobs = jobPerformance.length;
+  // Filter applicants based on selected job and search
+  const filteredApplicants = useMemo(() => {
+    let filtered = applicants;
+    
+    if (selectedJob !== 'all') {
+      filtered = filtered.filter(a => a.position === selectedJob);
+    }
+    
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(a => 
+        a.name?.toLowerCase().includes(query) || 
+        a.email?.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
+  }, [applicants, selectedJob, searchQuery]);
 
-  const generateRecentActivity = () => {
-    const activities: Array<{
-      type: 'new_applicant' | 'resume_reviewed' | 'video_submitted' | 'test_completed';
-      message: string;
-      time: string;
-      applicantName: string;
-    }> = [];
+  // Calculate KPIs
+  const kpis = useMemo(() => {
+    const total = filteredApplicants.length;
+    const passed = filteredApplicants.filter(a => a.resume?.status === 'suitable').length;
+    const needsReview = filteredApplicants.filter(a => !a.resume || a.resume.status === 'pending').length;
+    const failed = filteredApplicants.filter(a => a.resume?.status === 'not_suitable').length;
+    
+    return { total, passed, needsReview, failed };
+  }, [filteredApplicants]);
 
-    const recentApplicants = [...applicants]
+  // Funnel stages - Pastel colors
+  const funnelStages = useMemo(() => {
+    return [
+      { name: 'Applicants', count: kpis.total, color: 'bg-blue-200', textColor: 'text-blue-600' },
+      { name: 'Screened', count: kpis.passed + kpis.failed, color: 'bg-indigo-200', textColor: 'text-indigo-600' },
+      { name: 'Shortlisted', count: kpis.passed, color: 'bg-green-200', textColor: 'text-green-600' },
+      { name: 'Interview', count: Math.floor(kpis.passed * 0.6), color: 'bg-amber-200', textColor: 'text-amber-600' },
+      { name: 'Hired', count: Math.floor(kpis.passed * 0.3), color: 'bg-emerald-200', textColor: 'text-emerald-600' },
+    ];
+  }, [kpis]);
+
+  // Applicants needing review
+  const needsReviewApplicants = useMemo(() => {
+    return filteredApplicants
+      .filter(a => !a.resume || a.resume.status === 'pending')
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .slice(0, 5);
+      .slice(0, 10);
+  }, [filteredApplicants]);
 
-    recentApplicants.forEach(applicant => {
-      if (applicant.created_at) activities.push({ type: 'new_applicant', message: `applied for ${applicant.position}`, time: applicant.created_at, applicantName: applicant.name });
-      if (applicant.resume?.status === 'suitable' || applicant.resume?.status === 'not_suitable') {
-        const resumeTime = applicant.resume?.uploaded_at;
-        if (resumeTime) activities.push({ type: 'resume_reviewed', message: `resume ${applicant.resume.status}`, time: resumeTime, applicantName: applicant.name });
-      }
-      if (applicant.video?.status === 'submitted' || applicant.video?.status === 'completed') {
-        const videoTime = applicant.video.submitted_at || applicant.video.created_at;
-        if (videoTime) activities.push({ type: 'video_submitted', message: `video ${applicant.video.status}`, time: videoTime, applicantName: applicant.name });
-      }
-      if (applicant.test?.status === 'completed') {
-        const testTime = applicant.test.submitted_at || applicant.test.created_at;
-        if (testTime) activities.push({ type: 'test_completed', message: 'test completed', time: testTime, applicantName: applicant.name });
-      }
-    });
-    return activities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 6);
+  // Recent applicants
+  const recentApplicants = useMemo(() => {
+    return [...filteredApplicants]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 10);
+  }, [filteredApplicants]);
+
+  // Get status info - Pastel colors
+  const getStatusInfo = (applicant: ApplicantWithDetails) => {
+    if (!applicant.resume || applicant.resume.status === 'pending') {
+      return { label: 'Needs Review', color: 'bg-yellow-200 text-yellow-700', icon: AlertCircle };
+    }
+    if (applicant.resume.status === 'suitable') {
+      return { label: 'Passed', color: 'bg-green-200 text-green-700', icon: CheckCircle };
+    }
+    return { label: 'Failed', color: 'bg-red-200 text-red-700', icon: XCircle };
   };
-
-  const recentActivity = generateRecentActivity();
 
   const getRelativeTime = (dateString: string | null | undefined): string => {
     if (!dateString) return 'Unknown';
@@ -126,220 +120,346 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
     return date.toLocaleDateString();
   };
 
-  // Pastel quick actions
-  const quickActions = [
-    { label: 'Pending Reviews', count: resumeStages.pending, action: () => onMenuChange?.('applicants'), gradient: 'from-blue-200 to-blue-300', textColor: 'text-blue-700' },
-    { label: 'Shortlisted', count: resumeStages.suitable, action: () => onMenuChange?.('shortlisted'), gradient: 'from-green-200 to-green-300', textColor: 'text-green-700' },
-    { label: 'Pending Videos', count: videoStages.notStarted, action: () => onMenuChange?.('applicants'), gradient: 'from-violet-200 to-violet-300', textColor: 'text-violet-700' },
-    { label: 'All Jobs', count: totalJobs, action: () => onMenuChange?.('job-management'), gradient: 'from-teal-200 to-teal-300', textColor: 'text-teal-700' },
-  ];
+  // Loading state
+  if (!applicants.length) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto p-6 space-y-6">
+          {/* Header skeleton */}
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-10 w-40" />
+          </div>
+          
+          {/* KPI Cards skeleton */}
+          <div className="grid grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl p-5 border border-gray-100">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="w-12 h-12 rounded-xl" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-8 w-16" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         
-        {/* Header */}
+        {/* Header with Job Selector and Date */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
             <p className="text-gray-400 text-sm mt-0.5">Recruitment overview</p>
           </div>
-          <div className="flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-green-200 to-emerald-200 rounded-lg">
-            <TrendingUp className="w-4 h-4 text-green-600" />
-            <span className="text-sm font-bold text-green-700">{completionRate}%</span>
-            <span className="text-sm text-green-600/80">complete</span>
+          
+          <div className="flex items-center gap-4">
+            {/* Job Selector */}
+            <div className="relative">
+              <select
+                value={selectedJob}
+                onChange={(e) => setSelectedJob(e.target.value)}
+                className="appearance-none bg-white border border-gray-200 text-gray-700 py-2.5 px-4 pr-10 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer hover:border-gray-300 transition-colors"
+              >
+                {jobs.map(job => (
+                  <option key={job} value={job}>
+                    {job === 'all' ? 'All Jobs' : job}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            </div>
+            
+            {/* Date Display */}
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-600">
+              <Calendar className="w-4 h-4" />
+              <span>{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+            </div>
           </div>
         </div>
 
-        {/* Quick Actions - Pastel buttons */}
-        <div className="flex gap-3">
-          {quickActions.map((action, idx) => (
-            <button
-              key={idx}
-              onClick={action.action}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-semibold transition-all bg-gradient-to-r ${action.gradient} ${action.textColor} hover:opacity-80`}
-            >
-              <span>{action.label}</span>
-              <span className="opacity-80">({action.count})</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Stats Cards - Pastel icons */}
+        {/* KPI Cards - Pastel */}
         <div className="grid grid-cols-4 gap-4">
-          {statsCards.map((stat, idx) => {
-            const Icon = stat.icon;
-            return (
-              <div key={idx} className="bg-white rounded-xl p-4 border border-gray-100 hover:shadow-md transition-shadow">
-                <div className="flex items-center gap-3">
-                  <div className={`p-3 rounded-xl ${stat.iconBg}`}>
-                    <Icon className="w-6 h-6 text-gray-600" />
-                  </div>
-                  <div>
-                    <p className="text-3xl font-bold text-gray-800">{stat.value}</p>
-                    <p className="text-xs text-gray-400 font-medium">{stat.title}</p>
-                  </div>
-                </div>
-                {stat.subValue && (
-                  <p className="text-xs text-gray-400 mt-3 pt-3 border-t border-gray-50">{stat.subValue}</p>
+          {/* Total Applicants */}
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg hover:shadow-blue-100/50 transition-all duration-300 group">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-blue-100 group-hover:bg-blue-200 transition-colors">
+                <Users className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-gray-800">{kpis.total}</p>
+                <p className="text-sm text-gray-500 font-medium">Total Applicants</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Passed */}
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg hover:shadow-green-100/50 transition-all duration-300 group">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-green-100 group-hover:bg-green-200 transition-colors">
+                <CheckCircle className="w-6 h-6 text-green-600" />
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-gray-800">{kpis.passed}</p>
+                <p className="text-sm text-gray-500 font-medium">Passed</p>
+                {kpis.total > 0 && (
+                  <p className="text-xs text-green-600 font-medium">{Math.round((kpis.passed / kpis.total) * 100)}%</p>
                 )}
               </div>
-            );
-          })}
+            </div>
+          </div>
+
+          {/* Needs Review */}
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg hover:shadow-yellow-100/50 transition-all duration-300 group">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-yellow-100 group-hover:bg-yellow-200 transition-colors">
+                <AlertCircle className="w-6 h-6 text-yellow-600" />
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-gray-800">{kpis.needsReview}</p>
+                <p className="text-sm text-gray-500 font-medium">Needs Review</p>
+                {kpis.total > 0 && (
+                  <p className="text-xs text-yellow-600 font-medium">{Math.round((kpis.needsReview / kpis.total) * 100)}%</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Failed */}
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg hover:shadow-red-100/50 transition-all duration-300 group">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-red-100 group-hover:bg-red-200 transition-colors">
+                <XCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-gray-800">{kpis.failed}</p>
+                <p className="text-sm text-gray-500 font-medium">Failed</p>
+                {kpis.total > 0 && (
+                  <p className="text-xs text-red-600 font-medium">{Math.round((kpis.failed / kpis.total) * 100)}%</p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Two Column Layout */}
         <div className="grid grid-cols-3 gap-6">
           {/* Left - 2/3 width */}
           <div className="col-span-2 space-y-6">
-            {/* Recent Activity - Pastel */}
-            <div className="bg-white rounded-xl p-5 border border-gray-100">
-              <h2 className="text-sm font-bold text-gray-700 mb-4">Recent Activity</h2>
-              <div className="space-y-3">
-                {recentActivity.length > 0 ? recentActivity.map((activity, idx) => {
-                  const icons: Record<string, typeof UserPlus> = { new_applicant: UserPlus, resume_reviewed: FileCheck, video_submitted: Video, test_completed: ClipboardCheck };
-                  const pastelBg: Record<string, string> = {
-                    new_applicant: 'bg-blue-100',
-                    resume_reviewed: 'bg-green-100',
-                    video_submitted: 'bg-violet-100',
-                    test_completed: 'bg-amber-100',
-                  };
-                  const Icon = icons[activity.type] || UserPlus;
-                  return (
-                    <div key={idx} className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className={`p-2 rounded-lg ${pastelBg[activity.type]}`}>
-                        <Icon className="w-3.5 h-3.5 text-gray-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-gray-700 truncate">{activity.applicantName} {activity.message}</p>
-                        <p className="text-xs text-gray-400">{getRelativeTime(activity.time)}</p>
-                      </div>
-                    </div>
-                  );
-                }) : (
-                  <p className="text-xs text-gray-400 text-center py-2">No activity yet</p>
-                )}
+
+
+            {/* Needs Review Panel - High Priority */}
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all duration-300">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-bold text-gray-800">Needs Review</h2>
+                  <span className="px-2.5 py-1 bg-yellow-200 text-yellow-700 text-xs font-bold rounded-full">
+                    {needsReviewApplicants.length}
+                  </span>
+                </div>
+                <button
+                  onClick={() => onMenuChange?.('applicants')}
+                  className="text-sm text-blue-600 font-medium hover:text-blue-700 transition-colors"
+                >
+                  View All
+                </button>
               </div>
+              
+              {needsReviewApplicants.length > 0 ? (
+                <div className="space-y-3">
+                  {needsReviewApplicants.map((applicant) => {
+                    const StatusIcon = AlertCircle;
+                    return (
+                      <div 
+                        key={applicant.id}
+                        className="flex items-center justify-between p-4 bg-yellow-50 rounded-xl hover:bg-yellow-100 transition-colors group"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-yellow-200 rounded-full flex items-center justify-center">
+                            <UserPlus className="w-5 h-5 text-yellow-700" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-800">{applicant.name}</p>
+                            <p className="text-xs text-gray-500">{applicant.position}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-400">{getRelativeTime(applicant.created_at)}</span>
+                          <button
+                            onClick={() => onMenuChange?.('applicants')}
+                            className="px-3 py-1.5 bg-yellow-400 text-yellow-900 text-xs font-semibold rounded-lg hover:bg-yellow-500 transition-colors"
+                          >
+                            Review
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState message="No applicants need review" />
+              )}
             </div>
 
-            {/* Job Performance - Pastel */}
-            <div className="bg-white rounded-xl p-5 border border-gray-100">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-bold text-gray-700">Job Performance</h2>
-                <div className="flex gap-4 text-xs font-medium">
-                  <span className="text-blue-500">{totalJobs} jobs</span>
-                  <span className="text-violet-500">{totalApplicants} apps</span>
+            {/* Recent Applicants */}
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all duration-300">
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-lg font-bold text-gray-800">Recent Applicants</h2>
+                <div className="flex items-center gap-3">
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  {/* Status Filter */}
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="passed">Passed</option>
+                    <option value="needs_review">Needs Review</option>
+                    <option value="failed">Failed</option>
+                  </select>
                 </div>
               </div>
-              <div className="space-y-3">
-                {jobPerformance.length > 0 ? jobPerformance.map((job, idx) => {
-                  const barColor = job.conversionRate >= 50 ? 'from-green-300 to-green-400' : job.conversionRate >= 25 ? 'from-yellow-300 to-yellow-400' : 'from-red-300 to-rose-400';
-                  const iconBg = job.conversionRate >= 50 ? 'bg-green-100' : job.conversionRate >= 25 ? 'bg-yellow-100' : 'bg-red-100';
-                  return (
-                    <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                      <div className={`w-10 h-10 rounded-lg ${iconBg} flex items-center justify-center`}>
-                        <Briefcase className="w-5 h-5 text-gray-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-gray-700 truncate">{job.position}</p>
-                        <p className="text-xs text-gray-400">{job.applicants} applicants</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-green-600">{job.suitable}</p>
-                        <p className="text-xs text-gray-400">{job.conversionRate}%</p>
-                      </div>
-                      <div className="w-20 h-3 bg-gray-200 rounded-full overflow-hidden">
-                        <div className={`h-full bg-gradient-to-r ${barColor} rounded-full`} style={{ width: `${job.conversionRate}%` }} />
-                      </div>
-                    </div>
-                  );
-                }) : (
-                  <p className="text-sm text-gray-400 text-center py-4">No data yet</p>
-                )}
-              </div>
+              
+              {recentApplicants.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="pb-3">Name</th>
+                        <th className="pb-3">Job Applied</th>
+                        <th className="pb-3">Status</th>
+                        <th className="pb-3">Date Applied</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {recentApplicants.map((applicant) => {
+                        const status = getStatusInfo(applicant);
+                        const StatusIcon = status.icon;
+                        return (
+                          <tr 
+                            key={applicant.id} 
+                            className="hover:bg-gray-50 transition-colors cursor-pointer"
+                            onClick={() => onMenuChange?.('applicants')}
+                          >
+                            <td className="py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                                  <span className="text-xs font-bold text-gray-600">
+                                    {applicant.name?.charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                                <span className="text-sm font-medium text-gray-800">{applicant.name}</span>
+                              </div>
+                            </td>
+                            <td className="py-3">
+                              <span className="text-sm text-gray-600">{applicant.position}</span>
+                            </td>
+                            <td className="py-3">
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${status.color}`}>
+                                <StatusIcon className="w-3.5 h-3.5" />
+                                {status.label}
+                              </span>
+                            </td>
+                            <td className="py-3">
+                              <span className="text-sm text-gray-500">{getRelativeTime(applicant.created_at)}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState message="No applicants found" />
+              )}
             </div>
           </div>
 
           {/* Right - 1/3 width */}
           <div className="space-y-6">
-            {/* Stage Breakdown - Pastel */}
-            <div className="bg-white rounded-xl p-5 border border-gray-100">
-              <h2 className="text-sm font-bold text-gray-700 mb-4">Stage Breakdown</h2>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-300" />
-                      <span className="text-sm font-semibold text-gray-600">Resume</span>
-                    </div>
-                    <span className="text-sm font-bold text-blue-500">{resumeStages.suitable}/{resumeStages.suitable + resumeStages.notSuitable}</span>
+            {/* Quick Stats - Compact - Pastel */}
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all duration-300">
+              <h2 className="text-sm font-bold text-gray-800 mb-3">Quick Stats</h2>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between py-2 px-3 bg-blue-50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-blue-400" />
+                    <span className="text-xs font-medium text-blue-600">Resume</span>
                   </div>
-                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-300 rounded-full" style={{ width: `${totalApplicants > 0 ? Math.round(((resumeStages.suitable + resumeStages.notSuitable) / totalApplicants) * 100) : 0}%` }} />
-                  </div>
+                  <span className="text-xs font-bold text-blue-600">{kpis.passed + kpis.failed}</span>
                 </div>
-                
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-violet-300" />
-                      <span className="text-sm font-semibold text-gray-600">Video</span>
-                    </div>
-                    <span className="text-sm font-bold text-violet-500">{videoStages.completed}/{resumeStages.suitable}</span>
+                <div className="flex items-center justify-between py-2 px-3 bg-violet-50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Video className="w-4 h-4 text-violet-400" />
+                    <span className="text-xs font-medium text-violet-600">Video</span>
                   </div>
-                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-violet-300 rounded-full" style={{ width: `${resumeStages.suitable > 0 ? Math.round((videoStages.completed / resumeStages.suitable) * 100) : 0}%` }} />
-                  </div>
+                  <span className="text-xs font-bold text-violet-600">
+                    {filteredApplicants.filter(a => a.video?.status === 'completed').length}
+                  </span>
                 </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-amber-300" />
-                      <span className="text-sm font-semibold text-gray-600">Test</span>
-                    </div>
-                    <span className="text-sm font-bold text-amber-500">{testStages.completed}/{videoStages.completed}</span>
+                <div className="flex items-center justify-between py-2 px-3 bg-green-50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-green-400" />
+                    <span className="text-xs font-medium text-green-600">Success</span>
                   </div>
-                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-amber-300 rounded-full" style={{ width: `${videoStages.completed > 0 ? Math.round((testStages.completed / videoStages.completed) * 100) : 0}%` }} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Summary box - Pastel */}
-              <div className="mt-5 pt-4 border-t border-gray-100">
-                <div className="flex items-center gap-3 p-3 bg-green-50 rounded-xl border border-green-100">
-                  <div className="p-2 bg-green-200 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-green-700">{fullyCompleted} fully qualified</p>
-                    <p className="text-xs text-green-500">Completed all stages</p>
-                  </div>
+                  <span className="text-xs font-bold text-green-600">
+                    {kpis.total > 0 ? Math.round((kpis.passed / kpis.total) * 100) : 0}%
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Hiring Funnel - Pastel - Compact for narrow column */}
-            <div className="bg-white rounded-xl p-4 border border-gray-100">
-              <h2 className="text-sm font-bold text-gray-700 mb-3">Hiring Pipeline</h2>
-              <div className="flex items-center gap-1">
-                {funnelStages.map((stage, idx) => {
-                  const pct = maxFunnelCount > 0 ? Math.round((stage.count / maxFunnelCount) * 100) : 0;
-                  return (
-                    <div key={idx} className="flex-1">
-                      <div className="text-center mb-1.5">
-                        <div className={`w-8 h-8 rounded-lg ${stage.gradient} flex items-center justify-center mx-auto mb-1`}>
-                          <span className="text-gray-700 font-bold text-sm">{stage.count}</span>
-                        </div>
-                        <p className="text-[10px] font-medium text-gray-500">{stage.name}</p>
+            {/* Recruitment Funnel - Vertical Graph - Pastel */}
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all duration-300">
+              <h2 className="text-sm font-bold text-gray-800 mb-3">Recruitment Funnel</h2>
+              <div className="space-y-2">
+                {funnelStages.map((stage, idx) => (
+                  <div key={stage.name} className="flex items-center gap-3">
+                    <div className={`w-10 h-10 ${stage.color} rounded-lg flex items-center justify-center shadow-sm`}>
+                      <span className={`${stage.textColor} font-bold text-sm`}>{stage.count}</span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-gray-700">{stage.name}</span>
+                        <span className="text-xs text-gray-400">
+                          {idx === 0 ? '100%' : idx === 1 ? `${kpis.total > 0 ? Math.round(((kpis.passed + kpis.failed) / kpis.total) * 100) : 0}%` : 
+                           idx === 2 ? `${kpis.passed + kpis.failed > 0 ? Math.round((kpis.passed / (kpis.passed + kpis.failed)) * 100) : 0}%` :
+                           idx === 3 ? '60%' : '30%'}
+                        </span>
                       </div>
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div className={`h-full ${stage.gradient} rounded-full`} style={{ width: `${pct}%` }} />
+                      <div className="h-2 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                        <div 
+                          className={`h-full ${stage.color} rounded-full`} 
+                          style={{ 
+                            width: idx === 0 ? '100%' : 
+                            idx === 1 ? (kpis.total > 0 ? Math.round(((kpis.passed + kpis.failed) / kpis.total) * 100) : 0) + '%' : 
+                            idx === 2 ? (kpis.passed + kpis.failed > 0 ? Math.round((kpis.passed / (kpis.passed + kpis.failed)) * 100) : 0) + '%' :
+                            idx === 3 ? '60%' : '30%'
+                          }}
+                        />
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
