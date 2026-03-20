@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight, Send } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Send, User, ClipboardList } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getSupabaseAdminClient } from '../lib/supabase';
 import {
@@ -182,204 +182,256 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
   const likertAllAnswered = Object.keys(answers).length === questions.length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 py-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
+    <div className="min-h-screen bg-gray-50">
+      {/* Top Navigation Bar */}
+      <nav className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-6xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            {/* Back to Dashboard Link */}
             <button
               onClick={onBack}
-              className="flex items-center gap-2 text-white/90 hover:text-white mb-4 transition-colors"
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors font-medium"
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Dashboard
             </button>
-            <h1 className="text-2xl font-bold">Work Style Assessment</h1>
-            <p className="text-blue-100 mt-1">
-              {isEssayQuestion 
-                ? 'Final Question: Share your experience' 
-                : `${questions.length} likert scale questions and one short essay to help evaluate your work preferences, behaviors, and role alignment.`}
-            </p>
 
-            <div className="mt-4">
-              <div className="flex items-center justify-between text-sm mb-2">
-                <span>Progress</span>
-                <span>{progress}% Complete</span>
+            {/* User Profile Avatar */}
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+                {applicant?.photo_url ? (
+                  <img src={applicant.photo_url} alt={applicant?.name} className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-4 h-4 text-gray-500" />
+                )}
               </div>
-              <div className="w-full bg-blue-800 rounded-full h-2">
-                <div
-                  className="bg-white rounded-full h-2 transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Main Content */}
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        {/* Page Header */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-800">Work Style Assessment</h1>
+          <p className="text-gray-500 mt-1">
+            {isEssayQuestion 
+              ? 'Final Question: Share your experience' 
+              : `${questions.length} Likert scale questions and one short essay to help evaluate your work preferences, behaviors, and role alignment.`}
+          </p>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium text-gray-600">Progress</span>
+            <span className="text-sm font-semibold text-gray-800">{progress}% Complete</span>
+          </div>
+          <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+            <div 
+              className="h-full rounded-full transition-all duration-300"
+              style={{ 
+                width: `${progress}%`,
+                backgroundColor: progress === '100' ? '#98D8AA' : '#B4D3D9'
+              }}
+            />
+          </div>
+          <p className="text-sm text-gray-500 mt-3">
+            {Object.keys(answers).length} of {totalQuestions} completed
+          </p>
+        </div>
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Instructions Panel */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 sticky top-6">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#BDA6CE' }}>
+                  <ClipboardList className="w-4 h-4 text-gray-700" />
+                </div>
+                <h2 className="text-lg font-bold text-gray-800">Instructions</h2>
+              </div>
+              
+              {!isEssayQuestion ? (
+                <div className="text-gray-600 text-sm space-y-3">
+                  <p>Please answer honestly based on how you typically behave in academic, internship, or work-related situations.</p>
+                  <p>For each statement, select the option that best reflects your level of agreement.</p>
+                  <p className="text-gray-400 italic">There are no right or wrong answers.</p>
+                </div>
+              ) : (
+                <div className="text-gray-600 text-sm space-y-3">
+                  <p>Now you'll answer a short essay question to further describe your work approach.</p>
+                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mt-4">
+                    <p className="text-blue-800 text-sm">
+                      <strong>Tips:</strong> Provide specific examples from your experience. Describe the situation, your actions, the outcome, and what you learned.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Question Navigator */}
+              <div className="mt-6">
+                <h3 className="text-sm font-medium text-gray-600 mb-3">Questions</h3>
+                <div className="flex flex-wrap gap-2">
+                  {questions.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setCurrentQuestion(idx)}
+                      className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                        idx === currentQuestion
+                          ? 'bg-blue-600 text-white'
+                          : answers[idx] !== undefined
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                      title={`Question ${idx + 1}`}
+                    >
+                      {idx + 1}
+                    </button>
+                  ))}
+                  {/* Essay button */}
+                  <button
+                    onClick={() => setCurrentQuestion(questions.length)}
+                    className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                      currentQuestion === questions.length
+                        ? 'bg-blue-600 text-white'
+                        : essay.trim()
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                    title="Essay Question"
+                  >
+                    <span className="text-lg leading-none">📝</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="p-8">
-            {/* Instructions */}
-            {!isEssayQuestion && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
-                <p className="text-amber-900 text-sm">
-                  <strong>Instructions:</strong> Please answer honestly based on how you typically behave in academic, internship, or work-related situations. For each statement, select the option that best reflects your level of agreement. There are no right or wrong answers. After completing the multiple-choice section, you will be asked to answer a short essay question to further describe your work approach.
-                </p>
+          {/* Question Content */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              {/* Question number */}
+              <div className="text-sm text-gray-500 mb-2">
+                {isEssayQuestion ? 'Final Question' : `Question ${currentQuestion + 1} of ${questions.length}`}
               </div>
-            )}
 
-            {!isEssayQuestion ? (
-              /* Likert Scale Questions */
-              <div className="mb-8">
-                <div className="text-sm text-gray-500 mb-2">
-                  Question {currentQuestion + 1} of {questions.length}
-                </div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-6">
-                  {questions[currentQuestion].text}
-                </h2>
-                
-                <div className="space-y-3">
-                  {[1, 2, 3, 4, 5].map((value) => (
-                    <button
-                      key={value}
-                      onClick={() => handleAnswer(value)}
-                      className={`w-full p-4 text-left border-2 rounded-lg transition-all ${
-                        answers[currentQuestion] === value
-                          ? 'border-blue-600 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300 bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                            answers[currentQuestion] === value
-                              ? 'border-blue-600 bg-blue-600'
-                              : 'border-gray-300'
-                          }`}
-                        >
-                          {answers[currentQuestion] === value && (
-                            <div className="w-2 h-2 bg-white rounded-full" />
-                          )}
+              {!isEssayQuestion ? (
+                /* Likert Scale Questions */
+                <div className="mb-8">
+                  <h2 className="text-xl font-semibold text-gray-900 mb-6">
+                    {questions[currentQuestion].text}
+                  </h2>
+                  
+                  <div className="space-y-3">
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <button
+                        key={value}
+                        onClick={() => handleAnswer(value)}
+                        className={`w-full p-4 text-left border-2 rounded-xl transition-all duration-200 ${
+                          answers[currentQuestion] === value
+                            ? 'border-blue-600 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300 bg-white hover:scale-[1.01]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                              answers[currentQuestion] === value
+                                ? 'border-blue-600 bg-blue-600'
+                                : 'border-gray-300'
+                            }`}
+                          >
+                            {answers[currentQuestion] === value && (
+                              <div className="w-2 h-2 bg-white rounded-full" />
+                            )}
+                          </div>
+                          <span className={`font-medium ${
+                            answers[currentQuestion] === value ? 'text-blue-900' : 'text-gray-700'
+                          }`}>
+                            {SCALE_LABELS[value - 1]}
+                          </span>
                         </div>
-                        <span className={`font-medium ${
-                          answers[currentQuestion] === value ? 'text-blue-900' : 'text-gray-700'
-                        }`}>
-                          {SCALE_LABELS[value - 1]}
-                        </span>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              /* Essay Question */
-              <div className="mb-8">
-                <div className="text-sm text-gray-500 mb-2">
-                  Final Question - Essay Response
-                </div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  {ESSAY_QUESTION.text}
-                </h2>
-                
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                  <p className="text-blue-900 text-sm">
-                    <strong>Tips:</strong> Provide specific examples from your experience. Describe the situation, your actions, the outcome, and what you learned. This helps us understand how you apply your skills in real-world scenarios.
-                  </p>
-                </div>
-
-                <textarea
-                  value={essay}
-                  onChange={(e) => setEssay(e.target.value)}
-                  placeholder="Share a specific situation where you faced a challenge or conflict at work or school. Explain how you handled it and what you learned..."
-                  className="w-full h-64 p-4 border-2 border-gray-200 rounded-lg focus:border-blue-600 focus:outline-none resize-none text-gray-700"
-                  maxLength={2000}
-                />
-                
-                <div className="mt-2 text-sm text-gray-500 text-right">
-                  {essay.length}/2000 characters
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between pt-6 border-t border-gray-200">
-              <button
-                onClick={handlePrevious}
-                disabled={currentQuestion === 0}
-                className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors ${
-                  currentQuestion === 0
-                    ? 'text-gray-400 cursor-not-allowed'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <ArrowLeft className="w-5 h-5" />
-                Previous
-              </button>
-
-              {isEssayQuestion ? (
-                <button
-                  onClick={handleSubmit}
-                  disabled={submitting || !likertAllAnswered}
-                  className={`flex items-center gap-2 px-8 py-3 rounded-lg font-medium transition-colors ${
-                    submitting || !likertAllAnswered
-                      ? 'bg-gray-400 cursor-not-allowed text-gray-200'
-                      : 'bg-green-600 hover:bg-green-700 text-white'
-                  }`}
-                >
-                  {scoringInProgress ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-5 h-5" />
-                      Submit Assessment
-                    </>
-                  )}
-                </button>
               ) : (
+                /* Essay Question */
+                <div className="mb-8">
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                    {ESSAY_QUESTION.text}
+                  </h2>
+                  
+                  <textarea
+                    value={essay}
+                    onChange={(e) => setEssay(e.target.value)}
+                    placeholder="Share a specific situation where you faced a challenge or conflict at work or school. Explain how you handled it and what you learned..."
+                    className="w-full h-64 p-4 border-2 border-gray-200 rounded-xl focus:border-blue-600 focus:outline-none resize-none text-gray-700"
+                    maxLength={2000}
+                  />
+                  
+                  <div className="mt-3 text-sm text-gray-500 text-right">
+                    {essay.length}/2000 characters
+                  </div>
+                </div>
+              )}
+
+              {/* Navigation Buttons */}
+              <div className="flex items-center justify-between pt-6 border-t border-gray-100">
                 <button
-                  onClick={handleNext}
-                  disabled={answers[currentQuestion] === undefined}
-                  className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors ${
-                    answers[currentQuestion] === undefined
-                      ? 'bg-gray-400 cursor-not-allowed text-gray-200'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  onClick={handlePrevious}
+                  disabled={currentQuestion === 0}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-colors ${
+                    currentQuestion === 0
+                      ? 'text-gray-300 cursor-not-allowed'
+                      : 'text-gray-700 hover:bg-gray-100'
                   }`}
                 >
-                  Next
-                  <ArrowRight className="w-5 h-5" />
+                  <ArrowLeft className="w-5 h-5" />
+                  Previous
                 </button>
-              )}
-            </div>
 
-            {/* Question navigation dots */}
-            {!isEssayQuestion && (
-              <div className="mt-8 flex flex-wrap gap-2 justify-center">
-                {questions.map((_, idx) => (
+                {isEssayQuestion ? (
                   <button
-                    key={idx}
-                    onClick={() => setCurrentQuestion(idx)}
-                    className={`w-3 h-3 rounded-full transition-colors ${
-                      idx === currentQuestion
-                        ? 'bg-blue-600'
-                        : answers[idx] !== undefined
-                        ? 'bg-green-500'
-                        : 'bg-gray-300'
+                    onClick={handleSubmit}
+                    disabled={submitting || !likertAllAnswered}
+                    className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium transition-colors ${
+                      submitting || !likertAllAnswered
+                        ? 'bg-gray-400 cursor-not-allowed text-gray-200'
+                        : 'bg-green-600 hover:bg-green-700 text-white'
                     }`}
-                    title={`Question ${idx + 1}`}
-                  />
-                ))}
-                {/* Essay dot */}
-                <button
-                  onClick={() => setCurrentQuestion(questions.length)}
-                  className={`w-3 h-3 rounded-full transition-colors ${
-                    currentQuestion === questions.length
-                      ? 'bg-blue-600'
-                      : essay.trim()
-                      ? 'bg-green-500'
-                      : 'bg-gray-300'
-                  }`}
-                  title="Essay Question"
-                />
+                  >
+                    {scoringInProgress ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-5 h-5" />
+                        Submit Assessment
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleNext}
+                    disabled={answers[currentQuestion] === undefined}
+                    className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-colors ${
+                      answers[currentQuestion] === undefined
+                        ? 'bg-gray-400 cursor-not-allowed text-gray-200'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    Next
+                    <ArrowRight className="w-5 h-5" />
+                  </button>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>

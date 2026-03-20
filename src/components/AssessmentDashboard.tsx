@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Video, ClipboardList, CheckCircle, Clock, LogOut, Camera } from 'lucide-react';
+import { Video, ClipboardList, CheckCircle, Clock, LogOut, Camera, User, ChevronDown, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getSupabaseClient, getSupabaseAdminClient, VideoAssessment, PersonalityTest } from '../lib/supabase';
 
@@ -14,6 +14,7 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
   const [testStatus, setTestStatus] = useState<PersonalityTest | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   console.log('Applicant photo_url:', applicant?.photo_url);
 
@@ -132,10 +133,20 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
     return `${Math.floor(hoursLeft / 24)} days remaining`;
   };
 
+  const getExpiryHours = () => {
+    if (!applicant) return 0;
+    const expiresAt = new Date(applicant.access_expires_at);
+    const now = new Date();
+    return Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60));
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-white text-lg">Loading...</div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <div className="text-gray-500 text-sm font-medium">Loading...</div>
+        </div>
       </div>
     );
   }
@@ -143,160 +154,255 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
   const videoCompleted = videoStatus?.status === 'submitted';
   const testCompleted = testStatus?.status === 'submitted';
   const allCompleted = videoCompleted && testCompleted;
+  const completedCount = (videoCompleted ? 1 : 0) + (testCompleted ? 1 : 0);
+  const totalAssessments = 2;
+  const progressPercent = Math.round((completedCount / totalAssessments) * 100);
+  const expiryHours = getExpiryHours();
+  const isExpiringSoon = expiryHours < 24;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 py-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  {applicant?.photo_url ? (
-                    <img
-                      src={applicant.photo_url}
-                      alt={applicant?.name}
-                      className="w-16 h-16 rounded-full object-cover border-2 border-white"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 rounded-full bg-white/20 border-2 border-dashed border-white/50 flex items-center justify-center">
-                      <Camera className="w-8 h-8 text-white/70" />
-                    </div>
-                  )}
-                  <label className="absolute bottom-0 right-0 cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handlePhotoUpload(file);
-                      }}
-                      disabled={uploadingPhoto}
-                    />
-                    <span className={`w-6 h-6 bg-white rounded-full flex items-center justify-center text-blue-600 shadow-md ${uploadingPhoto ? 'opacity-50' : 'hover:bg-gray-100'}`}>
-                      {uploadingPhoto ? (
-                        <span className="animate-spin text-xs">⏳</span>
-                      ) : (
-                        <Camera className="w-3 h-3" />
-                      )}
-                    </span>
-                  </label>
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold mb-1">Welcome, {applicant?.name}</h1>
-                  <p className="text-blue-100">Position: {applicant?.position}</p>
-                </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* Top Navigation Bar */}
+      <nav className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-5xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            {/* Logo Placeholder */}
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#B4D3D9' }}>
+                <span className="text-gray-700 font-bold text-sm">AI</span>
               </div>
-              <button
-                onClick={logout}
-                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </button>
+              <span className="text-lg font-bold text-gray-800">AutoIntel</span>
             </div>
-            <div className="mt-4 flex items-center gap-2 text-sm">
+
+            {/* User Profile Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+                  {applicant?.photo_url ? (
+                    <img src={applicant.photo_url} alt={applicant?.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-4 h-4 text-gray-500" />
+                  )}
+                </div>
+                <div className="text-left hidden sm:block">
+                  <p className="text-sm font-medium text-gray-800">{applicant?.name}</p>
+                  <p className="text-xs text-gray-500">{applicant?.email}</p>
+                </div>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </button>
+
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
+                  <button
+                    onClick={logout}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Main Content */}
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        {/* Welcome Header */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-md mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="relative flex-shrink-0">
+                {applicant?.photo_url ? (
+                  <img
+                    src={applicant.photo_url}
+                    alt={applicant?.name}
+                    className="w-16 h-16 rounded-full object-cover border-2 border-gray-100"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-gray-100 border-2 border-dashed border-gray-200 flex items-center justify-center">
+                    <Camera className="w-6 h-6 text-gray-400" />
+                  </div>
+                )}
+                <label className="absolute bottom-0 right-0 cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handlePhotoUpload(file);
+                    }}
+                    disabled={uploadingPhoto}
+                  />
+                  <span className={`w-6 h-6 bg-white rounded-full flex items-center justify-center text-gray-600 shadow-md border border-gray-200 ${uploadingPhoto ? 'opacity-50' : 'hover:bg-gray-50'}`}>
+                    {uploadingPhoto ? (
+                      <span className="animate-spin text-xs">⏳</span>
+                    ) : (
+                      <Camera className="w-3 h-3" />
+                    )}
+                  </span>
+                </label>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800 mb-1">Welcome, {applicant?.name}</h1>
+                <p className="text-gray-500">Position: {applicant?.position}</p>
+              </div>
+            </div>
+            
+            {/* Expiry Badge */}
+            <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${
+              isExpiringSoon 
+                ? 'bg-red-50 text-red-700 border border-red-200' 
+                : 'bg-amber-50 text-amber-700 border border-amber-200'
+            }`}>
               <Clock className="w-4 h-4" />
               <span>Access expires: {getExpiryText()}</span>
             </div>
           </div>
+        </div>
 
-          <div className="p-8">
-            {allCompleted ? (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
-                <div className="flex items-center gap-3 mb-2">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
-                  <h2 className="text-lg font-semibold text-green-900">All Assessments Complete!</h2>
-                </div>
-                <p className="text-green-700">
-                  Thank you for completing all assessments. Our team will review your submission and
-                  contact you within 5-7 business days.
+        {/* Completion Message */}
+        {allCompleted && (
+          <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-md mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#98D8AA' }}>
+                <CheckCircle className="w-6 h-6 text-gray-700" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-800 mb-1">All Assessments Complete!</h2>
+                <p className="text-gray-500 text-sm">
+                  Thank you for completing all assessments. Our team will review your submission and contact you within 5-7 business days.
                 </p>
-              </div>
-            ) : (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <p className="text-blue-900 font-medium">
-                  Please complete all required assessments before the access token expires.
-                </p>
-              </div>
-            )}
-
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Assessment Progress</h2>
-
-            <div className="space-y-4">
-              <div className="border border-gray-200 rounded-lg p-6 hover:border-blue-300 transition-colors">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4 flex-1">
-                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                      videoCompleted ? 'bg-green-100' : 'bg-blue-100'
-                    }`}>
-                      <Video className={`w-6 h-6 ${
-                        videoCompleted ? 'text-green-600' : 'text-blue-600'
-                      }`} />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                        Video Assessment
-                      </h3>
-                      <p className="text-gray-600 text-sm mb-3">
-                        Record a brief video introducing yourself and answering assessment questions.
-                      </p>
-                      {videoCompleted ? (
-                        <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
-                          <CheckCircle className="w-4 h-4" />
-                          <span>Completed on {new Date(videoStatus?.submitted_at!).toLocaleDateString()}</span>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={onStartVideo}
-                          className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
-                        >
-                          Start Video Assessment
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border border-gray-200 rounded-lg p-6 hover:border-blue-300 transition-colors">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4 flex-1">
-                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                      testCompleted ? 'bg-green-100' : 'bg-blue-100'
-                    }`}>
-                      <ClipboardList className={`w-6 h-6 ${
-                        testCompleted ? 'text-green-600' : 'text-blue-600'
-                      }`} />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                        Work Style and Job Preference Assessment
-                      </h3>
-                      <p className="text-gray-600 text-sm mb-3">
-                        Complete a 20-question Likert-scale assessment and one short essay to help evaluate your work preferences, behaviors, and role alignment.
-                      </p>
-                      {testCompleted ? (
-                        <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
-                          <CheckCircle className="w-4 h-4" />
-                          <span>Completed on {new Date(testStatus?.submitted_at!).toLocaleDateString()}</span>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={onStartPersonalityTest}
-                          className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
-                        >
-                          Start Work Style Assessment
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
+        )}
+
+        {/* Progress Overview */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-md mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold text-gray-800">Progress Overview</h2>
+            <span className="text-sm font-semibold text-gray-600">{progressPercent}% Complete</span>
+          </div>
+          
+          {/* Integrated instruction text */}
+          <p className="text-sm text-gray-500 mb-3">
+            Please complete all required assessments before the access token expires.
+          </p>
+          
+          {/* Progress Bar */}
+          <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+            <div 
+              className="h-full rounded-full transition-all duration-500 ease-out"
+              style={{ 
+                width: `${progressPercent}%`,
+                backgroundColor: progressPercent === 100 ? '#98D8AA' : '#B4D3D9'
+              }}
+            />
+          </div>
         </div>
+
+        {/* Assessment Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Video Assessment Card */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-md hover:shadow-lg transition-all duration-300 p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                videoCompleted ? 'bg-green-100' : 'bg-blue-50'
+              }`}>
+                <Video className={`w-6 h-6 ${
+                  videoCompleted ? 'text-green-600' : 'text-blue-600'
+                }`} />
+              </div>
+              {videoCompleted && (
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                  <CheckCircle className="w-3 h-3" />
+                  Completed
+                </div>
+              )}
+            </div>
+            
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Video Assessment</h3>
+            <p className="text-gray-500 text-sm mb-4">
+              Record a brief video introducing yourself and answering assessment questions.
+            </p>
+            
+            <div className="flex items-center justify-between mt-auto">
+              <span className="text-xs text-gray-400 flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                ⏱️ 5-10 mins
+              </span>
+              
+              {videoCompleted ? (
+                <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Submitted</span>
+                </div>
+              ) : (
+                <button
+                  onClick={onStartVideo}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-5 rounded-lg transition-colors text-sm max-w-[160px] flex items-center justify-center gap-2"
+                >
+                  Start Assessment
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Work Style Assessment Card */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-md hover:shadow-lg transition-all duration-300 p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                testCompleted ? 'bg-green-100' : 'bg-purple-50'
+              }`}>
+                <ClipboardList className={`w-6 h-6 ${
+                  testCompleted ? 'text-green-600' : 'text-purple-600'
+                }`} />
+              </div>
+              {testCompleted && (
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                  <CheckCircle className="w-3 h-3" />
+                  Completed
+                </div>
+              )}
+            </div>
+            
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Work Style and Job Preference Assessment</h3>
+            <p className="text-gray-500 text-sm mb-4">
+              Complete a 20-question Likert-scale assessment and one short essay.
+            </p>
+            
+            <div className="flex items-center justify-between mt-auto">
+              <span className="text-xs text-gray-400 flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                ⏱️ 15-20 mins
+              </span>
+              
+              {testCompleted ? (
+                <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Submitted</span>
+                </div>
+              ) : (
+                <button
+                  onClick={onStartPersonalityTest}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-5 rounded-lg transition-colors text-sm max-w-[160px] flex items-center justify-center gap-2"
+                >
+                  Start Assessment
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+
       </div>
     </div>
   );
