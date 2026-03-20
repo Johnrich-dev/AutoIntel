@@ -304,7 +304,7 @@ export function AdminDashboard() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 overflow-y-auto bg-gray-50">
+        <div className="flex-1 overflow-y-auto bg-gray-50 p-8 lg:p-10 space-y-6 min-h-screen">
           {activeMenu === 'dashboard' && <DashboardLanding applicants={applicants} onMenuChange={setActiveMenu} />}
           {activeMenu === 'applicants' && <ApplicantsList applicants={applicants} />}
           {activeMenu === 'reports' && <ReportsDashboard applicants={applicants} />}

@@ -126,7 +126,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
   if (!applicants.length) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto p-6 space-y-6">
+        <div className="w-full p-6 space-y-6">
           {/* Header skeleton */}
           <div className="flex items-center justify-between">
             <Skeleton className="h-8 w-48" />
@@ -154,7 +154,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <div className="w-full p-6 space-y-6">
         
         {/* Header with Job Selector and Date */}
         <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-md">
