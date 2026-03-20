@@ -155,7 +155,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         
         {/* Header with Job Selector and Date */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-md">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
             <p className="text-gray-400 text-sm mt-0.5">Recruitment overview</p>
@@ -189,7 +189,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
         {/* KPI Cards - Custom Colors */}
         <div className="grid grid-cols-4 gap-4">
           {/* Total Applicants - Teal */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg transition-all duration-300 group">
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center gap-4">
               <div className="p-3 rounded-xl" style={{ backgroundColor: '#B4D3D9' }}>
                 <Users className="w-6 h-6 text-gray-700" />
@@ -202,7 +202,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
           </div>
 
           {/* Passed - Purple */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg transition-all duration-300 group">
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center gap-4">
               <div className="p-3 rounded-xl" style={{ backgroundColor: '#BDA6CE' }}>
                 <CheckCircle className="w-6 h-6 text-gray-700" />
@@ -218,7 +218,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
           </div>
 
           {/* Needs Review - Yellow */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg transition-all duration-300 group">
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center gap-4">
               <div className="p-3 rounded-xl" style={{ backgroundColor: '#FEEAC9' }}>
                 <AlertCircle className="w-6 h-6 text-gray-700" />
@@ -234,7 +234,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
           </div>
 
           {/* Failed - Pink */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-lg transition-all duration-300 group">
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center gap-4">
               <div className="p-3 rounded-xl" style={{ backgroundColor: '#FFCDC9' }}>
                 <XCircle className="w-6 h-6 text-gray-700" />
@@ -257,7 +257,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
 
 
             {/* Needs Review Panel - High Priority */}
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all duration-300">
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300">
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
                   <h2 className="text-lg font-bold text-gray-800">Needs Review</h2>
@@ -312,7 +312,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
             </div>
 
             {/* Recent Applicants */}
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all duration-300">
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300">
               <div className="flex items-center justify-between mb-5">
                 <h2 className="text-lg font-bold text-gray-800">Recent Applicants</h2>
                 <div className="flex items-center gap-3">
@@ -399,7 +399,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
           {/* Right - 1/3 width */}
           <div className="space-y-6">
             {/* Quick Stats - Compact - Custom Colors */}
-            <div className="bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg transition-all duration-300">
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300">
               <h2 className="text-sm font-bold text-gray-800 mb-3">Quick Stats</h2>
               <div className="space-y-2">
                 <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ backgroundColor: '#B4D3D9' }}>
@@ -431,7 +431,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
             </div>
 
             {/* Recruitment Funnel - Vertical Graph - Custom Colors */}
-            <div className="bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg transition-all duration-300">
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300">
               <h2 className="text-sm font-bold text-gray-800 mb-3">Recruitment Funnel</h2>
               <div className="space-y-2">
                 {funnelStages.map((stage, idx) => (
