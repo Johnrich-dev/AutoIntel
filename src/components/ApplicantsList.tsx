@@ -4,7 +4,6 @@ import {
   Filter, 
   ChevronDown, 
   ChevronUp, 
-  MoreHorizontal, 
   CheckSquare, 
   Square,
   Download,
@@ -13,17 +12,14 @@ import {
   FileText,
   Video,
   ClipboardCheck,
-  Star,
   CheckCircle,
   XCircle,
   Clock,
   AlertCircle,
-  Eye,
   ChevronLeft,
   ChevronRight,
   RefreshCw,
   User,
-  ArrowUpDown,
   CalendarDays,
   Award,
   Tag
@@ -32,14 +28,9 @@ import { Applicant, Resume, VideoAssessment, PersonalityTest, ResumeParsedData, 
 import { supabase } from '../lib/supabase';
 import { ApplicantDetailModal } from './ApplicantDetailModal';
 import { 
-  getWorkStyleResult, 
   calculateAlignmentScore,
   calculateDimensionScores,
-  WorkStyleAnswer,
-  DIMENSION_LABELS,
-  WEIGHT_VALUES,
-  WeightLevel,
-  detectRoleFamily
+  WorkStyleAnswer
 } from '../config/workStyleConfig';
 
 interface ApplicantWithDetails extends Applicant {
@@ -50,7 +41,6 @@ interface ApplicantWithDetails extends Applicant {
 
 interface ApplicantsListProps {
   applicants: ApplicantWithDetails[];
-  onViewApplicant?: (applicant: ApplicantWithDetails) => void;
 }
 
 // Helper to parse resume data
@@ -222,7 +212,7 @@ function ScoreBadge({ score }: { score: number }) {
   );
 }
 
-export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListProps) {
+export function ApplicantsList({ applicants }: ApplicantsListProps) {
   // State
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedApplicants, setSelectedApplicants] = useState<Set<string>>(new Set());
@@ -233,17 +223,8 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedApplicant, setSelectedApplicant] = useState<ApplicantWithDetails | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [applicantTags, setApplicantTags] = useState<Record<string, string[]>>({});
   const [scoringSettings, setScoringSettings] = useState<ScoringSettings | null>(null);
   const itemsPerPage = 10;
-
-  // Load tags from localStorage
-  useState(() => {
-    const saved = localStorage.getItem('applicant_tags');
-    if (saved) {
-      setApplicantTags(JSON.parse(saved));
-    }
-  });
 
   // Fetch scoring settings from database
   useEffect(() => {
@@ -518,12 +499,12 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
       </div>
 
       {/* Applicants Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+            <thead className="sticky top-0 z-50 bg-purple-50 border-b border-purple-100">
               <tr>
-                <th className="px-4 py-3 w-12">
+                <th className="px-4 py-6 w-12">
                   <button
                     onClick={toggleSelectAll}
                     className="flex items-center justify-center p-1 hover:bg-gray-200 rounded transition-colors"
@@ -536,7 +517,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                   </button>
                 </th>
                 <th
-                  className="px-4 py-3 text-left text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
+                  className="px-4 py-6 text-left text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
                   onClick={() => handleSort('name')}
                 >
                   <div className="flex items-center gap-2">
@@ -548,7 +529,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
+                  className="px-4 py-6 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
                   onClick={() => handleSort('resume')}
                 >
                   <div className="flex items-center justify-center gap-2">
@@ -562,7 +543,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
+                  className="px-4 py-6 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
                   onClick={() => handleSort('video')}
                 >
                   <div className="flex items-center justify-center gap-2">
@@ -576,7 +557,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
+                  className="px-4 py-6 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
                   onClick={() => handleSort('profile')}
                 >
                   <div className="flex items-center justify-center gap-2">
@@ -590,7 +571,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
+                  className="px-4 py-6 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
                   onClick={() => handleSort('overall')}
                 >
                   <div className="flex items-center justify-center gap-2">
@@ -603,11 +584,11 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                     )}
                   </div>
                 </th>
-                <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">
+                <th className="px-4 py-6 text-center text-sm font-bold text-gray-700">
                   Status
                 </th>
                 <th
-                  className="px-4 py-3 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
+                  className="px-4 py-6 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
                   onClick={() => handleSort('date')}
                 >
                   <div className="flex items-center justify-center gap-2">
@@ -618,18 +599,18 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                     )}
                   </div>
                 </th>
-                <th className="px-4 py-3 w-20"></th>
+                <th className="px-4 py-6 w-20"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-purple-100 bg-white">
               {paginatedApplicants.length > 0 ? (
                 paginatedApplicants.map((applicant) => (
                   <tr 
                     key={applicant.id} 
-                    className="group hover:bg-blue-50/50 transition-all duration-200 cursor-pointer"
+                    className="group hover:bg-purple-50/50 transition-all duration-200 cursor-pointer"
                     onClick={() => handleOpenModal(applicant)}
                   >
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-6">
                       <button 
                         onClick={() => toggleSelect(applicant.id)}
                         className="flex items-center justify-center opacity-60 group-hover:opacity-100 transition-opacity"
@@ -641,7 +622,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                         )}
                       </button>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-6">
                       <div className="flex items-center gap-3">
                         <div className="relative">
                           {applicant.photo_url ? (
@@ -690,7 +671,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-center">
+                    <td className="px-4 py-6 text-center">
                       <div className="flex flex-col items-center gap-1">
                         <ScoreBadge score={applicant.resumeScore} />
                         <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -706,7 +687,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-center">
+                    <td className="px-4 py-6 text-center">
                       <div className="flex flex-col items-center gap-1">
                         <ScoreBadge score={applicant.videoScore} />
                         <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -722,7 +703,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-center">
+                    <td className="px-4 py-6 text-center">
                       <div className="flex flex-col items-center gap-1">
                         <ScoreBadge score={applicant.profileFit} />
                         <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -738,7 +719,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-center">
+                    <td className="px-4 py-6 text-center">
                       <div className="flex flex-col items-center gap-1">
                         <span className={`inline-flex items-center justify-center w-12 h-12 rounded-xl text-xl font-bold ${
                           applicant.overall >= 80 ? 'text-green-700 bg-green-100 ring-2 ring-green-200' :
@@ -751,10 +732,10 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
                         <span className="text-xs text-gray-400">overall</span>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-center">
+                    <td className="px-4 py-6 text-center">
                       {getStatusBadge(applicant.status)}
                     </td>
-                    <td className="px-4 py-4 text-center">
+                    <td className="px-4 py-6 text-center">
                       <div className="flex flex-col items-center">
                         <span className="text-sm font-medium text-gray-700">
                           {new Date(applicant.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -781,7 +762,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
         
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+          <div className="px-4 py-6 border-t border-purple-100 flex items-center justify-between">
             <p className="text-sm text-gray-500">
               Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredApplicants.length)} of {filteredApplicants.length}
             </p>
@@ -789,7 +770,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
               <button
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
-                className="p-2 rounded-lg border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="p-2 rounded-lg border border-purple-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-purple-50"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
@@ -799,7 +780,7 @@ export function ApplicantsList({ applicants, onViewApplicant }: ApplicantsListPr
               <button
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
-                className="p-2 rounded-lg border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="p-2 rounded-lg border border-purple-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-purple-50"
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
