@@ -32,17 +32,12 @@ const menuItems = [
   // MAIN Section
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, category: 'MAIN' },
   
-  // JOB POSTINGS Section
+  // JOB MANAGEMENT Section (no sub-items)
   { 
-    id: 'job-postings', 
-    label: 'Job Postings', 
+    id: 'job-management', 
+    label: 'Job Management', 
     icon: Briefcase, 
-    category: 'JOB_POSTINGS',
-    children: [
-      { id: 'create-job', label: 'Create Job', icon: Plus },
-      { id: 'active-jobs', label: 'Active Jobs', icon: FolderOpen },
-      { id: 'closed-jobs', label: 'Closed Jobs', icon: Archive },
-    ]
+    category: 'JOB_MANAGEMENT'
   },
   
   // RECRUITMENT PIPELINE Section
@@ -449,9 +444,8 @@ export function AdminDashboard() {
         <div className="flex-1 overflow-y-auto bg-gray-50 p-4 lg:p-4 space-y-6 min-h-screen">
           {activeMenu === 'dashboard' && <DashboardLanding applicants={applicants} onMenuChange={setActiveMenu} />}
           
-          {/* Job Postings - Uses AdminJobManagement */}
-          {(activeMenu === 'create-job' || activeMenu === 'active-jobs' || activeMenu === 'closed-jobs' || activeMenu === 'job-postings') && 
-            <AdminJobManagement />}
+          {/* Job Management */}
+          {activeMenu === 'job-management' && <AdminJobManagement />}
           
           {/* Recruitment Pipeline - All pipeline views use ApplicantsList or ShortlistedCandidates */}
           {(activeMenu === 'applications' || activeMenu === 'screening-results' || activeMenu === 'needs-review' || activeMenu === 'interview-scheduling') && 
