@@ -582,16 +582,11 @@ export function ApplicantsList() {
                             <td className="px-4 py-4">
                               <button
                                 onClick={(e) => handleOpenModal(applicant, e)}
-                                className="flex items-center gap-3 text-left hover:opacity-80 transition-opacity"
+                                className="text-left hover:opacity-80 transition-opacity"
                               >
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                                  {applicant.name.charAt(0).toUpperCase()}
-                                </div>
-                                <div>
-                                  <p className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
-                                    {applicant.name}
-                                  </p>
-                                </div>
+                                <p className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                                  {applicant.name}
+                                </p>
                               </button>
                             </td>
 
