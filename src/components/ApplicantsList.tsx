@@ -1,330 +1,307 @@
 import { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
-  Filter, 
   ChevronDown, 
-  ChevronUp, 
-  CheckSquare, 
-  Square,
-  Download,
-  Mail,
-  Trash2,
-  FileText,
-  Video,
-  ClipboardCheck,
-  CheckCircle,
-  XCircle,
-  Clock,
-  AlertCircle,
+  Eye, 
+  FileText, 
+  Trash2, 
+  RefreshCw,
   ChevronLeft,
   ChevronRight,
-  RefreshCw,
-  User,
-  CalendarDays,
-  Award,
-  Tag
+  AlertCircle,
+  Clock,
+  CheckCircle,
+  XCircle,
+  ExternalLink,
+  Briefcase,
+  Users,
+  Loader2
 } from 'lucide-react';
-import { Applicant, Resume, VideoAssessment, PersonalityTest, ResumeParsedData, ScoringSettings } from '../lib/supabase';
-import { supabase } from '../lib/supabase';
+import { Applicant, Resume, JobPosting } from '../lib/supabase';
+import { supabase, getSupabaseAdminClient } from '../lib/supabase';
 import { ApplicantDetailModal } from './ApplicantDetailModal';
-import { 
-  calculateAlignmentScore,
-  calculateDimensionScores,
-  WorkStyleAnswer
-} from '../config/workStyleConfig';
 
-interface ApplicantWithDetails extends Applicant {
+// Interface for position/role option from applicants
+interface PositionOption {
+  position: string;
+  count: number;
+}
+
+interface ApplicantWithResume extends Applicant {
   resume?: Resume;
-  video?: VideoAssessment;
-  test?: PersonalityTest;
 }
 
-interface ApplicantsListProps {
-  applicants: ApplicantWithDetails[];
+type ApplicationStatus = 'all' | 'pending' | 'processing' | 'parsed' | 'error';
+
+interface StatusConfig {
+  label: string;
+  bg: string;
+  text: string;
+  border: string;
+  icon: React.ElementType;
 }
 
-// Helper to parse resume data
-function getParsedResumeData(resume: Resume | undefined): ResumeParsedData | null {
-  if (!resume?.parsed_data) return null;
-  if (typeof resume.parsed_data === 'object') return resume.parsed_data;
-  try {
-    return JSON.parse(resume.parsed_data);
-  } catch {
-    return null;
-  }
-}
-
-// Default scoring settings
-const DEFAULT_SCORING_SETTINGS: ScoringSettings = {
-  settings_id: 'default',
-  job_level: 'entry_level',
-  experience_weight: 28,
-  skills_weight: 30,
-  education_weight: 18,
-  projects_weight: 14,
-  traincert_weight: 6,
-  achievements_weight: 4,
-  qualified_threshold: 78,
-  review_threshold: 65,
-  baseline_experience: 2,
-  baseline_skills: 10,
-  baseline_education: 2,
-  baseline_projects: 2,
-  baseline_traincert: 2,
-  baseline_achievements: 1,
-  scoring_type: 'hybrid',
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
+const STATUS_CONFIGS: Record<string, StatusConfig> = {
+  pending: { 
+    label: 'Pending', 
+    bg: 'bg-yellow-50', 
+    text: 'text-yellow-700', 
+    border: 'border-yellow-200',
+    icon: Clock 
+  },
+  processing: { 
+    label: 'Processing', 
+    bg: 'bg-blue-50', 
+    text: 'text-blue-700', 
+    border: 'border-blue-200',
+    icon: Loader2 
+  },
+  parsed: { 
+    label: 'Parsed', 
+    bg: 'bg-green-50', 
+    text: 'text-green-700', 
+    border: 'border-green-200',
+    icon: CheckCircle 
+  },
+  error: { 
+    label: 'Error', 
+    bg: 'bg-red-50', 
+    text: 'text-red-700', 
+    border: 'border-red-200',
+    icon: XCircle 
+  },
 };
 
-// Calculate resume score - prefer backend combined score, fallback to count-based
-function calculateResumeScore(applicant?: ApplicantWithDetails, settings?: ScoringSettings | null): number {
-  // Use backend screening_score if available (combined semantic + count)
-  if (applicant?.screening_score !== undefined && applicant?.screening_score !== null) {
-    return Math.round(applicant.screening_score);
-  }
-  
-  // Fallback to count-based calculation if no screening_score
-  const resume = applicant?.resume;
-  if (!resume || !resume.parsed_data) return 0;
-  const parsed = getParsedResumeData(resume);
-  if (!parsed) return 0;
-  
-  // Use HR settings or defaults
-  const config = settings || DEFAULT_SCORING_SETTINGS;
-  
-  // Calculate raw scores for each category (0-100 scale)
-  let skillsScore = 0;
-  let experienceScore = 0;
-  let educationScore = 0;
-  let projectsScore = 0;
-  
-  // Skills: Based on number of skills (max 20 skills = 100 points)
-  const totalSkills = parsed.skills?.hard_skills?.length || 0;
-  skillsScore = Math.min((totalSkills / 20) * 100, 100);
-  
-  // Experience: Based on number of experiences (max 5 experiences = 100 points)
-  experienceScore = Math.min(((parsed.experience?.length || 0) / 5) * 100, 100);
-  
-  // Education: Based on number of education entries (max 3 entries = 100 points)
-  educationScore = Math.min(((parsed.education?.length || 0) / 3) * 100, 100);
-  
-  // Projects: Based on number of projects relative to baseline
-  const projectCount = parsed.projects?.length || 0;
-  projectsScore = projectCount >= config.baseline_projects
-    ? Math.min((projectCount / config.baseline_projects) * 100, 100)
-    : (projectCount / config.baseline_projects) * 50; // Below baseline gives partial credit
-  
-  // Calculate weighted total using HR settings
-  const weightedScore = (
-    (skillsScore * (config.skills_weight / 100)) +
-    (experienceScore * (config.experience_weight / 100)) +
-    (educationScore * (config.education_weight / 100)) +
-    (projectsScore * (config.projects_weight / 100))
-  );
-  
-  return Math.min(Math.round(weightedScore), 100);
-}
-
-// Calculate video assessment score from transcript
-function calculateVideoScore(video?: VideoAssessment): number {
-  if (!video) return 0;
-  
-  // If there's a real transcript score, use it (scaled to 100)
-  if (video.transcript_score !== null && video.transcript_score !== undefined) {
-    // transcript_score is 0-10, convert to 0-100
-    return Math.round(video.transcript_score * 10);
-  }
-  
-  // Fallback: score based on status if no transcript score yet
-  if (video.status === 'completed' || video.transcription_status === 'completed') {
-    // Transcription done but not scored yet
-    return 50;
-  }
-  if (video.status === 'submitted') return 30;
-  return 0;
-}
-
-// Calculate Work Style Alignment Score from work style assessment
-function calculateProfileFit(test?: PersonalityTest, jobRole?: string): number {
-  if (!test || test.status !== 'submitted') return 0;
-  if (!test.answers || !Array.isArray(test.answers) || test.answers.length === 0) return 0;
-  
-  // Convert answers to WorkStyleAnswer format
-  const answers: WorkStyleAnswer[] = test.answers.map((a: any) => ({
-    question: a.question,
-    answer: a.answer,
-  }));
-  
-  // Default to 'Backend Developer' if no job role specified
-  const targetRole = jobRole || 'Backend Developer';
-  
-  // Calculate alignment score using the new config
-  const { score } = calculateAlignmentScore(
-    calculateDimensionScores(answers),
-    targetRole
-  );
-  
-  return score;
-}
-
-// Calculate overall score
-function calculateOverallScore(resumeScore: number, videoScore: number, profileFit: number): number {
-  const weights = { resume: 0.5, video: 0.4, profile: 0.1 };
-  const score = (resumeScore * weights.resume) + (videoScore * weights.video) + (profileFit * weights.profile);
-  return Math.round(score);
-}
-
-// Get status badge
-function getStatusBadge(status: string) {
-  const configs: Record<string, { bg: string; text: string; icon: React.ElementType }> = {
-    suitable: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle },
-    not_suitable: { bg: 'bg-red-100', text: 'text-red-700', icon: XCircle },
-    pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', icon: Clock },
-    completed: { bg: 'bg-blue-100', text: 'text-blue-700', icon: CheckCircle },
-    submitted: { bg: 'bg-purple-100', text: 'text-purple-700', icon: FileText },
-    reviewed: { bg: 'bg-emerald-100', text: 'text-emerald-700', icon: CheckCircle },
-  };
-  
-  const config = configs[status] || configs.pending;
-  const Icon = config.icon;
-  
+// Loading skeleton component
+function TableSkeleton() {
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
-      <Icon className="w-3.5 h-3.5" />
-      {status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-    </span>
+    <>
+      {[...Array(5)].map((_, i) => (
+        <tr key={i} className="border-b border-gray-100">
+          <td className="px-4 py-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gray-200 rounded-lg animate-pulse" />
+              <div className="space-y-2">
+                <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
+                <div className="h-3 w-24 bg-gray-100 rounded animate-pulse" />
+              </div>
+            </div>
+          </td>
+          <td className="px-4 py-5">
+            <div className="h-4 w-28 bg-gray-200 rounded animate-pulse mx-auto" />
+          </td>
+          <td className="px-4 py-5">
+            <div className="h-4 w-40 bg-gray-200 rounded animate-pulse mx-auto" />
+          </td>
+          <td className="px-4 py-5">
+            <div className="h-8 w-24 bg-gray-200 rounded-lg animate-pulse mx-auto" />
+          </td>
+          <td className="px-4 py-5">
+            <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse mx-auto" />
+          </td>
+          <td className="px-4 py-5">
+            <div className="h-4 w-24 bg-gray-200 rounded animate-pulse mx-auto" />
+          </td>
+          <td className="px-4 py-5">
+            <div className="flex items-center justify-center gap-2">
+              <div className="h-8 w-8 bg-gray-200 rounded-lg animate-pulse" />
+              <div className="h-8 w-8 bg-gray-100 rounded-lg animate-pulse" />
+            </div>
+          </td>
+        </tr>
+      ))}
+    </>
   );
 }
 
-// Score badge component
-function ScoreBadge({ score }: { score: number }) {
-  let colorClass = 'text-gray-600 bg-gray-100';
-  if (score >= 80) colorClass = 'text-green-700 bg-green-100';
-  else if (score >= 60) colorClass = 'text-blue-700 bg-blue-100';
-  else if (score >= 40) colorClass = 'text-yellow-700 bg-yellow-100';
-  else if (score > 0) colorClass = 'text-red-700 bg-red-100';
-  
+// Empty state component
+function EmptyState({ selectedJob }: { selectedJob: string | null }) {
   return (
-    <span className={`inline-flex items-center px-2 py-1 rounded-lg text-sm font-semibold ${colorClass}`}>
-      {score > 0 ? score : '-'}
-    </span>
+    <tr>
+      <td colSpan={7} className="px-4 py-16 text-center">
+        <div className="flex flex-col items-center justify-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+            <Users className="w-8 h-8 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">
+            {selectedJob ? 'No applications received yet' : 'Select a job position'}
+          </h3>
+          <p className="text-gray-500 text-sm max-w-sm">
+            {selectedJob 
+              ? `No applications received yet for this job`
+              : 'Choose a job position from the dropdown above to view its applicants'}
+          </p>
+        </div>
+      </td>
+    </tr>
   );
 }
 
-export function ApplicantsList({ applicants }: ApplicantsListProps) {
+export function ApplicantsList() {
   // State
+  const [positions, setPositions] = useState<PositionOption[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedApplicants, setSelectedApplicants] = useState<Set<string>>(new Set());
-  const [sortField, setSortField] = useState<'name' | 'overall' | 'resume' | 'video' | 'profile' | 'date'>('date');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [showFilters, setShowFilters] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<ApplicationStatus>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedApplicant, setSelectedApplicant] = useState<ApplicantWithDetails | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isFetchingJobs, setIsFetchingJobs] = useState(true);
+  const [applicants, setApplicants] = useState<ApplicantWithResume[]>([]);
+  const [selectedApplicant, setSelectedApplicant] = useState<ApplicantWithResume | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [scoringSettings, setScoringSettings] = useState<ScoringSettings | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  
   const itemsPerPage = 10;
 
-  // Fetch scoring settings from database
+  // Fetch distinct positions from applicants for dropdown
   useEffect(() => {
-    async function fetchScoringSettings() {
+    async function fetchPositions() {
       try {
-        const { data, error } = await supabase
-          .from('scoring_settings')
-          .select('*')
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .single();
+        setIsFetchingJobs(true);
+        // Use admin client to bypass RLS
+        const adminClient = getSupabaseAdminClient();
+        // Get distinct positions with applicant count
+        const { data, error } = await adminClient
+          .from('applicants')
+          .select('position')
+          .order('position', { ascending: true });
+
+        if (error) throw error;
         
-        if (error) {
-          console.warn('Failed to fetch scoring settings, using defaults:', error);
-          setScoringSettings(DEFAULT_SCORING_SETTINGS);
-        } else if (data) {
-          setScoringSettings(data);
-        }
+        // Count applicants per position
+        
+        // Count applicants per position
+        const positionCounts = (data || []).reduce((acc, applicant) => {
+          if (applicant.position) {
+            acc[applicant.position] = (acc[applicant.position] || 0) + 1;
+          }
+          return acc;
+        }, {} as Record<string, number>);
+        
+        // Convert to array and sort alphabetically
+        const positionList = Object.entries(positionCounts)
+          .map(([position, count]) => ({ position, count }))
+          .sort((a, b) => a.position.localeCompare(b.position));
+        
+        setPositions(positionList);
       } catch (err) {
-        console.error('Error fetching scoring settings:', err);
-        setScoringSettings(DEFAULT_SCORING_SETTINGS);
+        console.error('Error fetching positions:', err);
+      } finally {
+        setIsFetchingJobs(false);
       }
     }
     
-    fetchScoringSettings();
+    fetchPositions();
   }, []);
 
-  // Process applicants with scores
-  const processedApplicants = useMemo(() => {
-    return applicants.map(applicant => {
-      const resumeScore = calculateResumeScore(applicant, scoringSettings);
-      const videoScore = calculateVideoScore(applicant.video);
-      const profileFit = calculateProfileFit(applicant.test, applicant.position);
-      const overall = calculateOverallScore(resumeScore, videoScore, profileFit);
-      
-      // Determine current status
-      let status = 'pending';
-      if (applicant.test?.status === 'completed') status = 'completed';
-      else if (applicant.video?.status === 'completed') status = 'submitted';
-      else if (applicant.resume?.status === 'suitable') status = 'reviewed';
-      else if (applicant.resume?.status === 'not_suitable') status = 'not_suitable';
-      
-      return {
-        ...applicant,
-        resumeScore,
-        videoScore,
-        profileFit,
-        overall,
-        status,
-      };
-    });
-  }, [applicants, scoringSettings]);
+  // Fetch applicants when job is selected
+  useEffect(() => {
+    async function fetchApplicants() {
+      try {
+        setIsLoading(true);
+        
+        // Use admin client to bypass RLS
+        const adminClient = getSupabaseAdminClient();
+        
+        // Fetch applicants - filter by job if a specific job is selected
+        let query = adminClient
+          .from('applicants')
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        // If a specific job is selected (not 'all'), filter by position
+        if (selectedJobId) {
+          query = query.eq('position', selectedJobId);
+        }
 
-  // Filter and sort
+        const { data: applicantsData, error: applicantsError } = await query;
+
+        if (applicantsError) throw applicantsError;
+        
+        console.log('Applicants query result:', applicantsData, applicantsError);
+
+        // Combine applicants with their resumes
+
+        // Fetch resumes for these applicants
+        const applicantIds = (applicantsData || []).map(a => a.id);
+        let resumesMap: Record<string, Resume> = {};
+        
+        if (applicantIds.length > 0) {
+          const { data: resumesData, error: resumesError } = await adminClient
+            .from('resumes')
+            .select('*')
+            .in('applicant_id', applicantIds);
+
+          if (!resumesError && resumesData) {
+            resumesMap = resumesData.reduce((acc, resume) => {
+              acc[resume.applicant_id] = resume;
+              return acc;
+            }, {} as Record<string, Resume>);
+          }
+        }
+
+        // Combine applicants with their resumes
+        const applicantsWithResumes = (applicantsData || []).map(applicant => ({
+          ...applicant,
+          resume: resumesMap[applicant.id],
+        }));
+
+        setApplicants(applicantsWithResumes);
+      } catch (err) {
+        console.error('Error fetching applicants:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchApplicants();
+  }, [selectedJobId]);
+
+  // Get application status from applicant/resume
+  const getApplicationStatus = (applicant: ApplicantWithResume): string => {
+    // Check if there's an error in the resume parsing
+    if (applicant.resume?.status === 'error') {
+      return 'error';
+    }
+    
+    // Check resume status for parsing status
+    if (applicant.resume?.parsed_data) {
+      return 'parsed';
+    }
+    
+    // Check if resume is currently being processed
+    if (applicant.resume?.status === 'processing' || applicant.resume?.status === 'uploading') {
+      return 'processing';
+    }
+    
+    // Default to pending if resume exists but not parsed
+    if (applicant.resume) {
+      return 'pending';
+    }
+    
+    return 'pending';
+  };
+
+  // Filter applicants
   const filteredApplicants = useMemo(() => {
-    let result = processedApplicants;
+    let result = applicants;
     
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(a => 
         a.name.toLowerCase().includes(query) ||
-        a.email.toLowerCase().includes(query) ||
-        a.position.toLowerCase().includes(query)
+        a.email.toLowerCase().includes(query)
       );
     }
     
     // Status filter
     if (statusFilter !== 'all') {
-      result = result.filter(a => a.status === statusFilter);
+      result = result.filter(a => getApplicationStatus(a) === statusFilter);
     }
     
-    // Sort
-    result = [...result].sort((a, b) => {
-      let comparison = 0;
-      switch (sortField) {
-        case 'name':
-          comparison = a.name.localeCompare(b.name);
-          break;
-        case 'overall':
-          comparison = a.overall - b.overall;
-          break;
-        case 'resume':
-          comparison = a.resumeScore - b.resumeScore;
-          break;
-        case 'video':
-          comparison = a.videoScore - b.videoScore;
-          break;
-        case 'profile':
-          comparison = a.profileFit - b.profileFit;
-          break;
-        case 'date':
-          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-          break;
-      }
-      return sortDirection === 'asc' ? comparison : -comparison;
-    });
-    
     return result;
-  }, [processedApplicants, searchQuery, statusFilter, sortField, sortDirection]);
+  }, [applicants, searchQuery, statusFilter]);
 
   // Pagination
   const totalPages = Math.ceil(filteredApplicants.length / itemsPerPage);
@@ -333,46 +310,16 @@ export function ApplicantsList({ applicants }: ApplicantsListProps) {
     currentPage * itemsPerPage
   );
 
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, selectedJobId]);
+
   // Handlers
-  const toggleSelectAll = () => {
-    if (selectedApplicants.size === paginatedApplicants.length) {
-      setSelectedApplicants(new Set());
-    } else {
-      setSelectedApplicants(new Set(paginatedApplicants.map(a => a.id)));
-    }
-  };
-
-  const toggleSelect = (id: string) => {
-    const newSet = new Set(selectedApplicants);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
-    }
-    setSelectedApplicants(newSet);
-  };
-
-  const handleSort = (field: typeof sortField) => {
-    if (sortField === field) {
-      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('desc');
-    }
-  };
-
-  const handleBulkAction = (action: string) => {
-    // TODO: Implement bulk actions
-    console.log(`Bulk action: ${action} on`, Array.from(selectedApplicants));
-    alert(`${action} for ${selectedApplicants.size} applicants`);
-  };
-
-  const handleOpenModal = (applicant: ApplicantWithDetails) => {
-    const applicantWithScores = processedApplicants.find(a => a.id === applicant.id);
-    if (applicantWithScores) {
-      setSelectedApplicant(applicantWithScores);
-      setIsModalOpen(true);
-    }
+  const handleOpenModal = (applicant: ApplicantWithResume, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSelectedApplicant(applicant);
+    setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
@@ -380,413 +327,393 @@ export function ApplicantsList({ applicants }: ApplicantsListProps) {
     setSelectedApplicant(null);
   };
 
-  const getTagsForApplicant = (id: string) => {
-    const saved = localStorage.getItem(`applicant_tags_${id}`);
-    return saved ? JSON.parse(saved) : [];
+  const handleViewResume = async (applicant: ApplicantWithResume, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (applicant.resume?.resume_url) {
+      window.open(applicant.resume.resume_url, '_blank');
+    }
+  };
+
+  const handleRetryParsing = async (applicant: ApplicantWithResume, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Retry parsing this resume?')) return;
+    
+    try {
+      setRetryingId(applicant.id);
+      
+      // Call the retry endpoint or function
+      const { error } = await supabase
+        .from('resumes')
+        .update({ status: 'pending', parsed_data: null })
+        .eq('id', applicant.resume?.id);
+
+      if (error) throw error;
+      
+      // Refresh applicants list
+      const { data: updatedData } = await supabase
+        .from('applicants')
+        .select('*')
+        .eq('position', selectedJobId)
+        .order('created_at', { ascending: false });
+        
+      if (updatedData) {
+        const applicantIds = updatedData.map(a => a.id);
+        let resumesMap: Record<string, Resume> = {};
+        
+        if (applicantIds.length > 0) {
+          const { data: resumesData } = await supabase
+            .from('resumes')
+            .select('*')
+            .in('applicant_id', applicantIds);
+
+          if (resumesData) {
+            resumesMap = resumesData.reduce((acc, resume) => {
+              acc[resume.applicant_id] = resume;
+              return acc;
+            }, {} as Record<string, Resume>);
+          }
+        }
+
+        const applicantsWithResumes = updatedData.map(a => ({
+          ...a,
+          resume: resumesMap[a.id],
+        }));
+        setApplicants(applicantsWithResumes);
+      }
+    } catch (err) {
+      console.error('Error retrying parsing:', err);
+      alert('Failed to retry parsing. Please try again.');
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
+  const handleDelete = async (applicant: ApplicantWithResume, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Are you sure you want to delete ${applicant.name}?`)) return;
+    
+    try {
+      // Delete resume first
+      if (applicant.resume?.id) {
+        await supabase.from('resumes').delete().eq('id', applicant.resume.id);
+      }
+      
+      // Delete applicant
+      const { error } = await supabase.from('applicants').delete().eq('id', applicant.id);
+      if (error) throw error;
+      
+      // Update local state
+      setApplicants(prev => prev.filter(a => a.id !== applicant.id));
+    } catch (err) {
+      console.error('Error deleting applicant:', err);
+      alert('Failed to delete applicant. Please try again.');
+    }
+  };
+
+  const handleJobChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    setSelectedJobId(value === '' ? null : value);
+  };
+
+  const selectedPosition = positions.find(p => p.position === selectedJobId);
+
+  // Helper to get job title from job_id
+  const getJobTitle = (jobId: string) => {
+    return jobId;
+  };
+
+  const getStatusBadge = (status: string) => {
+    const config = STATUS_CONFIGS[status] || STATUS_CONFIGS.pending;
+    const Icon = config.icon;
+    
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${config.bg} ${config.text} ${config.border}`}>
+        <Icon className="w-3.5 h-3.5" />
+        {config.label}
+      </span>
+    );
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
   };
 
   return (
-    <div className="p-8 lg:p-10 space-y-6 bg-slate-50 min-h-screen">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Applicants</h1>
-          <p className="text-gray-600 mt-1">
-            {filteredApplicants.length} total applicants • {selectedApplicants.size} selected
-          </p>
-        </div>
-        
-        {/* Search, Filter, and Refresh */}
-        <div className="flex flex-col sm:flex-row gap-2">
-          {/* Search */}
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search applicants..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-            />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Applicants</h1>
+            <p className="text-gray-500 mt-1">
+              {selectedPosition 
+                ? `${filteredApplicants.length} applicant${filteredApplicants.length !== 1 ? 's' : ''} for ${selectedPosition.position}`
+                : 'Select a job position to view applicants'}
+            </p>
           </div>
-          
-          {/* Filter Toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center justify-center gap-2 px-3 py-2 border rounded-lg transition-colors ${
-              showFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            <Filter className="w-4 h-4" />
-            <span className="sm:hidden">Filters</span>
-            {statusFilter !== 'all' && (
-              <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">1</span>
-            )}
-          </button>
-          
-          {/* Refresh */}
-          <button
-            onClick={() => window.location.reload()}
-            className="flex items-center justify-center gap-2 px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            title="Refresh data"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
         </div>
-      </div>
 
-      {/* Bulk Actions & Filters */}
-      <div className="space-y-4">
-        {/* Bulk Actions */}
-        {selectedApplicants.size > 0 && (
-          <div className="flex items-center gap-2 bg-blue-50 p-3 rounded-lg">
-            <span className="text-sm text-gray-600">{selectedApplicants.size} selected:</span>
-            <button
-              onClick={() => handleBulkAction('email')}
-              className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-            >
-              <Mail className="w-4 h-4" />
-              Email
-            </button>
-            <button
-              onClick={() => handleBulkAction('export')}
-              className="flex items-center gap-2 px-3 py-1.5 bg-white text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm"
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
-            <button
-              onClick={() => handleBulkAction('delete')}
-              className="flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete
-            </button>
-          </div>
-        )}
-        
-        {/* Filter Options */}
-        {showFilters && (
-          <div className="pt-4 border-t border-gray-100">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">Status:</label>
+        {/* Filters Card */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Job Selector */}
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Briefcase className="w-4 h-4 inline mr-1.5 text-gray-400" />
+                Job Position
+              </label>
+              <div className="relative">
                 <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  value={selectedJobId || ''}
+                  onChange={handleJobChange}
+                  disabled={isFetchingJobs}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none cursor-pointer hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <option value="all">All Statuses</option>
-                  <option value="pending">Pending Review</option>
-                  <option value="reviewed">Resume Suitable</option>
-                  <option value="submitted">Video Submitted</option>
-                  <option value="completed">Assessment Completed</option>
-                  <option value="not_suitable">Not Suitable</option>
+                  <option value="">All Jobs</option>
+                  {positions.map(pos => (
+                    <option key={pos.position} value={pos.position}>
+                      {pos.position} ({pos.count})
+                    </option>
+                  ))}
                 </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
               </div>
-              
-              {statusFilter !== 'all' && (
-                <button
-                  onClick={() => setStatusFilter('all')}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  Clear filters
-                </button>
-              )}
+            </div>
+
+            {/* Search */}
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Search className="w-4 h-4 inline mr-1.5 text-gray-400" />
+                Search
+              </label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by name or email..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 hover:bg-gray-100 transition-colors"
+                />
+              </div>
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Applicants Table */}
-      <div className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="sticky top-0 z-50 bg-purple-50 border-b border-purple-100">
-              <tr>
-                <th className="px-4 py-6 w-12">
+          {/* Status Filter Tabs */}
+          {selectedJobId && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="flex flex-wrap gap-2">
+                {(['all', 'pending', 'processing', 'parsed', 'error'] as ApplicationStatus[]).map(status => (
                   <button
-                    onClick={toggleSelectAll}
-                    className="flex items-center justify-center p-1 hover:bg-gray-200 rounded transition-colors"
+                    key={status}
+                    onClick={() => setStatusFilter(status)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                      statusFilter === status
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
                   >
-                    {selectedApplicants.size === paginatedApplicants.length && paginatedApplicants.length > 0 ? (
-                      <CheckSquare className="w-5 h-5 text-blue-600" />
-                    ) : (
-                      <Square className="w-5 h-5 text-gray-400" />
+                    {status === 'all' ? 'All' : STATUS_CONFIGS[status].label}
+                    {status !== 'all' && (
+                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs ${
+                        statusFilter === status ? 'bg-blue-500' : 'bg-gray-200'
+                      }`}>
+                        {applicants.filter(a => getApplicationStatus(a) === status).length}
+                      </span>
                     )}
                   </button>
-                </th>
-                <th
-                  className="px-4 py-6 text-left text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
-                  onClick={() => handleSort('name')}
-                >
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-gray-400" />
-                    Applicant
-                    {sortField === 'name' && (
-                      sortDirection === 'asc' ? <ChevronUp className="w-4 h-4 text-blue-600" /> : <ChevronDown className="w-4 h-4 text-blue-600" />
-                    )}
-                  </div>
-                </th>
-                <th
-                  className="px-4 py-6 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
-                  onClick={() => handleSort('resume')}
-                >
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="p-1.5 bg-emerald-100 rounded-md">
-                      <FileText className="w-3.5 h-3.5 text-emerald-600" />
-                    </div>
-                    <span className="hidden lg:inline">Resume</span>
-                    {sortField === 'resume' && (
-                      sortDirection === 'asc' ? <ChevronUp className="w-4 h-4 text-blue-600" /> : <ChevronDown className="w-4 h-4 text-blue-600" />
-                    )}
-                  </div>
-                </th>
-                <th
-                  className="px-4 py-6 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
-                  onClick={() => handleSort('video')}
-                >
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="p-1.5 bg-purple-100 rounded-md">
-                      <Video className="w-3.5 h-3.5 text-purple-600" />
-                    </div>
-                    <span className="hidden lg:inline">Video</span>
-                    {sortField === 'video' && (
-                      sortDirection === 'asc' ? <ChevronUp className="w-4 h-4 text-blue-600" /> : <ChevronDown className="w-4 h-4 text-blue-600" />
-                    )}
-                  </div>
-                </th>
-                <th
-                  className="px-4 py-6 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
-                  onClick={() => handleSort('profile')}
-                >
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="p-1.5 bg-orange-100 rounded-md">
-                      <ClipboardCheck className="w-3.5 h-3.5 text-orange-600" />
-                    </div>
-                    <span className="hidden lg:inline">Profile</span>
-                    {sortField === 'profile' && (
-                      sortDirection === 'asc' ? <ChevronUp className="w-4 h-4 text-blue-600" /> : <ChevronDown className="w-4 h-4 text-blue-600" />
-                    )}
-                  </div>
-                </th>
-                <th
-                  className="px-4 py-6 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
-                  onClick={() => handleSort('overall')}
-                >
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="p-1.5 bg-yellow-100 rounded-md">
-                      <Award className="w-3.5 h-3.5 text-yellow-600" />
-                    </div>
-                    <span className="hidden lg:inline">Overall</span>
-                    {sortField === 'overall' && (
-                      sortDirection === 'asc' ? <ChevronUp className="w-4 h-4 text-blue-600" /> : <ChevronDown className="w-4 h-4 text-blue-600" />
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-6 text-center text-sm font-bold text-gray-700">
-                  Status
-                </th>
-                <th
-                  className="px-4 py-6 text-center text-sm font-bold text-gray-700 cursor-pointer hover:text-blue-600 transition-colors"
-                  onClick={() => handleSort('date')}
-                >
-                  <div className="flex items-center justify-center gap-2">
-                    <CalendarDays className="w-4 h-4 text-gray-400" />
-                    <span className="hidden lg:inline">Applied</span>
-                    {sortField === 'date' && (
-                      sortDirection === 'asc' ? <ChevronUp className="w-4 h-4 text-blue-600" /> : <ChevronDown className="w-4 h-4 text-blue-600" />
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-6 w-20"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-purple-100 bg-white">
-              {paginatedApplicants.length > 0 ? (
-                paginatedApplicants.map((applicant) => (
-                  <tr 
-                    key={applicant.id} 
-                    className="group hover:bg-purple-50/50 transition-all duration-200 cursor-pointer"
-                    onClick={() => handleOpenModal(applicant)}
-                  >
-                    <td className="px-4 py-6">
-                      <button 
-                        onClick={() => toggleSelect(applicant.id)}
-                        className="flex items-center justify-center opacity-60 group-hover:opacity-100 transition-opacity"
-                      >
-                        {selectedApplicants.has(applicant.id) ? (
-                          <CheckSquare className="w-5 h-5 text-blue-600" />
-                        ) : (
-                          <Square className="w-5 h-5 text-gray-400" />
-                        )}
-                      </button>
-                    </td>
-                    <td className="px-4 py-6">
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
-                          {applicant.photo_url ? (
-                            <img 
-                              src={applicant.photo_url} 
-                              alt={applicant.name}
-                              className="w-11 h-11 rounded-xl object-cover shadow-sm"
-                            />
-                          ) : (
-                            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold shadow-sm">
-                              {applicant.name.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                          <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
-                            applicant.status === 'completed' ? 'bg-green-500' :
-                            applicant.status === 'submitted' ? 'bg-blue-500' :
-                            applicant.status === 'reviewed' ? 'bg-emerald-500' :
-                            applicant.status === 'not_suitable' ? 'bg-red-500' :
-                            'bg-yellow-500'
-                          }`} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-gray-900">{applicant.name}</p>
-                          <div className="flex items-center gap-2 text-sm">
-                            <span className="text-gray-600">{applicant.position}</span>
-                          </div>
-                          {/* Tags */}
-                          {getTagsForApplicant(applicant.id).length > 0 && (
-                            <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                              {getTagsForApplicant(applicant.id).slice(0, 2).map((tag: string) => (
-                                <span 
-                                  key={tag} 
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-medium"
-                                >
-                                  <Tag className="w-3 h-3" />
-                                  {tag}
-                                </span>
-                              ))}
-                              {getTagsForApplicant(applicant.id).length > 2 && (
-                                <span className="text-[10px] text-gray-400">
-                                  +{getTagsForApplicant(applicant.id).length - 2}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-6 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <ScoreBadge score={applicant.resumeScore} />
-                        <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full ${
-                              applicant.resumeScore >= 80 ? 'bg-green-500' :
-                              applicant.resumeScore >= 60 ? 'bg-blue-500' :
-                              applicant.resumeScore >= 40 ? 'bg-yellow-500' :
-                              'bg-gray-300'
-                            }`}
-                            style={{ width: `${applicant.resumeScore}%` }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-6 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <ScoreBadge score={applicant.videoScore} />
-                        <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full ${
-                              applicant.videoScore >= 80 ? 'bg-green-500' :
-                              applicant.videoScore >= 60 ? 'bg-blue-500' :
-                              applicant.videoScore >= 40 ? 'bg-yellow-500' :
-                              'bg-gray-300'
-                            }`}
-                            style={{ width: `${applicant.videoScore}%` }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-6 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <ScoreBadge score={applicant.profileFit} />
-                        <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full ${
-                              applicant.profileFit >= 80 ? 'bg-green-500' :
-                              applicant.profileFit >= 60 ? 'bg-blue-500' :
-                              applicant.profileFit >= 40 ? 'bg-yellow-500' :
-                              'bg-gray-300'
-                            }`}
-                            style={{ width: `${applicant.profileFit}%` }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-6 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <span className={`inline-flex items-center justify-center w-12 h-12 rounded-xl text-xl font-bold ${
-                          applicant.overall >= 80 ? 'text-green-700 bg-green-100 ring-2 ring-green-200' :
-                          applicant.overall >= 60 ? 'text-blue-700 bg-blue-100 ring-2 ring-blue-200' :
-                          applicant.overall >= 40 ? 'text-yellow-700 bg-yellow-100 ring-2 ring-yellow-200' :
-                          'text-gray-600 bg-gray-100'
-                        }`}>
-                          {applicant.overall > 0 ? applicant.overall : '-'}
-                        </span>
-                        <span className="text-xs text-gray-400">overall</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-6 text-center">
-                      {getStatusBadge(applicant.status)}
-                    </td>
-                    <td className="px-4 py-6 text-center">
-                      <div className="flex flex-col items-center">
-                        <span className="text-sm font-medium text-gray-700">
-                          {new Date(applicant.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </span>
-                        <span className="text-xs text-gray-400">
-                          {new Date(applicant.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center">
-                    <AlertCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">No applicants found</p>
-                    <p className="text-sm text-gray-400">Try adjusting your search or filters</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="px-4 py-6 border-t border-purple-100 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
-              Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredApplicants.length)} of {filteredApplicants.length}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="p-2 rounded-lg border border-purple-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-purple-50"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <span className="text-sm text-gray-700">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-                className="p-2 rounded-lg border border-purple-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-purple-50"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
+                ))}
+              </div>
             </div>
+          )}
+        </div>
+
+        {/* Table Card */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    Applicant
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    Job Applied
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    Email
+                  </th>
+                  <th className="px-4 py-4 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    Resume
+                  </th>
+                  <th className="px-4 py-4 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-4 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    Applied Date
+                  </th>
+                  <th className="px-4 py-4 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {isLoading ? (
+                  <TableSkeleton />
+                ) : (
+                  <>
+                    {paginatedApplicants.length > 0 ? (
+                      paginatedApplicants.map((applicant) => {
+                        const status = getApplicationStatus(applicant);
+                        const isError = status === 'error';
+                        
+                        return (
+                          <tr 
+                            key={applicant.id} 
+                            className="hover:bg-gray-50/80 transition-colors duration-150 group"
+                          >
+                            {/* Name */}
+                            <td className="px-4 py-4">
+                              <button
+                                onClick={(e) => handleOpenModal(applicant, e)}
+                                className="flex items-center gap-3 text-left hover:opacity-80 transition-opacity"
+                              >
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                                  {applicant.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                                    {applicant.name}
+                                  </p>
+                                </div>
+                              </button>
+                            </td>
+
+                            {/* Job Applied */}
+                            <td className="px-4 py-4">
+                              <span className="text-sm text-gray-600">
+                                {applicant.position}
+                              </span>
+                            </td>
+
+                            {/* Email */}
+                            <td className="px-4 py-4">
+                              <a 
+                                href={`mailto:${applicant.email}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-sm text-gray-600 hover:text-blue-600 transition-colors"
+                              >
+                                {applicant.email}
+                              </a>
+                            </td>
+
+                            {/* Resume */}
+                            <td className="px-4 py-4 text-center">
+                              <button
+                                onClick={(e) => handleViewResume(applicant, e)}
+                                disabled={!applicant.resume?.resume_url}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-blue-50 text-gray-700 hover:text-blue-700 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-100"
+                              >
+                                <FileText className="w-4 h-4" />
+                                View
+                                {applicant.resume?.resume_url && (
+                                  <ExternalLink className="w-3 h-3" />
+                                )}
+                              </button>
+                            </td>
+
+                            {/* Status */}
+                            <td className="px-4 py-4 text-center">
+                              {getStatusBadge(status)}
+                            </td>
+
+                            {/* Applied Date */}
+                            <td className="px-4 py-4">
+                              <span className="text-sm text-gray-500">
+                                {formatDate(applicant.created_at)}
+                              </span>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="px-4 py-4">
+                              <div className="flex items-center justify-center gap-1.5">
+                                {/* View Details */}
+                                <button
+                                  onClick={(e) => handleOpenModal(applicant, e)}
+                                  className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                  title="View Details"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+
+                                {/* Retry Parsing (only for error state) */}
+                                {isError && (
+                                  <button
+                                    onClick={(e) => handleRetryParsing(applicant, e)}
+                                    disabled={retryingId === applicant.id}
+                                    className="p-2 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded-lg transition-all disabled:opacity-50"
+                                    title="Retry Parsing"
+                                  >
+                                    <RefreshCw className={`w-4 h-4 ${retryingId === applicant.id ? 'animate-spin' : ''}`} />
+                                  </button>
+                                )}
+
+                                {/* Delete */}
+                                <button
+                                  onClick={(e) => handleDelete(applicant, e)}
+                                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <EmptyState selectedJob={selectedPosition?.position || null} />
+                    )}
+                  </>
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
+
+          {/* Pagination */}
+          {!isLoading && totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50/50 flex items-center justify-between">
+              <p className="text-sm text-gray-500">
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredApplicants.length)} of {filteredApplicants.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-lg border border-gray-200 bg-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5 text-gray-600" />
+                </button>
+                <span className="text-sm font-medium text-gray-700 px-2">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-lg border border-gray-200 bg-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Applicant Detail Modal */}

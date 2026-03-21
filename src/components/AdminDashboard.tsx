@@ -449,7 +449,7 @@ export function AdminDashboard() {
           
           {/* Recruitment Pipeline - All pipeline views use ApplicantsList or ShortlistedCandidates */}
           {(activeMenu === 'applications' || activeMenu === 'screening-results' || activeMenu === 'needs-review' || activeMenu === 'interview-scheduling') && 
-            <ApplicantsList applicants={applicants} />}
+            <ApplicantsList />}
           
           {/* Shortlisted and Final Decisions use ShortlistedCandidates */}
           {(activeMenu === 'shortlisted' || activeMenu === 'final-decisions') && <ShortlistedCandidates applicants={applicants} />}
