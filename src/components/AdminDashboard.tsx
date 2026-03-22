@@ -3,6 +3,7 @@ import { AdminJobManagement } from './AdminJobManagement';
 import { AdminScoringSettings } from './AdminScoringSettings';
 import { DashboardLanding } from './DashboardLanding';
 import { ApplicantsList } from './ApplicantsList';
+import { ScreeningResults } from './ScreeningResults';
 import { ReportsDashboard } from './ReportsDashboard';
 import { AdminSettings } from './AdminSettings';
 import { ShortlistedCandidates } from './ShortlistedCandidates';
@@ -448,7 +449,8 @@ export function AdminDashboard() {
           {activeMenu === 'job-management' && <AdminJobManagement />}
           
           {/* Recruitment Pipeline - All pipeline views use ApplicantsList or ShortlistedCandidates */}
-          {(activeMenu === 'applications' || activeMenu === 'screening-results' || activeMenu === 'needs-review' || activeMenu === 'interview-scheduling') && 
+          {activeMenu === 'screening-results' && <ScreeningResults />}
+          {(activeMenu === 'applications' || activeMenu === 'needs-review' || activeMenu === 'interview-scheduling') && 
             <ApplicantsList />}
           
           {/* Shortlisted and Final Decisions use ShortlistedCandidates */}
