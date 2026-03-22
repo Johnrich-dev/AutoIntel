@@ -160,14 +160,6 @@ function ScoreBadge({ score }: { score: number }) {
       <div className={`px-3 py-1.5 rounded-lg font-semibold text-sm ${getScoreColor(score)}`}>
         {score}%
       </div>
-      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden w-16">
-        <div
-          className={`h-full rounded-full transition-all ${
-            score >= 80 ? 'bg-green-500' : score >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-          }`}
-          style={{ width: `${score}%` }}
-        />
-      </div>
     </div>
   );
 }
@@ -460,7 +452,7 @@ export function ScreeningResults() {
 
         // Convert to JobOption array and sort alphabetically
         const jobOptions: JobOption[] = Object.entries(positionCounts)
-          .map(([position, count]) => ({
+          .map(([position, count]: [string, number]) => ({
             id: position,
             title: position,
             department: 'General',
