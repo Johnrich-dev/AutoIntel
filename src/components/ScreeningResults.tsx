@@ -451,8 +451,8 @@ export function ScreeningResults() {
         }, {} as Record<string, number>);
 
         // Convert to JobOption array and sort alphabetically
-        const jobOptions: JobOption[] = Object.entries(positionCounts)
-          .map(([position, count]: [string, number]) => ({
+        const jobOptions: JobOption[] = (Object.entries(positionCounts) as [string, number][])
+          .map(([position, count]) => ({
             id: position,
             title: position,
             department: 'General',
