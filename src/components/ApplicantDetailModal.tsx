@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import {
   X,
   Mail,
@@ -26,6 +27,7 @@ import {
   GraduationCap,
   Award,
   TrendingUp,
+  TrendingDown,
   Target,
   Zap,
   Shield,
@@ -63,7 +65,8 @@ interface ApplicantWithDetails extends Applicant {
 }
 
 interface ApplicantDetailModalProps {
-  applicant: ApplicantWithDetails | null;
+  applicantId?: string;
+  applicant?: ApplicantWithDetails | null;
   isOpen: boolean;
   onClose: () => void;
   onStatusChange?: (id: string, status: string) => void;
@@ -135,7 +138,8 @@ const getTagColor = (tag: string) => {
 };
 
 export function ApplicantDetailModal({
-  applicant,
+  applicantId,
+  applicant: initialApplicant,
   isOpen,
   onClose,
   onStatusChange,
@@ -154,19 +158,208 @@ export function ApplicantDetailModal({
   const [tags, setTags] = useState<string[]>([]);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [showActionsDropdown, setShowActionsDropdown] = useState(false);
+  
+  // Data fetching state
+  const [applicant, setApplicant] = useState<ApplicantWithDetails | null>(initialApplicant || null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // Load data from localStorage when applicant changes
-  useEffect(() => {
-    if (applicant) {
-      const savedNotes = localStorage.getItem(`applicant_notes_${applicant.id}`);
-      const savedEmails = localStorage.getItem(`applicant_emails_${applicant.id}`);
-      const savedTags = localStorage.getItem(`applicant_tags_${applicant.id}`);
+  // Fetch applicant data from Supabase
+  const fetchApplicantData = async () => {
+    // Use applicantId if provided, otherwise use applicant.id
+    const id = applicantId || applicant?.id;
+    if (!id) {
+      setFetchError('No applicant ID provided');
+      return;
+    }
+    
+    setIsLoading(true);
+    setFetchError(null);
+    
+    try {
+      // Fetch applicant with related data
+      const { data: applicantData, error: applicantError } = await supabase
+        .from('applicants')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      
+      if (applicantError) {
+        console.error('Error fetching applicant:', applicantError);
+        throw new Error(`Failed to fetch applicant: ${applicantError.message}`);
+      }
+      if (!applicantData) throw new Error('Applicant not found');
+      
+      // Fetch resume data
+      const { data: resumeData } = await supabase
+        .from('resumes')
+        .select('*')
+        .eq('applicant_id', id)
+        .single();
+      
+      // Fetch video assessment
+      const { data: videoData } = await supabase
+        .from('video_assessments')
+        .select('*')
+        .eq('applicant_id', id)
+        .single();
+      
+      // Fetch work style assessment - check work_style_assessments first, fallback to personality_tests
+      let testData = null;
+      const { data: workStyleData } = await supabase
+        .from('work_style_assessments')
+        .select('*')
+        .eq('applicant_id', id)
+        .maybeSingle();
+      
+      if (workStyleData) {
+        testData = workStyleData;
+      } else {
+        // Fallback to old personality_tests table
+        const { data: personalityData } = await supabase
+          .from('personality_tests')
+          .select('*')
+          .eq('applicant_id', id)
+          .single();
+        testData = personalityData;
+      }
+      
+      // Combine all data
+      const fullApplicant: ApplicantWithDetails = {
+        ...applicantData,
+        resume: resumeData || undefined,
+        video: videoData || undefined,
+        test: testData || undefined,
+      };
+      
+      setApplicant(fullApplicant);
+      
+      // Load local storage data
+      const savedNotes = localStorage.getItem(`applicant_notes_${id}`);
+      const savedEmails = localStorage.getItem(`applicant_emails_${id}`);
+      const savedTags = localStorage.getItem(`applicant_tags_${id}`);
       
       if (savedNotes) setNotes(JSON.parse(savedNotes));
       if (savedEmails) setEmails(JSON.parse(savedEmails));
       if (savedTags) setTags(JSON.parse(savedTags));
+      
+    } catch (err) {
+      console.error('Error fetching applicant data:', err);
+      setFetchError(err instanceof Error ? err.message : 'Failed to load applicant data');
+    } finally {
+      setIsLoading(false);
     }
-  }, [applicant]);
+  };
+
+  // Fetch data when modal opens or applicantId changes
+  useEffect(() => {
+    if (isOpen) {
+      // Reset to initial state
+      setActiveTab('summary');
+      setNotes([]);
+      setEmails([]);
+      setTags([]);
+      
+      // If we have an applicantId, fetch fresh data
+      if (applicantId) {
+        fetchApplicantData();
+      } else if (initialApplicant) {
+        // Use the pre-loaded applicant data
+        setApplicant(initialApplicant);
+        const savedNotes = localStorage.getItem(`applicant_notes_${initialApplicant.id}`);
+        const savedEmails = localStorage.getItem(`applicant_emails_${initialApplicant.id}`);
+        const savedTags = localStorage.getItem(`applicant_tags_${initialApplicant.id}`);
+        
+        if (savedNotes) setNotes(JSON.parse(savedNotes));
+        if (savedEmails) setEmails(JSON.parse(savedEmails));
+        if (savedTags) setTags(JSON.parse(savedTags));
+      }
+    }
+  }, [isOpen, applicantId]);
+
+  // Real-time subscription to applicant changes
+  useEffect(() => {
+    if (!isOpen || !applicant?.id) return;
+    
+    const channel = supabase
+      .channel(`applicant-${applicant.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'applicants',
+          filter: `id=eq.${applicant.id}`
+        },
+        (payload) => {
+          // Update applicant with new data
+          if (payload.new) {
+            setApplicant(prev => prev ? { ...prev, ...payload.new } : null);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'resumes',
+          filter: `applicant_id=eq.${applicant.id}`
+        },
+        (payload) => {
+          if (payload.new) {
+            setApplicant(prev => prev ? { ...prev, resume: payload.new as any } : null);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'video_assessments',
+          filter: `applicant_id=eq.${applicant.id}`
+        },
+        (payload) => {
+          if (payload.new) {
+            setApplicant(prev => prev ? { ...prev, video: payload.new as any } : null);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'work_style_assessments',
+          filter: `applicant_id=eq.${applicant.id}`
+        },
+        (payload) => {
+          if (payload.new) {
+            setApplicant(prev => prev ? { ...prev, test: payload.new as any } : null);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'personality_tests',
+          filter: `applicant_id=eq.${applicant.id}`
+        },
+        (payload) => {
+          if (payload.new) {
+            setApplicant(prev => prev ? { ...prev, test: payload.new as any } : null);
+          }
+        }
+      )
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isOpen, applicant?.id]);
 
   // Save notes to localStorage
   const saveNotes = (newNotes: typeof notes) => {
@@ -400,7 +593,103 @@ export function ApplicantDetailModal({
     return config.low;
   };
 
-  if (!isOpen || !applicant) return null;
+  // Get high score trait label
+  const getHighScoreTrait = (dimension: string): { label: string; type: 'high' } | null => {
+    const traits: Record<string, string> = {
+      structure: 'Prefers Structure',
+      social_energy: 'Team-Oriented',
+      change_adaptation: 'Adaptable',
+      achievement_orientation: 'Goal-Driven',
+      learning_style: 'Practical Learner',
+      conflict_resolution: 'Collaborative',
+      risk_tolerance: 'Comfortable with Risk',
+      planning: 'Strategic',
+      independence: 'Self-Directed',
+      feedback_responsiveness: 'Receptive to Feedback',
+      creativity: 'Creative',
+      persistence: 'Persistent',
+      adaptability: 'Flexible',
+      leadership: 'Leadership Potential',
+      teamwork: 'Team Player'
+    };
+    const label = traits[dimension];
+    return label ? { label, type: 'high' as const } : null;
+  };
+
+  // Get low score trait label
+  const getLowScoreTrait = (dimension: string): { label: string; type: 'low' } | null => {
+    const traits: Record<string, string> = {
+      structure: 'Flexible Approach',
+      social_energy: 'Independent',
+      change_adaptation: 'Prefers Stability',
+      achievement_orientation: 'Process-Focused',
+      learning_style: 'Theory-Oriented',
+      conflict_resolution: 'Independent Resolver',
+      risk_tolerance: 'Risk-Averse',
+      planning: 'Spontaneous',
+      independence: 'Collaborative',
+      feedback_responsiveness: 'Self-Reliant',
+      creativity: 'Practical',
+      persistence: 'Adaptive',
+      adaptability: 'Fixed Approach',
+      leadership: 'Individual Contributor',
+      teamwork: 'Independent'
+    };
+    const label = traits[dimension];
+    return label ? { label, type: 'low' as const } : null;
+  };
+
+  // Format dimension name to readable label
+  const formatDimensionLabel = (dimension: string): string => {
+    // Check if DIMENSION_LABELS has it
+    if (DIMENSION_LABELS[dimension]) return DIMENSION_LABELS[dimension];
+    // Otherwise convert snake_case to Title Case
+    return dimension
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  if (!isOpen) return null;
+  
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4" />
+              <p className="text-gray-600 font-medium">Loading applicant data...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // Show error state
+  if (fetchError || !applicant) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+              <p className="text-gray-900 font-semibold mb-2">Failed to load applicant</p>
+              <p className="text-gray-500 text-sm mb-4">{fetchError || 'Applicant not found'}</p>
+              <button
+                onClick={fetchApplicantData}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -1420,10 +1709,9 @@ export function ApplicantDetailModal({
 
           {/* ===== WORK PROFILING TAB ===== */}
           {activeTab === 'test' && (
-            <div className="space-y-6 max-w-5xl">
+            <div className="space-y-5 max-w-5xl">
               {applicant.test && applicant.test.status === 'submitted' ? (
                 <>
-                  {/* Work Style Alignment Score */}
                   {(() => {
                     const answers: WorkStyleAnswer[] = applicant.test?.answers?.map((a: any) => ({
                       question: a.question,
@@ -1434,110 +1722,155 @@ export function ApplicantDetailModal({
                     const { score: alignmentScore, breakdown, matchedFamily } = calculateAlignmentScore(dimensionScores, targetPosition);
                     const result = getWorkStyleResult(answers, targetPosition);
                     
+                    // Generate key characteristic tags based on high/low scores
+                    const keyTraits = [];
+                    dimensionScores.forEach(ds => {
+                      const normalizedScore = Math.round((ds.score / 5) * 100);
+                      if (normalizedScore >= 75) {
+                        const highTrait = getHighScoreTrait(ds.dimension);
+                        if (highTrait) keyTraits.push(highTrait);
+                      } else if (normalizedScore <= 35) {
+                        const lowTrait = getLowScoreTrait(ds.dimension);
+                        if (lowTrait) keyTraits.push(lowTrait);
+                      }
+                    });
+                    
                     return (
                       <>
-                        <div className="bg-gradient-to-br from-amber-50/50 to-orange-50/50 rounded-2xl border border-amber-100 p-6">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
-                                <Brain className="w-6 h-6 text-amber-600" />
+                        {/* Header Card - Overall Score */}
+                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-sm">
+                                <Brain className="w-7 h-7 text-white" />
                               </div>
                               <div>
-                                <h3 className="font-semibold text-gray-900">Work Style Alignment</h3>
-                                <p className="text-sm text-gray-500">Comparison with target role profile</p>
+                                <p className="text-sm text-gray-500 font-medium">Work Style Assessment</p>
+                                <h3 className="text-lg font-semibold text-gray-900">Psychological Profile Summary</h3>
+                                <p className="text-sm text-gray-400">Based on {applicant.test.answers.length} behavioral responses</p>
                               </div>
                             </div>
                             <div className="text-right">
-                              <div className="text-5xl font-bold text-amber-700">{alignmentScore}%</div>
-                              <p className="text-xs text-gray-500 mt-1">alignment score</p>
+                              <div className="text-4xl font-bold bg-gradient-to-br from-violet-600 to-purple-700 bg-clip-text text-transparent">
+                                {alignmentScore}%
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5">role alignment</p>
                             </div>
                           </div>
                           
-                          {/* Target Role Badge */}
-                          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white rounded-full text-sm">
-                            <Target className="w-4 h-4 text-gray-400" />
-                            <span className="text-gray-600">Target Role:</span>
-                            <span className="font-medium text-gray-900">{applicant.position}</span>
-                          </div>
+                          {/* Key Traits Tags */}
+                          {keyTraits.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-gray-100">
+                              <p className="text-xs text-gray-500 mb-2 uppercase tracking-wide font-medium">Key Characteristics</p>
+                              <div className="flex flex-wrap gap-2">
+                                {keyTraits.slice(0, 6).map((trait, idx) => (
+                                  <span 
+                                    key={idx}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
+                                      trait.type === 'high' 
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                        : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                    }`}
+                                  >
+                                    {trait.type === 'high' && <TrendingUp className="w-3 h-3" />}
+                                    {trait.type === 'low' && <TrendingDown className="w-3 h-3" />}
+                                    {trait.label}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Dimension Scores with Interpretations */}
-                        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                          <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50/50 to-white">
-                            <h3 className="font-semibold text-gray-900">Psychological Profile</h3>
+                        {/* Dimension Breakdown Grid */}
+                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50">
+                            <h3 className="font-semibold text-gray-900">Behavioral Dimensions</h3>
+                            <p className="text-xs text-gray-500 mt-0.5">Detailed scoring across personality traits</p>
                           </div>
-                          <div className="p-5 space-y-6">
-                            {dimensionScores.map((ds) => {
-                              const normalizedScore = Math.round((ds.score / 5) * 100);
-                              const barColor = normalizedScore >= 70 ? 'bg-emerald-500' : normalizedScore >= 50 ? 'bg-amber-500' : 'bg-red-500';
-                              const interpretation = getWorkStyleInterpretation(ds.dimension, ds.score);
-                              
-                              return (
-                                <div key={ds.dimension} className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium text-gray-900">{DIMENSION_LABELS[ds.dimension]}</span>
-                                    <span className="text-sm font-semibold text-gray-900">{normalizedScore}%</span>
+                          <div className="p-5">
+                            <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                              {dimensionScores.map((ds) => {
+                                const normalizedScore = Math.round((ds.score / 5) * 100);
+                                const barColor = normalizedScore >= 70 ? 'bg-emerald-500' : normalizedScore >= 45 ? 'bg-amber-500' : 'bg-gray-300';
+                                const interpretation = getWorkStyleInterpretation(ds.dimension, ds.score);
+                                
+                                return (
+                                  <div key={ds.dimension} className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-sm font-medium text-gray-800">{DIMENSION_LABELS[ds.dimension]}</span>
+                                      <span className={`text-sm font-bold ${normalizedScore >= 70 ? 'text-emerald-600' : normalizedScore >= 45 ? 'text-amber-600' : 'text-gray-500'}`}>
+                                        {normalizedScore}%
+                                      </span>
+                                    </div>
+                                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                      <div className={`h-full rounded-full ${barColor} transition-all duration-500`} style={{ width: `${normalizedScore}%` }} />
+                                    </div>
+                                    {interpretation && (
+                                      <p className="text-xs text-gray-500 leading-relaxed">{interpretation}</p>
+                                    )}
                                   </div>
-                                  <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                                    <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${normalizedScore}%` }} />
-                                  </div>
-                                  {interpretation && (
-                                    <p className="text-xs text-gray-500 leading-relaxed pl-1">{interpretation}</p>
-                                  )}
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
 
-                        {/* Work Style Summary */}
-                        <div className="bg-gradient-to-br from-violet-50/50 to-purple-50/50 rounded-2xl border border-violet-100 p-5">
-                          <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-violet-500" />
-                            Work Style Summary
-                          </h4>
-                          <p className="text-sm text-gray-600 leading-relaxed">
-                            {result?.strongAreas?.length ? `Strong alignment in: ${result.strongAreas.join(', ')}` : result?.moderateAreas?.length ? `Moderate alignment in: ${result.moderateAreas.join(', ')}` : 'Assessment completed. Review dimensions for detailed analysis.'}
-                          </p>
-                        </div>
-
-                        {/* Submission Info */}
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-                            <p className="text-xs text-gray-500 mb-1">Submitted On</p>
-                            <p className="text-lg font-bold text-gray-900">
-                              {applicant.test.submitted_at 
-                                ? new Date(applicant.test.submitted_at).toLocaleDateString() 
-                                : 'N/A'}
-                            </p>
-                          </div>
-                          <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-                            <p className="text-xs text-gray-500 mb-1">Questions Answered</p>
-                            <p className="text-lg font-bold text-gray-900">
-                              {applicant.test.answers.length}
-                            </p>
+                        {/* Profile Interpretation */}
+                        <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl border border-gray-200 p-5">
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <MessageCircle className="w-4 h-4 text-violet-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-1.5">Profile Interpretation</h4>
+                              <p className="text-sm text-gray-600 leading-relaxed">
+                                {result?.strongAreas?.length > 0 
+                                  ? `This candidate demonstrates strong alignment in ${result.strongAreas.slice(0, 3).map(formatDimensionLabel).join(', ')}. `
+                                  : ''}
+                                {result?.moderateAreas?.length > 0 
+                                  ? `Shows moderate tendencies in ${result.moderateAreas.slice(0, 2).map(formatDimensionLabel).join(', ')}.`
+                                  : ''}
+                                {result?.developmentAreas?.length > 0
+                                  ? ` Areas that may need development include ${result.developmentAreas.slice(0, 2).map(formatDimensionLabel).join(', ')}.`
+                                  : ''}
+                              </p>
+                            </div>
                           </div>
                         </div>
 
-                        {/* Essay & Insights */}
+                        {/* Submission Info Row */}
+                        <div className="flex items-center gap-4 text-sm text-gray-500">
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="w-4 h-4" />
+                            <span>Completed {applicant.test.submitted_at ? new Date(applicant.test.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}</span>
+                          </div>
+                          <span className="text-gray-300">•</span>
+                          <div className="flex items-center gap-1.5">
+                            <CheckCircle className="w-4 h-4 text-emerald-500" />
+                            <span>{applicant.test.answers.length} responses recorded</span>
+                          </div>
+                        </div>
+
+                        {/* Essay & AI Insights */}
                         {(applicant.test.essay || (applicant.test as any).essay_insights) && (
                           <div className="space-y-4">
-                            {applicant.test.essay && (
-                              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                                <h4 className="font-medium text-gray-900 mb-3">Essay Response</h4>
-                                <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">
-                                  {applicant.test.essay}
+                            {(applicant.test as any).essay_insights && (
+                              <div className="bg-gradient-to-br from-amber-50/50 to-orange-50/50 rounded-xl border border-amber-200/50 p-5">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Sparkles className="w-4 h-4 text-amber-500" />
+                                  <h4 className="font-medium text-gray-900">AI Behavioral Analysis</h4>
+                                </div>
+                                <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                                  {(applicant.test as any).essay_insights}
                                 </p>
                               </div>
                             )}
-                            {(applicant.test as any).essay_insights && (
-                              <div className="bg-gradient-to-br from-indigo-50/50 to-violet-50/50 rounded-xl border border-indigo-100 p-5">
-                                <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-                                  <Zap className="w-4 h-4 text-amber-500" />
-                                  AI Analysis
-                                </h4>
-                                <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">
-                                  {(applicant.test as any).essay_insights}
+                            {applicant.test.essay && (
+                              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                                <h4 className="font-medium text-gray-900 mb-2">Written Response</h4>
+                                <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                                  {applicant.test.essay}
                                 </p>
                               </div>
                             )}

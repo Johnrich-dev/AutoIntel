@@ -17,7 +17,7 @@ import {
   Users,
   Loader2
 } from 'lucide-react';
-import { Applicant, Resume, JobPosting } from '../lib/supabase';
+import { Applicant, Resume, JobPosting, VideoAssessment, PersonalityTest } from '../lib/supabase';
 import { supabase, getSupabaseAdminClient } from '../lib/supabase';
 import { ApplicantDetailModal } from './ApplicantDetailModal';
 
@@ -29,6 +29,8 @@ interface PositionOption {
 
 interface ApplicantWithResume extends Applicant {
   resume?: Resume;
+  video?: VideoAssessment;
+  test?: PersonalityTest | any;
 }
 
 type ApplicationStatus = 'all' | 'pending' | 'processing' | 'parsed' | 'error';
@@ -240,10 +242,61 @@ export function ApplicantsList() {
           }
         }
 
-        // Combine applicants with their resumes
+        // Fetch video assessments for these applicants
+        let videoMap: Record<string, any> = {};
+        if (applicantIds.length > 0) {
+          const { data: videoData } = await adminClient
+            .from('video_assessments')
+            .select('*')
+            .in('applicant_id', applicantIds);
+          
+          if (videoData) {
+            videoMap = videoData.reduce((acc, video) => {
+              acc[video.applicant_id] = video;
+              return acc;
+            }, {} as Record<string, any>);
+          }
+        }
+        
+        // Fetch work style assessments for these applicants
+        let workStyleMap: Record<string, any> = {};
+        if (applicantIds.length > 0) {
+          const { data: workStyleData } = await adminClient
+            .from('work_style_assessments')
+            .select('*')
+            .in('applicant_id', applicantIds);
+          
+          if (workStyleData) {
+            workStyleMap = workStyleData.reduce((acc, ws) => {
+              acc[ws.applicant_id] = ws;
+              return acc;
+            }, {} as Record<string, any>);
+          }
+        }
+        
+        // Also check personality_tests for legacy data
+        if (applicantIds.length > 0) {
+          const { data: personalityData } = await adminClient
+            .from('personality_tests')
+            .select('*')
+            .in('applicant_id', applicantIds);
+          
+          if (personalityData) {
+            personalityData.forEach(pt => {
+              // Only add if work_style_assessments doesn't already have it
+              if (!workStyleMap[pt.applicant_id]) {
+                workStyleMap[pt.applicant_id] = pt;
+              }
+            });
+          }
+        }
+        
+        // Combine applicants with all their data
         const applicantsWithResumes = (applicantsData || []).map(applicant => ({
           ...applicant,
           resume: resumesMap[applicant.id],
+          video: videoMap[applicant.id],
+          test: workStyleMap[applicant.id],
         }));
 
         setApplicants(applicantsWithResumes);
