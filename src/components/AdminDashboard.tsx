@@ -8,6 +8,7 @@ import { ReportsDashboard } from './ReportsDashboard';
 import { AdminSettings } from './AdminSettings';
 import { ShortlistedCandidates } from './ShortlistedCandidates';
 import { NeedsReview } from './NeedsReview';
+import { InterviewScheduling } from './InterviewScheduling';
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Applicant, PersonalityTest, Resume, ResumeParsedData, getSupabaseAdminClient, VideoAssessment } from '../lib/supabase';
@@ -452,8 +453,9 @@ export function AdminDashboard() {
           {/* Recruitment Pipeline - All pipeline views use ApplicantsList or ShortlistedCandidates */}
           {activeMenu === 'screening-results' && <ScreeningResults />}
           {activeMenu === 'needs-review' && <NeedsReview />}
-          {(activeMenu === 'applications' || activeMenu === 'interview-scheduling') && 
+          {(activeMenu === 'applications') && 
             <ApplicantsList />}
+          {activeMenu === 'interview-scheduling' && <InterviewScheduling />}
           
           {/* Shortlisted and Final Decisions use ShortlistedCandidates */}
           {(activeMenu === 'shortlisted' || activeMenu === 'final-decisions') && <ShortlistedCandidates applicants={applicants} />}
