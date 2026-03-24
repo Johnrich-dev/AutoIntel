@@ -6,6 +6,8 @@ interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
   video?: VideoAssessment;
   test?: PersonalityTest;
+  screening_status?: 'passed' | 'needs_review' | 'failed';
+  screening_stage?: 'screened' | 'review' | 'shortlisted';
 }
 
 interface DashboardLandingProps {
@@ -63,30 +65,31 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
   // Calculate KPIs
   const kpis = useMemo(() => {
     const total = filteredApplicants.length;
-    const passed = filteredApplicants.filter(a => a.resume?.status === 'suitable').length;
-    const needsReview = filteredApplicants.filter(a => !a.resume || a.resume.status === 'pending').length;
-    const failed = filteredApplicants.filter(a => a.resume?.status === 'not_suitable').length;
+    // Use screening_status from ScreeningResults
+    const passed = filteredApplicants.filter(a => a.screening_status === 'passed').length;
+    const needsReview = filteredApplicants.filter(a => a.screening_status === 'needs_review').length;
+    const failed = filteredApplicants.filter(a => a.screening_status === 'failed').length;
     
     return { total, passed, needsReview, failed };
   }, [filteredApplicants]);
 
-  // Funnel stages - Custom colors
+  // Funnel stages - Using AdminScoringSettings colors (Blue, Purple, Teal, Orange, Green)
   const funnelStages = useMemo(() => {
     const interviewCount = kpis.passed > 0 ? Math.floor(kpis.passed * 0.6) : 0;
     const hiredCount = interviewCount > 0 ? Math.floor(interviewCount * 0.5) : 0;
     return [
-      { name: 'Applicants', count: kpis.total, color: '#B4D3D9' },
-      { name: 'Screened', count: kpis.passed + kpis.failed, color: '#BDA6CE' },
-      { name: 'Shortlisted', count: kpis.passed, color: '#FACE68' },
-      { name: 'Interview', count: interviewCount, color: '#FAAC68' },
-      { name: 'Hired', count: hiredCount, color: '#98D8AA' },
+      { name: 'Applicants', count: kpis.total, color: '#BFDBFE', textColor: '#1E40AF' },
+      { name: 'Screened', count: kpis.passed + kpis.failed, color: '#E9D5FF', textColor: '#7E22CE' },
+      { name: 'Shortlisted', count: kpis.passed, color: '#99F6E4', textColor: '#0F766E' },
+      { name: 'Interview', count: interviewCount, color: '#FED7AA', textColor: '#C2410C' },
+      { name: 'Hired', count: hiredCount, color: '#BBF7D0', textColor: '#15803D' },
     ];
   }, [kpis]);
 
   // Applicants needing review
   const needsReviewApplicants = useMemo(() => {
     return filteredApplicants
-      .filter(a => !a.resume || a.resume.status === 'pending')
+      .filter(a => a.screening_status === 'needs_review' || !a.resume || a.resume.status === 'pending')
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 10);
   }, [filteredApplicants]);
@@ -94,19 +97,37 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
   // Recent applicants
   const recentApplicants = useMemo(() => {
     return [...filteredApplicants]
+      .filter(a => {
+        if (statusFilter === 'all') return true;
+        if (statusFilter === 'needs_review') return !a.resume || a.resume.status === 'pending';
+        if (statusFilter === 'passed') return a.resume?.status === 'suitable';
+        if (statusFilter === 'failed') return a.resume?.status === 'not_suitable';
+        return true;
+      })
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 10);
-  }, [filteredApplicants]);
+  }, [filteredApplicants, statusFilter]);
 
-  // Get status info - Custom colors
+  // Get status info - Using AdminScoringSettings colors (Yellow, Green, Red)
   const getStatusInfo = (applicant: ApplicantWithDetails) => {
+    // Use screening_status from ScreeningResults
+    if (applicant.screening_status === 'passed') {
+      return { label: 'Passed', bgColor: '#D1FAE5', textColor: '#065F46', icon: CheckCircle };
+    }
+    if (applicant.screening_status === 'failed') {
+      return { label: 'Failed', bgColor: '#FEE2E2', textColor: '#991B1B', icon: XCircle };
+    }
+    if (applicant.screening_status === 'needs_review') {
+      return { label: 'Needs Review', bgColor: '#FEF3C7', textColor: '#92400E', icon: AlertCircle };
+    }
+    // Fallback to resume status
     if (!applicant.resume || applicant.resume.status === 'pending') {
-      return { label: 'Needs Review', bgColor: '#FEEAC9', icon: AlertCircle };
+      return { label: 'Needs Review', bgColor: '#FEF3C7', textColor: '#92400E', icon: AlertCircle };
     }
     if (applicant.resume.status === 'suitable') {
-      return { label: 'Passed', bgColor: '#BDA6CE', icon: CheckCircle };
+      return { label: 'Passed', bgColor: '#D1FAE5', textColor: '#065F46', icon: CheckCircle };
     }
-    return { label: 'Failed', bgColor: '#FFCDC9', icon: XCircle };
+    return { label: 'Failed', bgColor: '#FEE2E2', textColor: '#991B1B', icon: XCircle };
   };
 
   const getRelativeTime = (dateString: string | null | undefined): string => {
@@ -188,13 +209,13 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
           </div>
         </div>
 
-        {/* KPI Cards - Custom Colors */}
+        {/* KPI Cards - Using AdminScoringSettings palette: Blue, Green, Yellow, Red */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total Applicants - Teal */}
+          {/* Total Applicants - Blue */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl" style={{ backgroundColor: '#B4D3D9' }}>
-                <Users className="w-6 h-6 text-gray-700" />
+              <div className="p-3 rounded-xl bg-blue-100">
+                <Users className="w-6 h-6 text-blue-600" />
               </div>
               <div>
                 <p className="text-3xl font-bold text-gray-800">{kpis.total}</p>
@@ -203,17 +224,17 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
             </div>
           </div>
 
-          {/* Passed - Purple */}
+          {/* Passed - Green */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl" style={{ backgroundColor: '#BDA6CE' }}>
-                <CheckCircle className="w-6 h-6 text-gray-700" />
+              <div className="p-3 rounded-xl bg-green-100">
+                <CheckCircle className="w-6 h-6 text-green-600" />
               </div>
               <div>
                 <p className="text-3xl font-bold text-gray-800">{kpis.passed}</p>
                 <p className="text-sm text-gray-500 font-medium">Passed</p>
                 {kpis.total > 0 && (
-                  <p className="text-xs font-medium" style={{ color: '#BDA6CE' }}>{Math.round((kpis.passed / kpis.total) * 100)}%</p>
+                  <p className="text-xs font-medium text-green-600">{Math.round((kpis.passed / kpis.total) * 100)}%</p>
                 )}
               </div>
             </div>
@@ -222,30 +243,30 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
           {/* Needs Review - Yellow */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl" style={{ backgroundColor: '#FEEAC9' }}>
-                <AlertCircle className="w-6 h-6 text-gray-700" />
+              <div className="p-3 rounded-xl bg-yellow-100">
+                <AlertCircle className="w-6 h-6 text-yellow-600" />
               </div>
               <div>
                 <p className="text-3xl font-bold text-gray-800">{kpis.needsReview}</p>
                 <p className="text-sm text-gray-500 font-medium">Needs Review</p>
                 {kpis.total > 0 && (
-                  <p className="text-xs font-medium" style={{ color: '#FACE68' }}>{Math.round((kpis.needsReview / kpis.total) * 100)}%</p>
+                  <p className="text-xs font-medium text-yellow-600">{Math.round((kpis.needsReview / kpis.total) * 100)}%</p>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Failed - Pink */}
+          {/* Failed - Red */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl" style={{ backgroundColor: '#FFCDC9' }}>
-                <XCircle className="w-6 h-6 text-gray-700" />
+              <div className="p-3 rounded-xl bg-red-100">
+                <XCircle className="w-6 h-6 text-red-600" />
               </div>
               <div>
                 <p className="text-3xl font-bold text-gray-800">{kpis.failed}</p>
                 <p className="text-sm text-gray-500 font-medium">Failed</p>
                 {kpis.total > 0 && (
-                  <p className="text-xs font-medium" style={{ color: '#FFCDC9' }}>{Math.round((kpis.failed / kpis.total) * 100)}%</p>
+                  <p className="text-xs font-medium text-red-600">{Math.round((kpis.failed / kpis.total) * 100)}%</p>
                 )}
               </div>
             </div>
@@ -263,14 +284,13 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
                   <h2 className="text-lg font-bold text-gray-800">Needs Review</h2>
-                  <span className="px-2.5 py-1 text-xs font-bold rounded-full" style={{ backgroundColor: '#FEEAC9', color: '#666' }}>
+                  <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-yellow-100 text-yellow-700">
                     {needsReviewApplicants.length}
                   </span>
                 </div>
                 <button
-                  onClick={() => onMenuChange?.('applicants')}
-                  className="text-sm text-blue-600 font-medium hover:text-blue-700 transition-colors"
-                >
+                  onClick={() => onMenuChange?.('needs-review')}
+                  className="text-sm text-blue-600 font-medium hover:text-blue-700 transition-colors">
                   View All
                 </button>
               </div>
@@ -282,12 +302,11 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
                     return (
                       <div 
                         key={applicant.id}
-                        className="flex items-center justify-between p-4 rounded-xl hover:opacity-90 transition-opacity"
-                        style={{ backgroundColor: '#FEEAC9' }}
+                        className="flex items-center justify-between p-4 rounded-xl hover:opacity-90 transition-opacity bg-yellow-50"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: '#FAAC68' }}>
-                            <UserPlus className="w-5 h-5 text-gray-700" />
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center bg-yellow-200">
+                            <UserPlus className="w-5 h-5 text-yellow-700" />
                           </div>
                           <div>
                             <p className="text-sm font-bold text-gray-800">{applicant.name}</p>
@@ -297,9 +316,8 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
                         <div className="flex items-center gap-3">
                           <span className="text-xs text-gray-400">{getRelativeTime(applicant.created_at)}</span>
                           <button
-                            onClick={() => onMenuChange?.('applicants')}
-                            className="px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors"
-                            style={{ backgroundColor: '#FAAC68', color: '#333' }}
+                            onClick={() => onMenuChange?.('needs-review')}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors bg-yellow-500 text-white hover:bg-yellow-600"
                           >
                             Review
                           </button>
@@ -362,7 +380,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
                           <tr 
                             key={applicant.id} 
                             className="hover:bg-gray-50 transition-colors cursor-pointer"
-                            onClick={() => onMenuChange?.('applicants')}
+                            onClick={() => onMenuChange?.('shortlisted')}
                           >
                             <td className="py-3">
                               <div className="flex items-center gap-3">
@@ -378,7 +396,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
                               <span className="text-sm text-gray-600">{applicant.position}</span>
                             </td>
                             <td className="py-3">
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold text-gray-700" style={{ backgroundColor: status.bgColor }}>
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: status.bgColor, color: status.textColor }}>
                                 <StatusIcon className="w-3.5 h-3.5" />
                                 {status.label}
                               </span>
@@ -402,30 +420,30 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
           <div className="space-y-6">
             {/* Quick Stats - Compact - Custom Colors */}
             <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-md hover:shadow-lg transition-all duration-300">
-              <h2 className="text-sm font-bold text-gray-800 mb-3">Quick Stats</h2>
+              <h2 className="text-sm font-bold text-gray-800 mb-3">Quick Status</h2>
               <div className="space-y-2">
-                <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ backgroundColor: '#B4D3D9' }}>
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-purple-100">
                   <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-gray-700" />
-                    <span className="text-xs font-medium text-gray-700">Resume</span>
+                    <FileText className="w-4 h-4 text-purple-600" />
+                    <span className="text-xs font-medium text-purple-700">Resume</span>
                   </div>
-                  <span className="text-xs font-bold text-gray-700">{kpis.passed + kpis.failed}</span>
+                  <span className="text-xs font-bold text-purple-600">{kpis.passed + kpis.failed}</span>
                 </div>
-                <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ backgroundColor: '#BDA6CE' }}>
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-indigo-100">
                   <div className="flex items-center gap-2">
-                    <Video className="w-4 h-4 text-gray-700" />
-                    <span className="text-xs font-medium text-gray-700">Video</span>
+                    <Video className="w-4 h-4 text-indigo-600" />
+                    <span className="text-xs font-medium text-indigo-700">Video</span>
                   </div>
-                  <span className="text-xs font-bold text-gray-700">
+                  <span className="text-xs font-bold text-indigo-600">
                     {filteredApplicants.filter(a => a.video?.status === 'completed').length}
                   </span>
                 </div>
-                <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ backgroundColor: '#FACE68' }}>
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-green-100">
                   <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-gray-700" />
-                    <span className="text-xs font-medium text-gray-700">Success</span>
+                    <TrendingUp className="w-4 h-4 text-green-600" />
+                    <span className="text-xs font-medium text-green-700">Success</span>
                   </div>
-                  <span className="text-xs font-bold text-gray-700">
+                  <span className="text-xs font-bold text-green-600">
                     {kpis.total > 0 ? Math.round((kpis.passed / kpis.total) * 100) : 0}%
                   </span>
                 </div>
@@ -439,7 +457,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
                 {funnelStages.map((stage, idx) => (
                   <div key={stage.name} className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center shadow-sm" style={{ backgroundColor: stage.color }}>
-                      <span className="text-gray-700 font-bold text-sm">{stage.count}</span>
+                      <span className="font-bold text-sm" style={{ color: stage.textColor }}>{stage.count}</span>
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">

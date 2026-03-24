@@ -424,19 +424,63 @@ export function ScreeningResults() {
         .from('resumes')
         .select('*');
 
-      // Combine data
+      // Combine data - use REAL scores from database
       if (applicantsData) {
         const screenedApplicants: ScreenedApplicant[] = applicantsData.map((applicant) => {
           const resume = resumesData?.find((r) => r.applicant_id === applicant.id);
           
-          // Generate mock screening data for demo
-          // In production, this would come from actual screening results
-          const mockScores = generateMockScores(applicant.id);
+          // Use actual scores from the database
+          // Priority: applicant.screening_score > 0
+          // The screening_score is stored on the applicants table
+          const overallScore = applicant.screening_score ?? 0;
+          
+          // Determine status from database or calculate based on score
+          let status: 'passed' | 'needs_review' | 'failed' = applicant.screening_status || 'needs_review';
+          if (!applicant.screening_status && overallScore > 0) {
+            // Calculate status based on score if not set in DB
+            if (overallScore >= 78) status = 'passed';
+            else if (overallScore >= 65) status = 'needs_review';
+            else status = 'failed';
+          }
+          
+          // Extract matched skills from resume if available
+          let matchedSkills: string[] = [];
+          let missingSkills: string[] = [];
+          let skillsScore = 0;
+          let experienceScore = 0;
+          let educationScore = 0;
+          
+          if (resume?.parsed_data && typeof resume.parsed_data === 'object') {
+            const parsedData = resume.parsed_data as any;
+            // Extract skills from parsed data
+            if (parsedData.skills?.hard_skills) {
+              matchedSkills = parsedData.skills.hard_skills.slice(0, 5);
+            }
+            // Calculate skills score based on skill count
+            const totalSkills = matchedSkills.length;
+            skillsScore = Math.min((totalSkills / 20) * 100, 100);
+            
+            // Experience score based on number of experiences
+            const expCount = parsedData.experience?.length || 0;
+            experienceScore = Math.min((expCount / 5) * 100, 100);
+            
+            // Education score based on education entries
+            const eduCount = parsedData.education?.length || 0;
+            educationScore = Math.min((eduCount / 3) * 100, 100);
+          }
           
           return {
             ...applicant,
             resume,
-            ...mockScores,
+            overall_score: overallScore,
+            skills_score: Math.round(skillsScore),
+            experience_score: Math.round(experienceScore),
+            education_score: Math.round(educationScore),
+            screening_status: status,
+            screening_stage: status === 'passed' ? 'shortlisted' : status === 'needs_review' ? 'review' : 'screened',
+            screened_at: applicant.screened_at || new Date().toISOString(),
+            matched_skills: matchedSkills,
+            missing_skills: missingSkills,
           };
         });
 

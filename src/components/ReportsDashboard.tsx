@@ -29,6 +29,8 @@ interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
   video?: VideoAssessment;
   test?: PersonalityTest;
+  screening_status?: 'passed' | 'needs_review' | 'failed';
+  screened_at?: string;
 }
 
 interface ReportsDashboardProps {
@@ -58,8 +60,9 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
   // Calculate metrics
   const metrics = useMemo(() => {
     const total = filteredApplicants.length;
-    const suitable = filteredApplicants.filter(a => a.resume?.status === 'suitable').length;
-    const notSuitable = filteredApplicants.filter(a => a.resume?.status === 'not_suitable').length;
+    const passed = filteredApplicants.filter(a => a.screening_status === 'passed').length;
+    const needsReview = filteredApplicants.filter(a => a.screening_status === 'needs_review').length;
+    const failed = filteredApplicants.filter(a => a.screening_status === 'failed').length;
     const videoCompleted = filteredApplicants.filter(a => a.video?.status === 'completed').length;
     const testCompleted = filteredApplicants.filter(a => a.test?.status === 'completed').length;
     
@@ -75,15 +78,16 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
         }, 0) / completedApplicants.length
       : 0;
 
-    // Score averages
+    // Score averages - use screening_score from applicant level (not resume)
     const avgResumeScore = filteredApplicants.length > 0
-      ? Math.round(filteredApplicants.reduce((sum, a) => sum + (a.resume ? 70 : 0), 0) / total)
+      ? Math.round(filteredApplicants.reduce((sum, a) => sum + (a.screening_score ?? 0), 0) / total)
       : 0;
 
     return {
       total,
-      suitable,
-      notSuitable,
+      suitable: passed,
+      notSuitable: failed,
+      needsReview,
       videoCompleted,
       testCompleted,
       conversionRate: total > 0 ? Math.round((testCompleted / total) * 100) : 0,
@@ -94,9 +98,12 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
 
   // Pipeline data
   const pipelineData = useMemo(() => {
+    const passed = filteredApplicants.filter(a => a.screening_status === 'passed').length;
+    const failed = filteredApplicants.filter(a => a.screening_status === 'failed').length;
+    
     return [
       { stage: 'Applied', count: filteredApplicants.length, color: 'bg-blue-500' },
-      { stage: 'Resume Review', count: filteredApplicants.filter(a => a.resume?.status).length, color: 'bg-emerald-500' },
+      { stage: 'Resume Review', count: passed, color: 'bg-emerald-500' },
       { stage: 'Video Assessment', count: filteredApplicants.filter(a => a.video?.status === 'completed').length, color: 'bg-purple-500' },
       { stage: 'Work Profiling Test', count: filteredApplicants.filter(a => a.test?.status === 'completed').length, color: 'bg-orange-500' },
       { stage: 'Hired', count: Math.floor(filteredApplicants.filter(a => a.test?.status === 'completed').length * 0.3), color: 'bg-green-500' },
@@ -114,7 +121,24 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
     ];
 
     filteredApplicants.forEach(a => {
-      const score = a.test?.status === 'completed' ? 85 : a.video?.status === 'completed' ? 75 : a.resume?.status === 'suitable' ? 70 : 50;
+      // Use actual scores from database, fall back to screening_status
+      const testScore = a.test?.semantic_score;
+      const videoScore = a.video?.transcript_score;
+      const resumeScore = a.screening_score;
+      
+      // Calculate composite score: prioritize test > video > resume
+      let score: number;
+      if (testScore != null && testScore > 0) {
+        score = testScore;
+      } else if (videoScore != null && videoScore > 0) {
+        score = videoScore;
+      } else if (resumeScore != null && resumeScore > 0) {
+        score = resumeScore;
+      } else {
+        // Fallback: derive from screening status
+        score = a.screening_status === 'passed' ? 80 : a.screening_status === 'needs_review' ? 60 : 40;
+      }
+      
       if (score >= 90) ranges[0].count++;
       else if (score >= 80) ranges[1].count++;
       else if (score >= 70) ranges[2].count++;
@@ -135,6 +159,32 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
       .map(([position, count]) => ({ position, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
+  }, [filteredApplicants]);
+
+  // Calculate average days for each stage
+  const timelineAverages = useMemo(() => {
+    const passedApplicants = filteredApplicants.filter(a => a.screening_status === 'passed' && a.screened_at);
+    const videoCompleted = filteredApplicants.filter(a => a.video?.status === 'completed' && a.video?.submitted_at);
+    const testCompleted = filteredApplicants.filter(a => a.test?.status === 'completed' && a.test?.submitted_at);
+    
+    const avgPassedDays = passedApplicants.length > 0
+      ? Math.round(passedApplicants.reduce((sum, a) => sum + daysBetween(a.created_at, a.screened_at || a.created_at), 0) / passedApplicants.length)
+      : 1;
+    
+    const avgVideoDays = videoCompleted.length > 0
+      ? Math.round(videoCompleted.reduce((sum, a) => sum + daysBetween(a.created_at, a.video?.submitted_at || a.created_at), 0) / videoCompleted.length)
+      : 2;
+    
+    const avgTestDays = testCompleted.length > 0
+      ? Math.round(testCompleted.reduce((sum, a) => sum + daysBetween(a.created_at, a.test?.submitted_at || a.created_at), 0) / testCompleted.length)
+      : 2;
+    
+    return {
+      resume: avgPassedDays,
+      videoInvite: Math.max(1, avgPassedDays),
+      videoComplete: avgVideoDays,
+      testComplete: avgTestDays,
+    };
   }, [filteredApplicants]);
 
   const handleExport = (format: 'csv' | 'pdf') => {
@@ -292,7 +342,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                        style={{ width: `${(pos.count / metrics.total) * 100}%` }}
+                        style={{ width: `${metrics.total > 0 ? (pos.count / metrics.total) * 100 : 0}%` }}
                       />
                     </div>
                   </div>
@@ -356,15 +406,15 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                   {[
                     { 
                       stage: 'New Applications', 
-                      count: filteredApplicants.filter(a => !a.resume?.status).length,
-                      desc: 'Awaiting resume review',
+                      count: filteredApplicants.filter(a => !a.screening_status).length,
+                      desc: 'Awaiting screening',
                       color: 'bg-yellow-500',
                       icon: Mail
                     },
                     { 
-                      stage: 'Resume Review', 
-                      count: filteredApplicants.filter(a => a.resume?.status === 'suitable').length,
-                      desc: 'Suitable candidates',
+                      stage: 'Passed', 
+                      count: filteredApplicants.filter(a => a.screening_status === 'passed').length,
+                      desc: 'Screening passed',
                       color: 'bg-emerald-500',
                       icon: FileText
                     },
@@ -383,9 +433,9 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                       icon: ClipboardCheck
                     },
                     { 
-                      stage: 'Rejected', 
-                      count: filteredApplicants.filter(a => a.resume?.status === 'not_suitable').length,
-                      desc: 'Not suitable candidates',
+                      stage: 'Failed', 
+                      count: filteredApplicants.filter(a => a.screening_status === 'failed').length,
+                      desc: 'Screening failed',
                       color: 'bg-red-500',
                       icon: XCircle
                     },
@@ -482,7 +532,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Performers</h3>
               <div className="space-y-3">
                 {filteredApplicants
-                  .filter(a => a.test?.status === 'completed' || a.video?.status === 'completed')
+                  .filter(a => a.test?.status === 'completed' || a.video?.status === 'completed' || a.screening_status === 'passed')
                   .slice(0, 5)
                   .map((applicant, idx) => (
                     <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
@@ -495,7 +545,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold text-blue-600">
-                          {applicant.test?.status === 'completed' ? 85 : 75}
+                          {applicant.test?.semantic_score ?? applicant.video?.transcript_score ?? applicant.screening_score ?? (applicant.screening_status === 'passed' ? 80 : applicant.screening_status === 'needs_review' ? 60 : 0)}
                         </p>
                         <p className="text-xs text-gray-400">score</p>
                       </div>
@@ -526,7 +576,13 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                 <Calendar className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
                 <p className="text-4xl font-bold text-emerald-700">
                   {filteredApplicants.length > 0 
-                    ? Math.round(filteredApplicants.reduce((sum, a) => sum + (a.resume ? 2 : 0), 0) / filteredApplicants.length)
+                    ? Math.round(
+                        filteredApplicants
+                          .filter(a => a.resume?.reviewed_at)
+                          .reduce((sum, a) => {
+                            const days = daysBetween(a.created_at, a.resume?.reviewed_at || a.created_at);
+                            return sum + days;
+                          }, 0) / filteredApplicants.filter(a => a.resume?.reviewed_at).length || 0)
                     : 0}
                 </p>
                 <p className="text-sm text-emerald-600">Avg. Resume Review (days)</p>
@@ -553,10 +609,10 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                 <div className="relative flex justify-between">
                   {[
                     { label: 'Applied', day: 'Day 0', icon: Mail },
-                    { label: 'Resume Review', day: 'Day 1', icon: FileText },
-                    { label: 'Video Invite', day: 'Day 1', icon: Video },
-                    { label: 'Video Complete', day: 'Day 2', icon: CheckCircle },
-                    { label: 'Test Complete', day: 'Day 2', icon: Award },
+                    { label: 'Resume Review', day: `Day ${timelineAverages.resume}`, icon: FileText },
+                    { label: 'Video Invite', day: `Day ${timelineAverages.videoInvite}`, icon: Video },
+                    { label: 'Video Complete', day: `Day ${timelineAverages.videoComplete}`, icon: CheckCircle },
+                    { label: 'Test Complete', day: `Day ${timelineAverages.testComplete}`, icon: Award },
                   ].map((step, idx) => (
                     <div key={idx} className="flex flex-col items-center bg-white px-2">
                       <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white mb-2">

@@ -95,6 +95,9 @@ export interface Applicant {
   status?: string;
   screening_score?: number;
   screening_fit_category?: string;
+  resume_reviewed_at?: string | null;
+  screening_status?: 'passed' | 'needs_review' | 'failed';
+  screened_at?: string;
 }
 
 export interface Resume {
@@ -103,9 +106,11 @@ export interface Resume {
   resume_url: string | null;
   status: string;
   uploaded_at: string;
+  reviewed_at: string | null;
   raw_extracted_content: string | null;
   parsed_data: ResumeParsedData | string | null;
   ner_status: string | null;
+  // Note: screening_score is stored on applicants table, not resumes
 }
 
 export interface ResumeParsedData {

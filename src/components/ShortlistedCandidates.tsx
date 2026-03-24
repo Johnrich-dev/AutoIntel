@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import {
   Search,
   Filter,
@@ -236,6 +237,163 @@ function getRecommendationLabel(recommendation: string): { text: string; color: 
 }
 
 // ============================================================================
+// Portal Dropdown Component (renders outside table hierarchy)
+// ============================================================================
+
+interface ActionDropdownProps {
+  applicantId: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  handleStatusChange: (id: string, status: string) => void;
+}
+
+function ActionDropdown({ applicantId, isOpen, onToggle, onClose, handleStatusChange }: ActionDropdownProps) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+
+  // Calculate position when dropdown opens
+  useEffect(() => {
+    if (!isOpen || !buttonRef.current) {
+      setPosition(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (rect) {
+        setPosition({
+          top: rect.bottom + 4,
+          left: rect.right - 224, // w-56 = 224px, right-align
+        });
+      }
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen]);
+
+  // Close on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (isOpen) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('click', handleClickOutside, true);
+    }
+    return () => {
+      document.removeEventListener('click', handleClickOutside, true);
+    };
+  }, [isOpen, onClose]);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+      >
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+      {isOpen && position && ReactDOM.createPortal(
+        <div
+          className="fixed w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999]"
+          style={{
+            top: position.top,
+            left: position.left,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+            Actions
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStatusChange(applicantId, 'final_interview');
+              onClose();
+            }}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
+          >
+            <CheckCircle className="w-4 h-4 text-emerald-600" />
+            Move to Final Interview
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStatusChange(applicantId, 'shortlisted');
+              onClose();
+            }}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
+          >
+            <Star className="w-4 h-4 text-purple-600" />
+            Keep in Shortlist
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStatusChange(applicantId, 'rejected');
+              onClose();
+            }}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50"
+          >
+            <XCircle className="w-4 h-4 text-red-600" />
+            Reject Candidate
+          </button>
+          <div className="my-1 border-t border-gray-200" />
+          <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+            Quick View
+          </div>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
+          >
+            <FileText className="w-4 h-4" />
+            View Resume
+          </button>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
+          >
+            <Video className="w-4 h-4" />
+            Watch Interview
+          </button>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
+          >
+            <ClipboardList className="w-4 h-4" />
+            View Transcript
+          </button>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// ============================================================================
 // Sub-Components
 // ============================================================================
 
@@ -345,7 +503,7 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col">
+    <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-3">
@@ -391,7 +549,7 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
             </div>
           </div>
           {/* Clickable Recommendation Badge with Dropdown */}
-          <div className="relative">
+          <div className="relative" style={{ overflow: 'visible' }}>
             <button
               onClick={() => setShowRecommendationDropdown(!showRecommendationDropdown)}
               className="focus:outline-none"
@@ -400,7 +558,7 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
             </button>
             {/* Dropdown Menu */}
             {showRecommendationDropdown && (
-              <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50">
+              <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-[100]">
                 <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
                   Set Recommendation
                 </div>
@@ -1786,7 +1944,7 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-visible">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -1928,95 +2086,13 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
                     <RecommendationBadge recommendation={getUserRecommendation(applicant.explicitRecommendation)} />
                   </td>
                   <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-center gap-2">
-                      {/* Action Dropdown - State-based toggle */}
-                      <div className="relative">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setOpenDropdownId(openDropdownId === applicant.id ? null : applicant.id);
-                          }}
-                          className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </button>
-                        {/* Floating Dropdown Menu */}
-                        {openDropdownId === applicant.id && (
-                          <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 overflow-visible">
-                            <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                              Actions
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleStatusChange(applicant.id, 'final_interview');
-                                setOpenDropdownId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
-                            >
-                              <CheckCircle className="w-4 h-4 text-emerald-600" />
-                              Move to Final Interview
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleStatusChange(applicant.id, 'shortlisted');
-                                setOpenDropdownId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
-                            >
-                              <Star className="w-4 h-4 text-purple-600" />
-                              Keep in Shortlist
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleStatusChange(applicant.id, 'rejected');
-                                setOpenDropdownId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50"
-                            >
-                              <XCircle className="w-4 h-4 text-red-600" />
-                              Reject Candidate
-                            </button>
-                            <div className="my-1 border-t border-gray-200" />
-                            <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                              Quick View
-                            </div>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenDropdownId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
-                            >
-                              <FileText className="w-4 h-4" />
-                              View Resume
-                            </button>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenDropdownId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
-                            >
-                              <Video className="w-4 h-4" />
-                              Watch Interview
-                            </button>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenDropdownId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50"
-                            >
-                              <ClipboardList className="w-4 h-4" />
-                              View Transcript
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <ActionDropdown
+                      applicantId={applicant.id}
+                      isOpen={openDropdownId === applicant.id}
+                      onToggle={() => setOpenDropdownId(openDropdownId === applicant.id ? null : applicant.id)}
+                      onClose={() => setOpenDropdownId(null)}
+                      handleStatusChange={handleStatusChange}
+                    />
                   </td>
                 </tr>
               ))}
