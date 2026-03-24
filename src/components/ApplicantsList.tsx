@@ -4,11 +4,9 @@ import {
   ChevronDown, 
   Eye, 
   FileText, 
-  Trash2, 
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  AlertCircle,
   Clock,
   CheckCircle,
   XCircle,
@@ -17,8 +15,8 @@ import {
   Users,
   Loader2
 } from 'lucide-react';
-import { Applicant, Resume, JobPosting, VideoAssessment, PersonalityTest } from '../lib/supabase';
-import { supabase, getSupabaseAdminClient } from '../lib/supabase';
+import { Applicant, Resume, VideoAssessment, PersonalityTest } from '../lib/supabase';
+import { getSupabaseAdminClient } from '../lib/supabase';
 import { ApplicantDetailModal } from './ApplicantDetailModal';
 
 // Interface for position/role option from applicants
@@ -196,118 +194,119 @@ export function ApplicantsList() {
     fetchPositions();
   }, []);
 
+  // Fetch applicants function - extracted for reuse
+  const fetchApplicantsList = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Use admin client to bypass RLS
+      const adminClient = getSupabaseAdminClient();
+      
+      // Fetch applicants - filter by job if a specific job is selected
+      let query = adminClient
+        .from('applicants')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      // If a specific job is selected (not 'all'), filter by position
+      if (selectedJobId) {
+        query = query.eq('position', selectedJobId);
+      }
+
+      const { data: applicantsData, error: applicantsError } = await query;
+
+      if (applicantsError) throw applicantsError;
+      
+      console.log('Applicants query result:', applicantsData, applicantsError);
+
+      // Combine applicants with their resumes
+
+      // Fetch resumes for these applicants
+      const applicantIds = (applicantsData || []).map(a => a.id);
+      let resumesMap: Record<string, Resume> = {};
+      
+      if (applicantIds.length > 0) {
+        const { data: resumesData, error: resumesError } = await adminClient
+          .from('resumes')
+          .select('*')
+          .in('applicant_id', applicantIds);
+
+        if (!resumesError && resumesData) {
+          resumesMap = resumesData.reduce((acc, resume) => {
+            acc[resume.applicant_id] = resume;
+            return acc;
+          }, {} as Record<string, Resume>);
+        }
+      }
+
+      // Fetch video assessments for these applicants
+      let videoMap: Record<string, any> = {};
+      if (applicantIds.length > 0) {
+        const { data: videoData } = await adminClient
+          .from('video_assessments')
+          .select('*')
+          .in('applicant_id', applicantIds);
+        
+        if (videoData) {
+          videoMap = videoData.reduce((acc, video) => {
+            acc[video.applicant_id] = video;
+            return acc;
+          }, {} as Record<string, any>);
+        }
+      }
+      
+      // Fetch work style assessments for these applicants
+      let workStyleMap: Record<string, any> = {};
+      if (applicantIds.length > 0) {
+        const { data: workStyleData } = await adminClient
+          .from('work_style_assessments')
+          .select('*')
+          .in('applicant_id', applicantIds);
+        
+        if (workStyleData) {
+          workStyleMap = workStyleData.reduce((acc, ws) => {
+            acc[ws.applicant_id] = ws;
+            return acc;
+          }, {} as Record<string, any>);
+        }
+      }
+      
+      // Also check personality_tests for legacy data
+      if (applicantIds.length > 0) {
+        const { data: personalityData } = await adminClient
+          .from('personality_tests')
+          .select('*')
+          .in('applicant_id', applicantIds);
+        
+        if (personalityData) {
+          personalityData.forEach(pt => {
+            // Only add if work_style_assessments doesn't already have it
+            if (!workStyleMap[pt.applicant_id]) {
+              workStyleMap[pt.applicant_id] = pt;
+            }
+          });
+        }
+      }
+      
+      // Combine applicants with all their data
+      const applicantsWithResumes = (applicantsData || []).map(applicant => ({
+        ...applicant,
+        resume: resumesMap[applicant.id],
+        video: videoMap[applicant.id],
+        test: workStyleMap[applicant.id],
+      }));
+
+      setApplicants(applicantsWithResumes);
+    } catch (err) {
+      console.error('Error fetching applicants:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Fetch applicants when job is selected
   useEffect(() => {
-    async function fetchApplicants() {
-      try {
-        setIsLoading(true);
-        
-        // Use admin client to bypass RLS
-        const adminClient = getSupabaseAdminClient();
-        
-        // Fetch applicants - filter by job if a specific job is selected
-        let query = adminClient
-          .from('applicants')
-          .select('*')
-          .order('created_at', { ascending: false });
-        
-        // If a specific job is selected (not 'all'), filter by position
-        if (selectedJobId) {
-          query = query.eq('position', selectedJobId);
-        }
-
-        const { data: applicantsData, error: applicantsError } = await query;
-
-        if (applicantsError) throw applicantsError;
-        
-        console.log('Applicants query result:', applicantsData, applicantsError);
-
-        // Combine applicants with their resumes
-
-        // Fetch resumes for these applicants
-        const applicantIds = (applicantsData || []).map(a => a.id);
-        let resumesMap: Record<string, Resume> = {};
-        
-        if (applicantIds.length > 0) {
-          const { data: resumesData, error: resumesError } = await adminClient
-            .from('resumes')
-            .select('*')
-            .in('applicant_id', applicantIds);
-
-          if (!resumesError && resumesData) {
-            resumesMap = resumesData.reduce((acc, resume) => {
-              acc[resume.applicant_id] = resume;
-              return acc;
-            }, {} as Record<string, Resume>);
-          }
-        }
-
-        // Fetch video assessments for these applicants
-        let videoMap: Record<string, any> = {};
-        if (applicantIds.length > 0) {
-          const { data: videoData } = await adminClient
-            .from('video_assessments')
-            .select('*')
-            .in('applicant_id', applicantIds);
-          
-          if (videoData) {
-            videoMap = videoData.reduce((acc, video) => {
-              acc[video.applicant_id] = video;
-              return acc;
-            }, {} as Record<string, any>);
-          }
-        }
-        
-        // Fetch work style assessments for these applicants
-        let workStyleMap: Record<string, any> = {};
-        if (applicantIds.length > 0) {
-          const { data: workStyleData } = await adminClient
-            .from('work_style_assessments')
-            .select('*')
-            .in('applicant_id', applicantIds);
-          
-          if (workStyleData) {
-            workStyleMap = workStyleData.reduce((acc, ws) => {
-              acc[ws.applicant_id] = ws;
-              return acc;
-            }, {} as Record<string, any>);
-          }
-        }
-        
-        // Also check personality_tests for legacy data
-        if (applicantIds.length > 0) {
-          const { data: personalityData } = await adminClient
-            .from('personality_tests')
-            .select('*')
-            .in('applicant_id', applicantIds);
-          
-          if (personalityData) {
-            personalityData.forEach(pt => {
-              // Only add if work_style_assessments doesn't already have it
-              if (!workStyleMap[pt.applicant_id]) {
-                workStyleMap[pt.applicant_id] = pt;
-              }
-            });
-          }
-        }
-        
-        // Combine applicants with all their data
-        const applicantsWithResumes = (applicantsData || []).map(applicant => ({
-          ...applicant,
-          resume: resumesMap[applicant.id],
-          video: videoMap[applicant.id],
-          test: workStyleMap[applicant.id],
-        }));
-
-        setApplicants(applicantsWithResumes);
-      } catch (err) {
-        console.error('Error fetching applicants:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    fetchApplicants();
+    fetchApplicantsList();
   }, [selectedJobId]);
 
   // Get application status from applicant/resume
@@ -380,6 +379,27 @@ export function ApplicantsList() {
     setSelectedApplicant(null);
   };
 
+  // Refresh applicants list from server
+  const refreshApplicants = async () => {
+    await fetchApplicantsList();
+  };
+
+  const handleModalStatusChange = async (id: string, newStatus: string) => {
+    try {
+      const adminClient = getSupabaseAdminClient();
+      const { error } = await adminClient
+        .from('applicants')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      
+      if (error) throw error;
+      await refreshApplicants();
+    } catch (err) {
+      console.error('Error updating status:', err);
+      alert('Failed to update status. Please try again.');
+    }
+  };
+
   const handleViewResume = async (applicant: ApplicantWithResume, e: React.MouseEvent) => {
     e.stopPropagation();
     if (applicant.resume?.resume_url) {
@@ -393,73 +413,23 @@ export function ApplicantsList() {
     
     try {
       setRetryingId(applicant.id);
+      const adminClient = getSupabaseAdminClient();
       
       // Call the retry endpoint or function
-      const { error } = await supabase
+      const { error } = await adminClient
         .from('resumes')
         .update({ status: 'pending', parsed_data: null })
         .eq('id', applicant.resume?.id);
 
       if (error) throw error;
       
-      // Refresh applicants list
-      const { data: updatedData } = await supabase
-        .from('applicants')
-        .select('*')
-        .eq('position', selectedJobId)
-        .order('created_at', { ascending: false });
-        
-      if (updatedData) {
-        const applicantIds = updatedData.map(a => a.id);
-        let resumesMap: Record<string, Resume> = {};
-        
-        if (applicantIds.length > 0) {
-          const { data: resumesData } = await supabase
-            .from('resumes')
-            .select('*')
-            .in('applicant_id', applicantIds);
-
-          if (resumesData) {
-            resumesMap = resumesData.reduce((acc, resume) => {
-              acc[resume.applicant_id] = resume;
-              return acc;
-            }, {} as Record<string, Resume>);
-          }
-        }
-
-        const applicantsWithResumes = updatedData.map(a => ({
-          ...a,
-          resume: resumesMap[a.id],
-        }));
-        setApplicants(applicantsWithResumes);
-      }
+      // Refresh the list
+      await fetchApplicantsList();
     } catch (err) {
       console.error('Error retrying parsing:', err);
       alert('Failed to retry parsing. Please try again.');
     } finally {
       setRetryingId(null);
-    }
-  };
-
-  const handleDelete = async (applicant: ApplicantWithResume, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm(`Are you sure you want to delete ${applicant.name}?`)) return;
-    
-    try {
-      // Delete resume first
-      if (applicant.resume?.id) {
-        await supabase.from('resumes').delete().eq('id', applicant.resume.id);
-      }
-      
-      // Delete applicant
-      const { error } = await supabase.from('applicants').delete().eq('id', applicant.id);
-      if (error) throw error;
-      
-      // Update local state
-      setApplicants(prev => prev.filter(a => a.id !== applicant.id));
-    } catch (err) {
-      console.error('Error deleting applicant:', err);
-      alert('Failed to delete applicant. Please try again.');
     }
   };
 
@@ -469,11 +439,6 @@ export function ApplicantsList() {
   };
 
   const selectedPosition = positions.find(p => p.position === selectedJobId);
-
-  // Helper to get job title from job_id
-  const getJobTitle = (jobId: string) => {
-    return jobId;
-  };
 
   const getStatusBadge = (status: string) => {
     const config = STATUS_CONFIGS[status] || STATUS_CONFIGS.pending;
@@ -551,8 +516,16 @@ export function ApplicantsList() {
                   placeholder="Search by name or email..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 hover:bg-gray-100 transition-colors"
+                  className="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 hover:bg-gray-100 transition-colors"
                 />
+                <button
+                  onClick={() => fetchApplicantsList()}
+                  disabled={isLoading}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50"
+                  title="Refresh list"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                </button>
               </div>
             </div>
           </div>
@@ -711,15 +684,6 @@ export function ApplicantsList() {
                                     <RefreshCw className={`w-4 h-4 ${retryingId === applicant.id ? 'animate-spin' : ''}`} />
                                   </button>
                                 )}
-
-                                {/* Delete */}
-                                <button
-                                  onClick={(e) => handleDelete(applicant, e)}
-                                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
                               </div>
                             </td>
                           </tr>
@@ -769,11 +733,31 @@ export function ApplicantsList() {
         applicant={selectedApplicant}
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        onStatusChange={(id, status) => console.log('Status change:', id, status)}
-        onAddNote={(id, note) => console.log('Note added:', id, note)}
-        onAddTag={(id, tag) => console.log('Tag added:', id, tag)}
-        onRemoveTag={(id, tag) => console.log('Tag removed:', id, tag)}
-        onSendEmail={(id, template) => console.log('Email sent:', id, template)}
+        onStatusChange={handleModalStatusChange}
+        onAddNote={async (id, note) => {
+          try {
+            const adminClient = getSupabaseAdminClient();
+            const { error } = await adminClient
+              .from('admin_actions')
+              .insert({ applicant_id: id, action_type: 'note_added', notes: note });
+            if (error) throw error;
+          } catch (err) {
+            console.error('Error adding note:', err);
+            alert('Failed to add note. Please try again.');
+          }
+        }}
+        onAddTag={async (id, tag) => {
+          console.log('Tag added:', id, tag);
+          // Tags would need a tags table or column - just log for now
+        }}
+        onRemoveTag={async (id, tag) => {
+          console.log('Tag removed:', id, tag);
+          // Tags would need a tags table or column - just log for now
+        }}
+        onSendEmail={async (id, template) => {
+          console.log('Email sent:', id, template);
+          // Email sending would be implemented here
+        }}
       />
     </div>
   );

@@ -50,7 +50,8 @@ import {
   calculateAlignmentScore,
   calculateDimensionScores,
   DIMENSION_LABELS,
-  WorkStyleAnswer
+  WorkStyleAnswer,
+  WorkStyleDimension
 } from '../config/workStyleConfig';
 
 interface ApplicantWithDetails extends Applicant {
@@ -641,8 +642,8 @@ export function ApplicantDetailModal({
 
   // Format dimension name to readable label
   const formatDimensionLabel = (dimension: string): string => {
-    // Check if DIMENSION_LABELS has it
-    if (dimension in DIMENSION_LABELS) return DIMENSION_LABELS[dimension as keyof typeof DIMENSION_LABELS];
+    // Check if DIMENSION_LABELS has it - cast to WorkStyleDimension for indexing
+    if (dimension in DIMENSION_LABELS) return DIMENSION_LABELS[dimension as WorkStyleDimension];
     // Otherwise convert snake_case to Title Case
     return dimension
       .split('_')
@@ -1723,15 +1724,15 @@ export function ApplicantDetailModal({
                     const result = getWorkStyleResult(answers, targetPosition);
                     
                     // Generate key characteristic tags based on high/low scores
-                    const keyTraits = [];
+                    const keyTraits: string[] = [];
                     dimensionScores.forEach(ds => {
                       const normalizedScore = Math.round((ds.score / 5) * 100);
                       if (normalizedScore >= 75) {
                         const highTrait = getHighScoreTrait(ds.dimension);
-                        if (highTrait) keyTraits.push(highTrait);
+                        if (highTrait) keyTraits.push(highTrait.label);
                       } else if (normalizedScore <= 35) {
                         const lowTrait = getLowScoreTrait(ds.dimension);
-                        if (lowTrait) keyTraits.push(lowTrait);
+                        if (lowTrait) keyTraits.push(lowTrait.label);
                       }
                     });
                     
@@ -1798,7 +1799,7 @@ export function ApplicantDetailModal({
                                 return (
                                   <div key={ds.dimension} className="space-y-2">
                                     <div className="flex items-center justify-between">
-                                      <span className="text-sm font-medium text-gray-800">{DIMENSION_LABELS[ds.dimension]}</span>
+                                      <span className="text-sm font-medium text-gray-800">{ds.dimension in DIMENSION_LABELS ? DIMENSION_LABELS[ds.dimension as WorkStyleDimension] : formatDimensionLabel(ds.dimension)}</span>
                                       <span className={`text-sm font-bold ${normalizedScore >= 70 ? 'text-emerald-600' : normalizedScore >= 45 ? 'text-amber-600' : 'text-gray-500'}`}>
                                         {normalizedScore}%
                                       </span>
