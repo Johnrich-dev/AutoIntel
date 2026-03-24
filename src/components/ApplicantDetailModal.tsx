@@ -642,7 +642,7 @@ export function ApplicantDetailModal({
   // Format dimension name to readable label
   const formatDimensionLabel = (dimension: string): string => {
     // Check if DIMENSION_LABELS has it
-    if (DIMENSION_LABELS[dimension]) return DIMENSION_LABELS[dimension];
+    if (dimension in DIMENSION_LABELS) return DIMENSION_LABELS[dimension as keyof typeof DIMENSION_LABELS];
     // Otherwise convert snake_case to Title Case
     return dimension
       .split('_')

@@ -64,7 +64,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
     const needsReview = filteredApplicants.filter(a => a.screening_status === 'needs_review').length;
     const failed = filteredApplicants.filter(a => a.screening_status === 'failed').length;
     const videoCompleted = filteredApplicants.filter(a => a.video?.status === 'completed').length;
-    const testCompleted = filteredApplicants.filter(a => a.test?.status === 'completed').length;
+    const assessmentCompleted = filteredApplicants.filter(a => a.test?.status === 'completed').length;
     
     // Time to hire calculations
     const completedApplicants = filteredApplicants.filter(a => 
@@ -89,8 +89,8 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
       notSuitable: failed,
       needsReview,
       videoCompleted,
-      testCompleted,
-      conversionRate: total > 0 ? Math.round((testCompleted / total) * 100) : 0,
+      assessmentCompleted,
+      conversionRate: total > 0 ? Math.round((assessmentCompleted / total) * 100) : 0,
       avgTimeToHire: Math.round(timeToHire),
       avgResumeScore,
     };
@@ -105,7 +105,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
       { stage: 'Applied', count: filteredApplicants.length, color: 'bg-blue-500' },
       { stage: 'Resume Review', count: passed, color: 'bg-emerald-500' },
       { stage: 'Video Assessment', count: filteredApplicants.filter(a => a.video?.status === 'completed').length, color: 'bg-purple-500' },
-      { stage: 'Work Profiling Test', count: filteredApplicants.filter(a => a.test?.status === 'completed').length, color: 'bg-orange-500' },
+      { stage: 'Work Style Assessment', count: filteredApplicants.filter(a => a.test?.status === 'completed').length, color: 'bg-orange-500' },
       { stage: 'Hired', count: Math.floor(filteredApplicants.filter(a => a.test?.status === 'completed').length * 0.3), color: 'bg-green-500' },
     ];
   }, [filteredApplicants]);
@@ -163,9 +163,14 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
 
   // Calculate average days for each stage
   const timelineAverages = useMemo(() => {
+    // Resume review: applicants who have been screened (screened_at timestamp)
     const passedApplicants = filteredApplicants.filter(a => a.screening_status === 'passed' && a.screened_at);
+    
+    // Video complete: video assessments with submitted_at timestamp
     const videoCompleted = filteredApplicants.filter(a => a.video?.status === 'completed' && a.video?.submitted_at);
-    const testCompleted = filteredApplicants.filter(a => a.test?.status === 'completed' && a.test?.submitted_at);
+    
+    // Assessment complete: work_style_assessments with submitted_at timestamp
+    const assessmentCompleted = filteredApplicants.filter(a => a.test?.status === 'completed' && a.test?.submitted_at);
     
     const avgPassedDays = passedApplicants.length > 0
       ? Math.round(passedApplicants.reduce((sum, a) => sum + daysBetween(a.created_at, a.screened_at || a.created_at), 0) / passedApplicants.length)
@@ -175,15 +180,16 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
       ? Math.round(videoCompleted.reduce((sum, a) => sum + daysBetween(a.created_at, a.video?.submitted_at || a.created_at), 0) / videoCompleted.length)
       : 2;
     
-    const avgTestDays = testCompleted.length > 0
-      ? Math.round(testCompleted.reduce((sum, a) => sum + daysBetween(a.created_at, a.test?.submitted_at || a.created_at), 0) / testCompleted.length)
+    // Use work_style_assessments.submitted_at for assessment completion timing
+    const avgAssessmentDays = assessmentCompleted.length > 0
+      ? Math.round(assessmentCompleted.reduce((sum, a) => sum + daysBetween(a.created_at, a.test?.submitted_at || a.created_at), 0) / assessmentCompleted.length)
       : 2;
     
     return {
       resume: avgPassedDays,
       videoInvite: Math.max(1, avgPassedDays),
       videoComplete: avgVideoDays,
-      testComplete: avgTestDays,
+      assessmentComplete: avgAssessmentDays,
     };
   }, [filteredApplicants]);
 
@@ -292,7 +298,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
               },
               { 
                 label: 'Completed Assessments', 
-                value: metrics.testCompleted, 
+                value: metrics.assessmentCompleted, 
                 icon: CheckCircle, 
                 color: 'bg-purple-500',
                 change: '+15%',
@@ -426,9 +432,9 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                       icon: Video
                     },
                     { 
-                      stage: 'Work Profiling Test', 
+                      stage: 'Work Style Assessment', 
                       count: filteredApplicants.filter(a => a.test?.status === 'completed').length,
-                      desc: 'Test completed',
+                      desc: 'Assessment completed',
                       color: 'bg-orange-500',
                       icon: ClipboardCheck
                     },
@@ -483,10 +489,10 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                 <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
                   <div className="flex items-center gap-2 mb-2">
                     <ClipboardCheck className="w-5 h-5 text-orange-600" />
-                    <h4 className="font-semibold text-orange-900">Test Completion</h4>
+                    <h4 className="font-semibold text-orange-900">Work Style Completion</h4>
                   </div>
                   <p className="text-3xl font-bold text-orange-700">
-                    {metrics.videoCompleted > 0 ? Math.round((metrics.testCompleted / metrics.videoCompleted) * 100) : 0}%
+                    {metrics.videoCompleted > 0 ? Math.round((metrics.assessmentCompleted / metrics.videoCompleted) * 100) : 0}%
                   </p>
                   <p className="text-sm text-orange-600">Of video completed</p>
                 </div>
@@ -612,7 +618,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                     { label: 'Resume Review', day: `Day ${timelineAverages.resume}`, icon: FileText },
                     { label: 'Video Invite', day: `Day ${timelineAverages.videoInvite}`, icon: Video },
                     { label: 'Video Complete', day: `Day ${timelineAverages.videoComplete}`, icon: CheckCircle },
-                    { label: 'Test Complete', day: `Day ${timelineAverages.testComplete}`, icon: Award },
+                    { label: 'Assessment Complete', day: `Day ${timelineAverages.assessmentComplete}`, icon: Award },
                   ].map((step, idx) => (
                     <div key={idx} className="flex flex-col items-center bg-white px-2">
                       <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white mb-2">
