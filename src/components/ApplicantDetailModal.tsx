@@ -7,7 +7,6 @@ import {
   Calendar,
   Briefcase,
   FileText,
-  Star,
   Clock,
   User,
   GraduationCap,
@@ -228,21 +227,6 @@ export function ApplicantDetailModal({
     };
   }, [isOpen, applicant?.id]);
 
-  const getScoreLabel = (score: number | undefined): { label: string; color: string } => {
-    if (score === undefined || score === null) return { label: 'No Data', color: 'text-gray-500' };
-    if (score >= 80) return { label: 'Strong Match', color: 'text-emerald-600' };
-    if (score >= 60) return { label: 'Moderate Fit', color: 'text-amber-600' };
-    if (score >= 40) return { label: 'Needs Review', color: 'text-orange-600' };
-    return { label: 'Low Match', color: 'text-red-600' };
-  };
-
-  const getScoreBarColor = (score: number | undefined): string => {
-    if (score === undefined || score === null) return 'bg-gray-200';
-    if (score >= 80) return 'bg-emerald-500';
-    if (score >= 60) return 'bg-amber-500';
-    if (score >= 40) return 'bg-orange-500';
-    return 'bg-red-500';
-  };
 
   const parsedResume = applicant ? getParsedResumeData(applicant.resume) : null;
   const isScreeningComplete = !!applicant?.resume;
@@ -482,48 +466,6 @@ export function ApplicantDetailModal({
                     </div>
                   </div>
                   <div className="p-5">
-                    {/* Key Strengths */}
-                    <div className="mb-5">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <Award className="w-4 h-4 text-emerald-600" />
-                        Key Strengths
-                      </h4>
-                      <div className="space-y-2">
-                        {parsedResume?.skills && parsedResume.skills.hard_skills && parsedResume.skills.hard_skills.length > 0 && (
-                          <div className="flex items-start gap-2 p-3 bg-emerald-50 rounded-lg">
-                            <Check className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
-                            <p className="text-sm text-gray-700">
-                              <span className="font-medium">Technical Skills:</span> Demonstrates {parsedResume.skills.hard_skills.length} relevant technical skills
-                            </p>
-                          </div>
-                        )}
-                        {parsedResume?.experience && parsedResume.experience.length > 0 && (
-                          <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
-                            <Briefcase className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                            <p className="text-sm text-gray-700">
-                              <span className="font-medium">Work Experience:</span> {parsedResume.experience.length} position{parsedResume.experience.length > 1 ? 's' : ''} of relevant experience
-                            </p>
-                          </div>
-                        )}
-                        {parsedResume?.education && parsedResume.education.length > 0 && (
-                          <div className="flex items-start gap-2 p-3 bg-purple-50 rounded-lg">
-                            <GraduationCap className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                            <p className="text-sm text-gray-700">
-                              <span className="font-medium">Education:</span> {parsedResume.education[0]?.course_or_strand || parsedResume.education[0]?.school || 'Completed'}
-                            </p>
-                          </div>
-                        )}
-                        {applicant.resumeScore && applicant.resumeScore >= 70 && (
-                          <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg">
-                            <Star className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                            <p className="text-sm text-gray-700">
-                              <span className="font-medium">Resume Quality:</span> Strong resume with {Math.round(applicant.resumeScore)}% score - well-structured and comprehensive
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
                     {/* Why This Candidate */}
                     <div>
                       <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -555,7 +497,7 @@ export function ApplicantDetailModal({
                     <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
                       <Clock className="w-8 h-8 text-gray-400" />
                     </div>
-                    <p className="text-sm font-medium text-gray-700 mb-1">Scores not yet available</p>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Evaluation in progress</p>
                     <p className="text-xs text-gray-500">AI evaluation is in progress. Check back once screening is complete.</p>
                   </div>
                 </div>
@@ -694,39 +636,6 @@ export function ApplicantDetailModal({
                     >
                       View Resume
                     </a>
-                  </div>
-                </div>
-              )}
-
-              {/* Match Indicator */}
-              {applicant.resumeScore && (
-                <div className="bg-white rounded-xl border border-gray-200 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        applicant.resumeScore >= 70 ? 'bg-emerald-100' : applicant.resumeScore >= 50 ? 'bg-amber-100' : 'bg-red-100'
-                      }`}>
-                        <Target className={`w-5 h-5 ${
-                          applicant.resumeScore >= 70 ? 'text-emerald-600' : applicant.resumeScore >= 50 ? 'text-amber-600' : 'text-red-600'
-                        }`} />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Job Match Indicator</p>
-                        <p className="text-xs text-gray-500">
-                          {applicant.resumeScore >= 70 ? 'Strong alignment with job requirements' :
-                           applicant.resumeScore >= 50 ? 'Moderate alignment, review recommended' :
-                           'Low alignment with position requirements'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className={`text-2xl font-bold ${
-                        applicant.resumeScore >= 70 ? 'text-emerald-600' : applicant.resumeScore >= 50 ? 'text-amber-600' : 'text-red-600'
-                      }`}>
-                        {Math.round(applicant.resumeScore)}%
-                      </span>
-                      <p className="text-xs text-gray-500">match score</p>
-                    </div>
                   </div>
                 </div>
               )}
