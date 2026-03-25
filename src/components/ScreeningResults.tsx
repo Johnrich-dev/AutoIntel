@@ -12,7 +12,6 @@ import {
   XCircle,
   AlertCircle,
   Briefcase,
-  Download,
   Filter,
   ArrowUpDown,
   X,
@@ -158,7 +157,7 @@ function ScoreBadge({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-2">
       <div className={`px-3 py-1.5 rounded-lg font-semibold text-sm ${getScoreColor(score)}`}>
-        {score}%
+        {Math.round(score)}%
       </div>
     </div>
   );
@@ -224,7 +223,7 @@ function DetailModal({
                 </div>
                 <div>
                   <p className="text-sm text-blue-600 font-medium">Overall Score</p>
-                  <p className="text-3xl font-bold text-blue-900">{applicant.overall_score || 0}%</p>
+                  <p className="text-3xl font-bold text-blue-900">{Math.round(applicant.overall_score || 0)}%</p>
                 </div>
               </div>
               <div className="text-right">
@@ -246,21 +245,21 @@ function DetailModal({
                   <Star className="w-4 h-4 text-purple-500" />
                   <span className="text-xs font-medium text-gray-500">Skills</span>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{applicant.skills_score || 0}%</p>
+                <p className="text-2xl font-bold text-gray-900">{Math.round(applicant.skills_score || 0)}%</p>
               </div>
               <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                 <div className="flex items-center gap-2 mb-2">
                   <Briefcase className="w-4 h-4 text-blue-500" />
                   <span className="text-xs font-medium text-gray-500">Experience</span>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{applicant.experience_score || 0}%</p>
+                <p className="text-2xl font-bold text-gray-900">{Math.round(applicant.experience_score || 0)}%</p>
               </div>
               <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                 <div className="flex items-center gap-2 mb-2">
                   <Award className="w-4 h-4 text-green-500" />
                   <span className="text-xs font-medium text-gray-500">Education</span>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{applicant.education_score || 0}%</p>
+                <p className="text-2xl font-bold text-gray-900">{Math.round(applicant.education_score || 0)}%</p>
               </div>
             </div>
           </div>
@@ -386,7 +385,6 @@ export function ScreeningResults() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedApplicant, setSelectedApplicant] = useState<ScreenedApplicant | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState<string | null>(null);
   const [showSortMenu, setShowSortMenu] = useState(false);
 
   const itemsPerPage = 10;
@@ -400,7 +398,6 @@ export function ScreeningResults() {
   useEffect(() => {
     const handleClickOutside = () => {
       setShowSortMenu(false);
-      setShowExportMenu(null);
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
@@ -644,20 +641,6 @@ export function ScreeningResults() {
     }
   };
 
-  const handleExport = (applicantId: string, format: string) => {
-    const applicant = applicants.find((a) => a.id === applicantId);
-    if (!applicant) return;
-
-    if (format === 'pdf') {
-      // In production, generate PDF report
-      alert(`Exporting ${applicant.name}'s report as PDF...`);
-    } else if (format === 'csv') {
-      // In production, generate CSV
-      alert(`Exporting ${applicant.name}'s data as CSV...`);
-    }
-
-    setShowExportMenu(null);
-  };
 
   // Stats
   const stats = useMemo(() => {
@@ -897,10 +880,7 @@ export function ScreeningResults() {
 
                     {/* Job Applied */}
                     <td className="px-4 py-5">
-                      <div className="flex items-center gap-2">
-                        <Briefcase className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm text-gray-700">{applicant.position || 'N/A'}</span>
-                      </div>
+                      <span className="text-sm text-gray-700">{applicant.position || 'N/A'}</span>
                     </td>
 
                     {/* Score */}
@@ -963,50 +943,7 @@ export function ScreeningResults() {
                           </button>
                         )}
 
-                        <button
-                          onClick={() => handleReject(applicant.id)}
-                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                          title="Reject"
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </button>
 
-                        <div className="relative" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={() => setShowExportMenu(showExportMenu === applicant.id ? null : applicant.id)}
-                            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
-                            title="Export"
-                          >
-                            <Download className="w-4 h-4" />
-                          </button>
-
-                          {showExportMenu === applicant.id && (
-                            <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-10 min-w-[140px]">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleExport(applicant.id, 'pdf');
-                                  setShowExportMenu(null);
-                                }}
-                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                              >
-                                <FileText className="w-4 h-4" />
-                                Export PDF
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleExport(applicant.id, 'csv');
-                                  setShowExportMenu(null);
-                                }}
-                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                              >
-                                <Download className="w-4 h-4" />
-                                Export CSV
-                              </button>
-                            </div>
-                          )}
-                        </div>
                       </div>
                     </td>
                   </tr>

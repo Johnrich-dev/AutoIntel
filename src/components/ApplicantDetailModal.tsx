@@ -7,7 +7,6 @@ import {
   Calendar,
   Briefcase,
   FileText,
-  Star,
   Clock,
   User,
   GraduationCap,
@@ -228,21 +227,6 @@ export function ApplicantDetailModal({
     };
   }, [isOpen, applicant?.id]);
 
-  const getScoreLabel = (score: number | undefined): { label: string; color: string } => {
-    if (score === undefined || score === null) return { label: 'No Data', color: 'text-gray-500' };
-    if (score >= 80) return { label: 'Strong Match', color: 'text-emerald-600' };
-    if (score >= 60) return { label: 'Moderate Fit', color: 'text-amber-600' };
-    if (score >= 40) return { label: 'Needs Review', color: 'text-orange-600' };
-    return { label: 'Low Match', color: 'text-red-600' };
-  };
-
-  const getScoreBarColor = (score: number | undefined): string => {
-    if (score === undefined || score === null) return 'bg-gray-200';
-    if (score >= 80) return 'bg-emerald-500';
-    if (score >= 60) return 'bg-amber-500';
-    if (score >= 40) return 'bg-orange-500';
-    return 'bg-red-500';
-  };
 
   const parsedResume = applicant ? getParsedResumeData(applicant.resume) : null;
   const isScreeningComplete = !!applicant?.resume;
@@ -371,25 +355,6 @@ export function ApplicantDetailModal({
               </div>
             </div>
 
-            {/* Right: Overall Score - Only show when screening complete */}
-            {isScreeningComplete ? (
-              <div className="flex-shrink-0 text-center px-6 border-l border-gray-100">
-                <div className="text-4xl font-bold text-gray-900">{applicant.overall ? Math.round(applicant.overall) : '-'}</div>
-                <div className="text-xs text-gray-500 font-medium uppercase tracking-wide mt-1">Overall Score</div>
-                {applicant.overall && (
-                  <div className={`text-sm font-medium mt-1 ${getScoreLabel(applicant.overall).color}`}>
-                    {getScoreLabel(applicant.overall).label}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex-shrink-0 text-center px-6 border-l border-gray-100">
-                <div className="text-2xl font-bold text-gray-400">-</div>
-                <div className="text-xs text-gray-400 font-medium uppercase tracking-wide mt-1">Awaiting</div>
-              </div>
-            )}
-
-            {/* Close Button */}
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
               <X className="w-5 h-5 text-gray-400" />
             </button>
@@ -501,83 +466,6 @@ export function ApplicantDetailModal({
                     </div>
                   </div>
                   <div className="p-5">
-                    {/* Overall Recommendation */}
-                    <div className={`rounded-xl p-4 mb-5 ${applicant.overall && applicant.overall >= 60 ? 'bg-emerald-50 border border-emerald-100' : 'bg-amber-50 border border-amber-100'}`}>
-                      <div className="flex items-start gap-3">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${applicant.overall && applicant.overall >= 60 ? 'bg-emerald-100' : 'bg-amber-100'}`}>
-                          {applicant.overall && applicant.overall >= 60 ? (
-                            <Check className="w-5 h-5 text-emerald-600" />
-                          ) : (
-                            <Sparkles className="w-5 h-5 text-amber-600" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900 mb-1">
-                            {applicant.overall && applicant.overall >= 80 ? 'Excellent Match' : 
-                             applicant.overall && applicant.overall >= 60 ? 'Good Match' : 
-                             applicant.overall && applicant.overall >= 40 ? 'Needs Review' : 'Below Threshold'}
-                          </h4>
-                          <p className="text-sm text-gray-600">
-                            {applicant.overall && applicant.overall >= 80 ? 
-                              `${applicant.name} is an excellent candidate with strong alignment to the role requirements. Highly recommended for immediate consideration.` :
-                             applicant.overall && applicant.overall >= 60 ?
-                              `${applicant.name} shows good potential and meets most key requirements. Recommended for further evaluation.` :
-                             applicant.overall && applicant.overall >= 40 ?
-                              `${applicant.name} has some relevant qualifications but may need additional assessment. Manual review recommended.` :
-                              `${applicant.name} does not meet the minimum threshold for this position. Consider other candidates.`}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className={`text-2xl font-bold ${applicant.overall && applicant.overall >= 60 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                            {applicant.overall ? Math.round(applicant.overall) : '-'}
-                          </p>
-                          <p className="text-xs text-gray-500">Overall Score</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Key Strengths */}
-                    <div className="mb-5">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <Award className="w-4 h-4 text-emerald-600" />
-                        Key Strengths
-                      </h4>
-                      <div className="space-y-2">
-                        {parsedResume?.skills && parsedResume.skills.hard_skills && parsedResume.skills.hard_skills.length > 0 && (
-                          <div className="flex items-start gap-2 p-3 bg-emerald-50 rounded-lg">
-                            <Check className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
-                            <p className="text-sm text-gray-700">
-                              <span className="font-medium">Technical Skills:</span> Demonstrates {parsedResume.skills.hard_skills.length} relevant technical skills
-                            </p>
-                          </div>
-                        )}
-                        {parsedResume?.experience && parsedResume.experience.length > 0 && (
-                          <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
-                            <Briefcase className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                            <p className="text-sm text-gray-700">
-                              <span className="font-medium">Work Experience:</span> {parsedResume.experience.length} position{parsedResume.experience.length > 1 ? 's' : ''} of relevant experience
-                            </p>
-                          </div>
-                        )}
-                        {parsedResume?.education && parsedResume.education.length > 0 && (
-                          <div className="flex items-start gap-2 p-3 bg-purple-50 rounded-lg">
-                            <GraduationCap className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                            <p className="text-sm text-gray-700">
-                              <span className="font-medium">Education:</span> {parsedResume.education[0]?.course_or_strand || parsedResume.education[0]?.school || 'Completed'}
-                            </p>
-                          </div>
-                        )}
-                        {applicant.resumeScore && applicant.resumeScore >= 70 && (
-                          <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg">
-                            <Star className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                            <p className="text-sm text-gray-700">
-                              <span className="font-medium">Resume Quality:</span> Strong resume with {Math.round(applicant.resumeScore)}% score - well-structured and comprehensive
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
                     {/* Why This Candidate */}
                     <div>
                       <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -591,9 +479,6 @@ export function ApplicantDetailModal({
                             ` With ${parsedResume.experience.length} year${parsedResume.experience.length > 1 ? 's' : ''} of professional experience, `}
                           {parsedResume?.skills && parsedResume.skills.hard_skills && parsedResume.skills.hard_skills.length > 0 &&
                             `they bring ${parsedResume.skills.hard_skills.length} technical skill${parsedResume.skills.hard_skills.length > 1 ? 's' : ''} that align with job requirements. `}
-                          {applicant.overall && applicant.overall >= 60 ? 
-                            `Overall evaluation shows good fit for the position. Recommended for interview process.` :
-                            `While there are some areas for improvement, the candidate shows potential and could benefit from further evaluation.`}
                         </p>
                       </div>
                     </div>
@@ -612,7 +497,7 @@ export function ApplicantDetailModal({
                     <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
                       <Clock className="w-8 h-8 text-gray-400" />
                     </div>
-                    <p className="text-sm font-medium text-gray-700 mb-1">Scores not yet available</p>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Evaluation in progress</p>
                     <p className="text-xs text-gray-500">AI evaluation is in progress. Check back once screening is complete.</p>
                   </div>
                 </div>
@@ -751,39 +636,6 @@ export function ApplicantDetailModal({
                     >
                       View Resume
                     </a>
-                  </div>
-                </div>
-              )}
-
-              {/* Match Indicator */}
-              {applicant.resumeScore && (
-                <div className="bg-white rounded-xl border border-gray-200 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        applicant.resumeScore >= 70 ? 'bg-emerald-100' : applicant.resumeScore >= 50 ? 'bg-amber-100' : 'bg-red-100'
-                      }`}>
-                        <Target className={`w-5 h-5 ${
-                          applicant.resumeScore >= 70 ? 'text-emerald-600' : applicant.resumeScore >= 50 ? 'text-amber-600' : 'text-red-600'
-                        }`} />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Job Match Indicator</p>
-                        <p className="text-xs text-gray-500">
-                          {applicant.resumeScore >= 70 ? 'Strong alignment with job requirements' :
-                           applicant.resumeScore >= 50 ? 'Moderate alignment, review recommended' :
-                           'Low alignment with position requirements'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className={`text-2xl font-bold ${
-                        applicant.resumeScore >= 70 ? 'text-emerald-600' : applicant.resumeScore >= 50 ? 'text-amber-600' : 'text-red-600'
-                      }`}>
-                        {Math.round(applicant.resumeScore)}%
-                      </span>
-                      <p className="text-xs text-gray-500">match score</p>
-                    </div>
                   </div>
                 </div>
               )}
