@@ -28,14 +28,18 @@ import {
   CreditCard,
   Building2
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface AdminSettingsProps {
   // Props if needed
 }
 
 export function AdminSettings({}: AdminSettingsProps) {
+  const { adminSession } = useAuth();
   const [activeSection, setActiveSection] = useState<'general' | 'notifications' | 'security' | 'integrations' | 'appearance' | 'advanced'>('general');
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState({
     // General
     companyName: 'AutoIntel Recruitment',
@@ -49,7 +53,7 @@ export function AdminSettings({}: AdminSettingsProps) {
     emailAssessmentComplete: true,
     emailDailyDigest: false,
     browserNotifications: true,
-    slackWebhook: '',
+    webhook: '',
     
     // Security
     twoFactorAuth: false,
@@ -76,24 +80,121 @@ export function AdminSettings({}: AdminSettingsProps) {
     debugMode: false,
   });
 
-  const handleSave = () => {
-    // Save to localStorage for demo
-    localStorage.setItem('admin_settings', JSON.stringify(settings));
-    // Apply theme when saving
-    applyTheme(settings.theme);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
-  };
-
+  // Fetch settings from Supabase
   useEffect(() => {
-    const saved = localStorage.getItem('admin_settings');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      setSettings(parsed);
-      // Apply theme on load
-      applyTheme(parsed.theme || 'light');
+    const fetchSettings = async () => {
+      if (!adminSession?.user_id) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('admin_users')
+          .select('*')
+          .eq('id', adminSession.user_id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Error fetching settings:', error);
+          setLoading(false);
+          return;
+        }
+
+        if (data) {
+          // Map database fields to state
+          setSettings({
+            companyName: data.company_name || 'AutoIntel Recruitment',
+            adminEmail: data.email || adminSession.email || 'admin@autointel.com',
+            timezone: data.timezone || 'Asia/Manila',
+            dateFormat: data.date_format || 'MM/DD/YYYY',
+            language: data.language || 'en',
+            emailNewApplicant: data.email_new_applicant ?? true,
+            emailAssessmentComplete: data.email_assessment_complete ?? true,
+            emailDailyDigest: data.email_daily_digest ?? false,
+            browserNotifications: data.browser_notifications ?? true,
+            webhook: data.webhook || '',
+            twoFactorAuth: data.two_factor_auth ?? false,
+            passwordExpiry: data.password_expiry || '90',
+            sessionTimeout: data.session_timeout || '30',
+            ipWhitelist: data.ip_whitelist || '',
+            resumeWeight: String(data.resume_weight || 40),
+            videoWeight: String(data.video_weight || 35),
+            profileWeight: String(data.profile_weight || 25),
+            autoRejectThreshold: String(data.auto_reject_threshold || 30),
+            autoShortlistThreshold: String(data.auto_shortlist_threshold || 85),
+            theme: data.theme || 'light',
+            sidebarCollapsed: data.sidebar_collapsed ?? false,
+            compactView: data.compact_view ?? false,
+            dataRetention: data.data_retention || '365',
+            autoArchive: data.auto_archive ?? true,
+            apiAccess: data.api_access ?? false,
+            debugMode: data.debug_mode ?? false,
+          });
+          applyTheme(data.theme || 'light');
+        }
+      } catch (error) {
+        console.error('Error fetching settings:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, [adminSession?.user_id]);
+
+  const handleSave = async () => {
+    if (!adminSession?.user_id) {
+      console.error('No admin session found');
+      return;
     }
-  }, []);
+
+    try {
+      // Prepare data for Supabase - update admin_users table
+      const { error } = await supabase
+        .from('admin_users')
+        .update({
+          company_name: settings.companyName,
+          timezone: settings.timezone,
+          date_format: settings.dateFormat,
+          language: settings.language,
+          email_new_applicant: settings.emailNewApplicant,
+          email_assessment_complete: settings.emailAssessmentComplete,
+          email_daily_digest: settings.emailDailyDigest,
+          browser_notifications: settings.browserNotifications,
+          slack_webhook: settings.webhook,
+          two_factor_auth: settings.twoFactorAuth,
+          password_expiry: settings.passwordExpiry,
+          session_timeout: settings.sessionTimeout,
+          ip_whitelist: settings.ipWhitelist,
+          resume_weight: parseInt(settings.resumeWeight),
+          video_weight: parseInt(settings.videoWeight),
+          profile_weight: parseInt(settings.profileWeight),
+          auto_reject_threshold: parseInt(settings.autoRejectThreshold),
+          auto_shortlist_threshold: parseInt(settings.autoShortlistThreshold),
+          theme: settings.theme,
+          sidebar_collapsed: settings.sidebarCollapsed,
+          compact_view: settings.compactView,
+          data_retention: settings.dataRetention,
+          auto_archive: settings.autoArchive,
+          api_access: settings.apiAccess,
+          debug_mode: settings.debugMode,
+        })
+        .eq('id', adminSession.user_id);
+
+      if (error) {
+        console.error('Error saving settings:', error);
+        return;
+      }
+
+      // Apply theme when saving
+      applyTheme(settings.theme);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      console.error('Error saving settings:', error);
+    }
+  };
 
   // Apply theme to document
   const applyTheme = (theme: string) => {
@@ -143,6 +244,18 @@ export function AdminSettings({}: AdminSettingsProps) {
       />
     </button>
   );
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="p-8 lg:p-10 space-y-6 bg-slate-50 min-h-screen flex items-center justify-center">
+        <div className="flex items-center gap-3 text-gray-600">
+          <RefreshCw className="w-6 h-6 animate-spin" />
+          <span>Loading settings...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 lg:p-10 space-y-6 bg-slate-50 min-h-screen">
@@ -196,7 +309,9 @@ export function AdminSettings({}: AdminSettingsProps) {
               <Shield className="w-5 h-5 text-blue-600" />
               <h4 className="font-semibold text-blue-900">Account Status</h4>
             </div>
-            <p className="text-sm text-blue-700 mb-3">Your account is active and in good standing.</p>
+            <p className="text-sm text-blue-700 mb-3">
+              {adminSession?.email ? `Logged in as ${adminSession.email}` : 'Your account is active and in good standing.'}
+            </p>
             <div className="flex items-center gap-2 text-sm text-blue-600">
               <CheckCircle className="w-4 h-4" />
               <span>Last backup: Today, 2:00 AM</span>
@@ -325,12 +440,12 @@ export function AdminSettings({}: AdminSettingsProps) {
                   )}
                   
                   {renderSettingItem(
-                    'Slack Webhook URL',
-                    'Send notifications to Slack channel',
+                    'Webhook URL',
+                    'Send notifications to a custom endpoint',
                     <input
                       type="text"
-                      value={settings.slackWebhook}
-                      onChange={(e) => setSettings({ ...settings, slackWebhook: e.target.value })}
+                      value={settings.webhook}
+                      onChange={(e) => setSettings({ ...settings, webhook: e.target.value })}
                       placeholder="https://hooks.slack.com/..."
                       className="w-64 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
