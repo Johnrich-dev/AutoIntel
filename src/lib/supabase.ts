@@ -96,7 +96,7 @@ export interface Applicant {
   screening_score?: number;
   screening_fit_category?: string;
   resume_reviewed_at?: string | null;
-  screening_status?: 'passed' | 'needs_review' | 'failed';
+  screening_status?: 'for_review' | 'in_progress';
   screened_at?: string;
 }
 

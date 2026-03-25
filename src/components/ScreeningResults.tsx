@@ -35,11 +35,13 @@ interface ScreenedApplicant extends Applicant {
   skills_score?: number;
   experience_score?: number;
   education_score?: number;
-  screening_status?: 'passed' | 'needs_review' | 'failed';
+  screening_status?: 'for_review' | 'in_progress';
   screening_stage?: 'screened' | 'review' | 'shortlisted';
   screened_at?: string;
   matched_skills?: string[];
   missing_skills?: string[];
+  video_submitted?: boolean;
+  work_style_completed?: boolean;
 }
 
 interface JobOption {
@@ -49,7 +51,7 @@ interface JobOption {
   count: number;
 }
 
-type StatusFilter = 'all' | 'passed' | 'needs_review' | 'failed';
+type StatusFilter = 'all' | 'for_review' | 'in_progress';
 type SortOption = 'score_desc' | 'score_asc' | 'date_desc' | 'date_asc' | 'name_asc';
 
 interface StatusConfig {
@@ -61,26 +63,19 @@ interface StatusConfig {
 }
 
 const STATUS_CONFIGS: Record<string, StatusConfig> = {
-  passed: {
-    label: 'Passed',
-    bg: 'bg-green-50',
-    text: 'text-green-700',
-    border: 'border-green-200',
-    icon: CheckCircle,
-  },
-  needs_review: {
-    label: 'Needs Review',
+  for_review: {
+    label: 'For Review',
     bg: 'bg-yellow-50',
     text: 'text-yellow-700',
     border: 'border-yellow-200',
     icon: AlertCircle,
   },
-  failed: {
-    label: 'Failed',
-    bg: 'bg-red-50',
-    text: 'text-red-700',
-    border: 'border-red-200',
-    icon: XCircle,
+  in_progress: {
+    label: 'In Progress',
+    bg: 'bg-blue-50',
+    text: 'text-blue-700',
+    border: 'border-blue-200',
+    icon: Clock,
   },
 };
 
@@ -165,7 +160,7 @@ function ScoreBadge({ score }: { score: number }) {
 
 // Status badge component
 function StatusBadge({ status }: { status: string }) {
-  const config = STATUS_CONFIGS[status] || STATUS_CONFIGS.failed;
+  const config = STATUS_CONFIGS[status] || STATUS_CONFIGS.in_progress;
   const Icon = config.icon;
 
   return (
@@ -223,47 +218,77 @@ export function ScreeningResults() {
         .from('resumes')
         .select('*');
 
+      // Load resume scores for component scores
+      const { data: resumeScoresData } = await adminClient
+        .from('resume_scores')
+        .select('*');
+
+      // Load video assessments to check if applicant has submitted video
+      const { data: videoAssessmentsData } = await adminClient
+        .from('video_assessments')
+        .select('*');
+
+      // Load work style assessments to check if applicant has completed assessment
+      const { data: workStyleAssessmentsData } = await adminClient
+        .from('work_style_assessments')
+        .select('*');
+
       // Combine data - use REAL scores from database
       if (applicantsData) {
         const screenedApplicants: ScreenedApplicant[] = applicantsData.map((applicant) => {
           const resume = resumesData?.find((r) => r.applicant_id === applicant.id);
           
+          // Get resume score if available
+          const resumeScore = resumeScoresData?.find((rs) => rs.applicant_id === applicant.id);
+          
+          // Check video and work style assessment status
+          const videoAssessment = videoAssessmentsData?.find((va) => va.applicant_id === applicant.id);
+          const workStyleAssessment = workStyleAssessmentsData?.find((wsa) => wsa.applicant_id === applicant.id);
+          
+          // Determine if applicant has completed required assessments
+          const hasVideoSubmitted = videoAssessment && videoAssessment.status === 'completed';
+          const hasWorkStyleCompleted = workStyleAssessment && workStyleAssessment.status === 'completed';
+          
           // Use actual scores from the database
-          // Priority: applicant.screening_score > 0
-          // The screening_score is stored on the applicants table
           const overallScore = applicant.screening_score ?? 0;
           
           // Determine status from database or calculate based on score
-          let status: 'passed' | 'needs_review' | 'failed' = applicant.screening_status || 'needs_review';
-          if (!applicant.screening_status && overallScore > 0) {
-            // Calculate status based on score if not set in DB
-            if (overallScore >= 78) status = 'passed';
-            else if (overallScore >= 65) status = 'needs_review';
-            else status = 'failed';
+          // needs_review: applicants who have completed video and work style assessments
+          // These require human review of the video
+          let status: 'for_review' | 'in_progress' = applicant.screening_status as 'for_review' | 'in_progress' || 'in_progress';
+          
+          // If not explicitly set, determine based on completion
+          if (!applicant.screening_status) {
+            if (hasVideoSubmitted && hasWorkStyleCompleted) {
+              // Has completed video and work style - needs human review
+              status = 'for_review';
+            } else {
+              // Not yet completed assessments
+              status = 'in_progress';
+            }
           }
           
           // Extract matched skills from resume if available
           let matchedSkills: string[] = [];
           let missingSkills: string[] = [];
-          let skillsScore = 0;
-          let experienceScore = 0;
-          let educationScore = 0;
           
-          if (resume?.parsed_data && typeof resume.parsed_data === 'object') {
+          // Use real component scores from resume_scores if available
+          let skillsScore = resumeScore?.skills_score ?? 0;
+          let experienceScore = resumeScore?.experience_score ?? 0;
+          let educationScore = resumeScore?.education_score ?? 0;
+          
+          // If no resume scores, calculate from resume parsed data
+          if (!resumeScore && resume?.parsed_data && typeof resume.parsed_data === 'object') {
             const parsedData = resume.parsed_data as any;
-            // Extract skills from parsed data
             if (parsedData.skills?.hard_skills) {
               matchedSkills = parsedData.skills.hard_skills.slice(0, 5);
             }
-            // Calculate skills score based on skill count
             const totalSkills = matchedSkills.length;
             skillsScore = Math.min((totalSkills / 20) * 100, 100);
             
-            // Experience score based on number of experiences
             const expCount = parsedData.experience?.length || 0;
             experienceScore = Math.min((expCount / 5) * 100, 100);
             
-            // Education score based on education entries
             const eduCount = parsedData.education?.length || 0;
             educationScore = Math.min((eduCount / 3) * 100, 100);
           }
@@ -276,10 +301,13 @@ export function ScreeningResults() {
             experience_score: Math.round(experienceScore),
             education_score: Math.round(educationScore),
             screening_status: status,
-            screening_stage: status === 'passed' ? 'shortlisted' : status === 'needs_review' ? 'review' : 'screened',
+            screening_stage: status === 'for_review' ? 'review' : 'screened',
             screened_at: applicant.screened_at || new Date().toISOString(),
             matched_skills: matchedSkills,
             missing_skills: missingSkills,
+            // Add assessment completion info for display
+            video_submitted: hasVideoSubmitted,
+            work_style_completed: hasWorkStyleCompleted,
           };
         });
 
@@ -321,10 +349,9 @@ export function ScreeningResults() {
     const experience = 45 + (hash % 45);
     const education = 50 + (hash % 40);
 
-    let status: 'passed' | 'needs_review' | 'failed';
-    if (overall >= 75) status = 'passed';
-    else if (overall >= 55) status = 'needs_review';
-    else status = 'failed';
+    let status: 'for_review' | 'in_progress';
+    if (overall >= 75) status = 'for_review';
+    else status = 'in_progress';
 
     const matchedSkills = ['JavaScript', 'React', 'TypeScript', 'Node.js', 'Python'].slice(0, 2 + (hash % 3));
     const missingSkills = ['AWS', 'Docker', 'Kubernetes', 'GraphQL', 'PostgreSQL'].slice(0, 3 - (hash % 2));
@@ -335,7 +362,7 @@ export function ScreeningResults() {
       experience_score: experience,
       education_score: education,
       screening_status: status,
-      screening_stage: status === 'passed' ? 'shortlisted' : status === 'needs_review' ? 'review' : 'screened',
+      screening_stage: status === 'for_review' ? 'review' : 'screened',
       screened_at: new Date(Date.now() - (hash % 30) * 24 * 60 * 60 * 1000).toISOString(),
       matched_skills: matchedSkills,
       missing_skills: missingSkills,
@@ -406,13 +433,13 @@ export function ScreeningResults() {
       const adminClient = getSupabaseAdminClient();
       await adminClient
         .from('applicants')
-        .update({ screening_stage: 'shortlisted', screening_status: 'passed' })
+        .update({ screening_stage: 'shortlisted', screening_status: 'for_review' })
         .eq('id', id);
 
       // Update local state
       setApplicants((prev) =>
         prev.map((app) =>
-          app.id === id ? { ...app, screening_stage: 'shortlisted', screening_status: 'passed' } : app
+          app.id === id ? { ...app, screening_stage: 'shortlisted', screening_status: 'for_review' } : app
         )
       );
     } catch (error) {
@@ -420,36 +447,16 @@ export function ScreeningResults() {
     }
   };
 
-  const handleReject = async (id: string) => {
-    try {
-      const adminClient = getSupabaseAdminClient();
-      await adminClient
-        .from('applicants')
-        .update({ screening_status: 'failed', screening_stage: 'screened' })
-        .eq('id', id);
-
-      // Update local state
-      setApplicants((prev) =>
-        prev.map((app) =>
-          app.id === id ? { ...app, screening_status: 'failed', screening_stage: 'screened' } : app
-        )
-      );
-    } catch (error) {
-      console.error('Error rejecting applicant:', error);
-    }
-  };
-
 
   // Stats
   const stats = useMemo(() => {
-    const passed = applicants.filter((a) => a.screening_status === 'passed').length;
-    const needsReview = applicants.filter((a) => a.screening_status === 'needs_review').length;
-    const failed = applicants.filter((a) => a.screening_status === 'failed').length;
+    const forReview = applicants.filter((a) => a.screening_status === 'for_review').length;
+    const inProgress = applicants.filter((a) => a.screening_status === 'in_progress').length;
     const avgScore = applicants.length > 0
       ? Math.round(applicants.reduce((sum, a) => sum + (a.overall_score || 0), 0) / applicants.length)
       : 0;
 
-    return { passed, needsReview, failed, total: applicants.length, avgScore };
+    return { forReview, inProgress, total: applicants.length, avgScore };
   }, [applicants]);
 
   return (
@@ -470,16 +477,12 @@ export function ScreeningResults() {
             <p className="text-lg font-bold text-gray-900">{stats.total}</p>
           </div>
           <div className="bg-green-50 rounded-xl px-4 py-2 border border-green-200 shadow-sm">
-            <p className="text-xs text-green-600">Passed</p>
-            <p className="text-lg font-bold text-green-700">{stats.passed}</p>
+            <p className="text-xs text-green-600">For Review</p>
+            <p className="text-lg font-bold text-green-700">{stats.forReview}</p>
           </div>
           <div className="bg-yellow-50 rounded-xl px-4 py-2 border border-yellow-200 shadow-sm">
-            <p className="text-xs text-yellow-600">Needs Review</p>
-            <p className="text-lg font-bold text-yellow-700">{stats.needsReview}</p>
-          </div>
-          <div className="bg-red-50 rounded-xl px-4 py-2 border border-red-200 shadow-sm">
-            <p className="text-xs text-red-600">Failed</p>
-            <p className="text-lg font-bold text-red-700">{stats.failed}</p>
+            <p className="text-xs text-yellow-600">In Progress</p>
+            <p className="text-lg font-bold text-yellow-700">{stats.inProgress}</p>
           </div>
         </div>
       </div>
@@ -518,7 +521,7 @@ export function ScreeningResults() {
 
           {/* Status Filter Tabs */}
           <div className="flex items-center bg-gray-100 rounded-xl p-1">
-            {(['all', 'passed', 'needs_review', 'failed'] as StatusFilter[]).map((status) => (
+            {(['all', 'for_review', 'in_progress'] as StatusFilter[]).map((status) => (
               <button
                 key={status}
                 onClick={() => setStatusFilter(status)}
@@ -528,7 +531,7 @@ export function ScreeningResults() {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                {status === 'all' ? 'All' : status === 'passed' ? 'Passed' : status === 'needs_review' ? 'Needs Review' : 'Failed'}
+                {status === 'all' ? 'All' : status === 'for_review' ? 'For Review' : status === 'in_progress' ? 'In Progress' : status}
               </button>
             ))}
           </div>
@@ -688,7 +691,7 @@ export function ScreeningResults() {
 
                     {/* Status */}
                     <td className="px-4 py-5 text-center">
-                      <StatusBadge status={applicant.screening_status || 'failed'} />
+                      <StatusBadge status={applicant.screening_status || 'in_progress'} />
                     </td>
 
                     {/* Stage */}
@@ -789,8 +792,6 @@ export function ScreeningResults() {
         <ScreeningDetailModal
           applicant={selectedApplicant}
           onClose={() => setShowDetailModal(false)}
-          onApprove={handleApprove}
-          onReject={handleReject}
         />
       )}
 

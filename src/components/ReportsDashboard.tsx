@@ -29,7 +29,7 @@ interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
   video?: VideoAssessment;
   test?: PersonalityTest;
-  screening_status?: 'passed' | 'needs_review' | 'failed';
+  screening_status?: 'for_review' | 'in_progress';
   screened_at?: string;
 }
 
@@ -60,9 +60,8 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
   // Calculate metrics
   const metrics = useMemo(() => {
     const total = filteredApplicants.length;
-    const passed = filteredApplicants.filter(a => a.screening_status === 'passed').length;
-    const needsReview = filteredApplicants.filter(a => a.screening_status === 'needs_review').length;
-    const failed = filteredApplicants.filter(a => a.screening_status === 'failed').length;
+    const forReview = filteredApplicants.filter(a => a.screening_status === 'for_review').length;
+    const inProgress = filteredApplicants.filter(a => a.screening_status === 'in_progress').length;
     const videoCompleted = filteredApplicants.filter(a => a.video?.status === 'completed').length;
     const assessmentCompleted = filteredApplicants.filter(a => a.test?.status === 'completed').length;
     
@@ -85,9 +84,9 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
 
     return {
       total,
-      suitable: passed,
-      notSuitable: failed,
-      needsReview,
+      suitable: forReview,
+      notSuitable: inProgress,
+      needsReview: inProgress,
       videoCompleted,
       assessmentCompleted,
       conversionRate: total > 0 ? Math.round((assessmentCompleted / total) * 100) : 0,
@@ -98,8 +97,8 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
 
   // Pipeline data
   const pipelineData = useMemo(() => {
-    const passed = filteredApplicants.filter(a => a.screening_status === 'passed').length;
-    const failed = filteredApplicants.filter(a => a.screening_status === 'failed').length;
+    const forReview = filteredApplicants.filter(a => a.screening_status === 'for_review').length;
+    const inProgress = filteredApplicants.filter(a => a.screening_status === 'in_progress').length;
     
     return [
       { stage: 'Applied', count: filteredApplicants.length, color: 'bg-blue-500' },
@@ -136,7 +135,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
         score = resumeScore;
       } else {
         // Fallback: derive from screening status
-        score = a.screening_status === 'passed' ? 80 : a.screening_status === 'needs_review' ? 60 : 40;
+        score = a.screening_status === 'for_review' ? 80 : a.screening_status === 'in_progress' ? 60 : 40;
       }
       
       if (score >= 90) ranges[0].count++;
@@ -164,7 +163,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
   // Calculate average days for each stage
   const timelineAverages = useMemo(() => {
     // Resume review: applicants who have been screened (screened_at timestamp)
-    const passedApplicants = filteredApplicants.filter(a => a.screening_status === 'passed' && a.screened_at);
+    const forReviewApplicants = filteredApplicants.filter(a => a.screening_status === 'for_review' && a.screened_at);
     
     // Video complete: video assessments with submitted_at timestamp
     const videoCompleted = filteredApplicants.filter(a => a.video?.status === 'completed' && a.video?.submitted_at);
@@ -172,8 +171,8 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
     // Assessment complete: work_style_assessments with submitted_at timestamp
     const assessmentCompleted = filteredApplicants.filter(a => a.test?.status === 'completed' && a.test?.submitted_at);
     
-    const avgPassedDays = passedApplicants.length > 0
-      ? Math.round(passedApplicants.reduce((sum, a) => sum + daysBetween(a.created_at, a.screened_at || a.created_at), 0) / passedApplicants.length)
+    const avgForReviewDays = forReviewApplicants.length > 0
+      ? Math.round(forReviewApplicants.reduce((sum, a) => sum + daysBetween(a.created_at, a.screened_at || a.created_at), 0) / forReviewApplicants.length)
       : 1;
     
     const avgVideoDays = videoCompleted.length > 0
@@ -186,8 +185,8 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
       : 2;
     
     return {
-      resume: avgPassedDays,
-      videoInvite: Math.max(1, avgPassedDays),
+      resume: avgForReviewDays,
+      videoInvite: Math.max(1, avgForReviewDays),
       videoComplete: avgVideoDays,
       assessmentComplete: avgAssessmentDays,
     };
@@ -418,9 +417,9 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                       icon: Mail
                     },
                     { 
-                      stage: 'Passed', 
-                      count: filteredApplicants.filter(a => a.screening_status === 'passed').length,
-                      desc: 'Screening passed',
+                      stage: 'For Review', 
+                      count: filteredApplicants.filter(a => a.screening_status === 'for_review').length,
+                      desc: 'Ready for review',
                       color: 'bg-emerald-500',
                       icon: FileText
                     },
@@ -439,11 +438,11 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                       icon: ClipboardCheck
                     },
                     { 
-                      stage: 'Failed', 
-                      count: filteredApplicants.filter(a => a.screening_status === 'failed').length,
-                      desc: 'Screening failed',
-                      color: 'bg-red-500',
-                      icon: XCircle
+                      stage: 'In Progress', 
+                      count: filteredApplicants.filter(a => a.screening_status === 'in_progress').length,
+                      desc: 'Screening in progress',
+                      color: 'bg-blue-500',
+                      icon: Clock
                     },
                   ].map((item, idx) => (
                     <div key={idx} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
@@ -538,7 +537,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Performers</h3>
               <div className="space-y-3">
                 {filteredApplicants
-                  .filter(a => a.test?.status === 'completed' || a.video?.status === 'completed' || a.screening_status === 'passed')
+                  .filter(a => a.test?.status === 'completed' || a.video?.status === 'completed' || a.screening_status === 'for_review')
                   .slice(0, 5)
                   .map((applicant, idx) => (
                     <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
@@ -551,7 +550,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold text-blue-600">
-                          {applicant.test?.semantic_score ?? applicant.video?.transcript_score ?? applicant.screening_score ?? (applicant.screening_status === 'passed' ? 80 : applicant.screening_status === 'needs_review' ? 60 : 0)}
+                          {applicant.test?.semantic_score ?? applicant.video?.transcript_score ?? applicant.screening_score ?? (applicant.screening_status === 'for_review' ? 80 : applicant.screening_status === 'in_progress' ? 60 : 0)}
                         </p>
                         <p className="text-xs text-gray-400">score</p>
                       </div>

@@ -9,6 +9,7 @@ import {
   Award,
   Check,
   AlertCircle,
+  Clock,
 } from 'lucide-react';
 import { Applicant, Resume } from '../lib/supabase';
 
@@ -18,7 +19,7 @@ interface ScreenedApplicant extends Applicant {
   skills_score?: number;
   experience_score?: number;
   education_score?: number;
-  screening_status?: 'passed' | 'needs_review' | 'failed';
+  screening_status?: 'for_review' | 'in_progress';
   screening_stage?: 'screened' | 'review' | 'shortlisted';
   screened_at?: string;
   matched_skills?: string[];
@@ -34,31 +35,24 @@ interface StatusConfig {
 }
 
 const STATUS_CONFIGS: Record<string, StatusConfig> = {
-  passed: {
-    label: 'Passed',
-    bg: 'bg-green-50',
-    text: 'text-green-700',
-    border: 'border-green-200',
-    icon: CheckCircle,
-  },
-  needs_review: {
-    label: 'Needs Review',
+  for_review: {
+    label: 'For Review',
     bg: 'bg-yellow-50',
     text: 'text-yellow-700',
     border: 'border-yellow-200',
     icon: AlertCircle,
   },
-  failed: {
-    label: 'Failed',
-    bg: 'bg-red-50',
-    text: 'text-red-700',
-    border: 'border-red-200',
-    icon: XCircle,
+  in_progress: {
+    label: 'In Progress',
+    bg: 'bg-blue-50',
+    text: 'text-blue-700',
+    border: 'border-blue-200',
+    icon: Clock,
   },
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const config = STATUS_CONFIGS[status] || STATUS_CONFIGS.failed;
+  const config = STATUS_CONFIGS[status] || STATUS_CONFIGS.in_progress;
   const Icon = config.icon;
 
   return (
@@ -72,15 +66,11 @@ function StatusBadge({ status }: { status: string }) {
 interface ScreeningDetailModalProps {
   applicant: ScreenedApplicant;
   onClose: () => void;
-  onApprove: (id: string) => void;
-  onReject: (id: string) => void;
 }
 
 export function ScreeningDetailModal({
   applicant,
   onClose,
-  onApprove,
-  onReject,
 }: ScreeningDetailModalProps) {
   const hasResumeData = applicant.resume?.parsed_data && typeof applicant.resume?.parsed_data === 'object';
   const parsedData = hasResumeData ? applicant.resume?.parsed_data : null;
@@ -200,41 +190,27 @@ export function ScreeningDetailModal({
           </div>
 
           {/* Summary */}
-          {applicant.screening_status === 'passed' && (
-            <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-              <h4 className="text-sm font-semibold text-green-800 mb-2 flex items-center gap-2">
-                <Check className="w-4 h-4" />
-                Why This Candidate Passed
-              </h4>
-              <p className="text-sm text-green-700">
-                Strong overall profile with {Math.round(applicant.overall_score || 0)}% score. Candidate demonstrates adequate qualifications 
-                and meets the minimum requirements for the {applicant.position} position.
-              </p>
-            </div>
-          )}
-
-          {applicant.screening_status === 'failed' && (
-            <div className="bg-red-50 rounded-xl p-4 border border-red-100">
-              <h4 className="text-sm font-semibold text-red-800 mb-2 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" />
-                Why This Candidate Did Not Pass
-              </h4>
-              <p className="text-sm text-red-700">
-                Overall score of {Math.round(applicant.overall_score || 0)}% is below the minimum threshold. Key areas for improvement include 
-                {missingSkills.length > 0 ? ` missing skills: ${missingSkills.slice(0, 3).join(', ')}` : ' overall qualification alignment'}.
-              </p>
-            </div>
-          )}
-
-          {applicant.screening_status === 'needs_review' && (
+          {applicant.screening_status === 'for_review' && (
             <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-100">
               <h4 className="text-sm font-semibold text-yellow-800 mb-2 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" />
                 Requires Human Review
               </h4>
               <p className="text-sm text-yellow-700">
-                This candidate has an ambiguous profile with {Math.round(applicant.overall_score || 0)}% score. 
+                This candidate has completed video and work style assessments with a score of {Math.round(applicant.overall_score || 0)}%. 
                 Manual review is recommended to make a final determination.
+              </p>
+            </div>
+          )}
+
+          {applicant.screening_status === 'in_progress' && (
+            <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+              <h4 className="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Assessment In Progress
+              </h4>
+              <p className="text-sm text-blue-700">
+                This candidate is still completing required assessments. Current score: {Math.round(applicant.overall_score || 0)}%.
               </p>
             </div>
           )}
@@ -250,20 +226,9 @@ export function ScreeningDetailModal({
             })}
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => onReject(applicant.id)}
-              className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-            >
-              <XCircle className="w-4 h-4" />
-              Reject
-            </button>
-            <button
-              onClick={() => onApprove(applicant.id)}
-              className="px-4 py-2 bg-green-600 text-white hover:bg-green-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-            >
-              <CheckCircle className="w-4 h-4" />
-              Approve
-            </button>
+            <span className="text-sm text-gray-500">
+              Status: <span className="font-medium text-gray-700">{applicant.screening_status === 'for_review' ? 'For Review' : 'In Progress'}</span>
+            </span>
           </div>
         </div>
       </div>

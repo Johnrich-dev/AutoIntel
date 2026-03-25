@@ -46,7 +46,7 @@ interface NeedsReviewApplicant {
   experience_score?: number;
   education_score?: number;
   projects_score?: number;
-  screening_status?: 'needs_review';
+  screening_status?: 'for_review';
   screened_at?: string;
   matched_skills?: string[];
   missing_skills?: string[];

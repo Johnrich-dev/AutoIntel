@@ -6,7 +6,7 @@ interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
   video?: VideoAssessment;
   test?: PersonalityTest;
-  screening_status?: 'passed' | 'needs_review' | 'failed';
+  screening_status?: 'for_review' | 'in_progress';
   screening_stage?: 'screened' | 'review' | 'shortlisted';
 }
 
@@ -66,21 +66,20 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
   const kpis = useMemo(() => {
     const total = filteredApplicants.length;
     // Use screening_status from ScreeningResults
-    const passed = filteredApplicants.filter(a => a.screening_status === 'passed').length;
-    const needsReview = filteredApplicants.filter(a => a.screening_status === 'needs_review').length;
-    const failed = filteredApplicants.filter(a => a.screening_status === 'failed').length;
+    const forReview = filteredApplicants.filter(a => a.screening_status === 'for_review').length;
+    const inProgress = filteredApplicants.filter(a => a.screening_status === 'in_progress').length;
     
-    return { total, passed, needsReview, failed };
+    return { total, forReview, inProgress };
   }, [filteredApplicants]);
 
   // Funnel stages - Using AdminScoringSettings colors (Blue, Purple, Teal, Orange, Green)
   const funnelStages = useMemo(() => {
-    const interviewCount = kpis.passed > 0 ? Math.floor(kpis.passed * 0.6) : 0;
+    const interviewCount = kpis.forReview > 0 ? Math.floor(kpis.forReview * 0.6) : 0;
     const hiredCount = interviewCount > 0 ? Math.floor(interviewCount * 0.5) : 0;
     return [
       { name: 'Applicants', count: kpis.total, color: '#BFDBFE', textColor: '#1E40AF' },
-      { name: 'Screened', count: kpis.passed + kpis.failed, color: '#E9D5FF', textColor: '#7E22CE' },
-      { name: 'Shortlisted', count: kpis.passed, color: '#99F6E4', textColor: '#0F766E' },
+      { name: 'Screened', count: kpis.forReview + kpis.inProgress, color: '#E9D5FF', textColor: '#7E22CE' },
+      { name: 'For Review', count: kpis.forReview, color: '#99F6E4', textColor: '#0F766E' },
       { name: 'Interview', count: interviewCount, color: '#FED7AA', textColor: '#C2410C' },
       { name: 'Hired', count: hiredCount, color: '#BBF7D0', textColor: '#15803D' },
     ];
@@ -89,7 +88,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
   // Applicants needing review
   const needsReviewApplicants = useMemo(() => {
     return filteredApplicants
-      .filter(a => a.screening_status === 'needs_review' || !a.resume || a.resume.status === 'pending')
+      .filter(a => a.screening_status === 'for_review')
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 10);
   }, [filteredApplicants]);
@@ -99,9 +98,8 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
     return [...filteredApplicants]
       .filter(a => {
         if (statusFilter === 'all') return true;
-        if (statusFilter === 'needs_review') return !a.resume || a.resume.status === 'pending';
-        if (statusFilter === 'passed') return a.resume?.status === 'suitable';
-        if (statusFilter === 'failed') return a.resume?.status === 'not_suitable';
+        if (statusFilter === 'for_review') return a.screening_status === 'for_review';
+        if (statusFilter === 'in_progress') return a.screening_status === 'in_progress';
         return true;
       })
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -111,23 +109,14 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
   // Get status info - Using AdminScoringSettings colors (Yellow, Green, Red)
   const getStatusInfo = (applicant: ApplicantWithDetails) => {
     // Use screening_status from ScreeningResults
-    if (applicant.screening_status === 'passed') {
-      return { label: 'Passed', bgColor: '#D1FAE5', textColor: '#065F46', icon: CheckCircle };
+    if (applicant.screening_status === 'for_review') {
+      return { label: 'For Review', bgColor: '#FEF3C7', textColor: '#92400E', icon: AlertCircle };
     }
-    if (applicant.screening_status === 'failed') {
-      return { label: 'Failed', bgColor: '#FEE2E2', textColor: '#991B1B', icon: XCircle };
+    if (applicant.screening_status === 'in_progress') {
+      return { label: 'In Progress', bgColor: '#DBEAFE', textColor: '#1E40AF', icon: CheckCircle };
     }
-    if (applicant.screening_status === 'needs_review') {
-      return { label: 'Needs Review', bgColor: '#FEF3C7', textColor: '#92400E', icon: AlertCircle };
-    }
-    // Fallback to resume status
-    if (!applicant.resume || applicant.resume.status === 'pending') {
-      return { label: 'Needs Review', bgColor: '#FEF3C7', textColor: '#92400E', icon: AlertCircle };
-    }
-    if (applicant.resume.status === 'suitable') {
-      return { label: 'Passed', bgColor: '#D1FAE5', textColor: '#065F46', icon: CheckCircle };
-    }
-    return { label: 'Failed', bgColor: '#FEE2E2', textColor: '#991B1B', icon: XCircle };
+    // Fallback - if no status, treat as in progress
+    return { label: 'In Progress', bgColor: '#DBEAFE', textColor: '#1E40AF', icon: CheckCircle };
   };
 
   const getRelativeTime = (dateString: string | null | undefined): string => {
