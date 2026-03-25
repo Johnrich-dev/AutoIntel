@@ -4,17 +4,13 @@ import {
   X,
   Mail,
   Phone,
-  MapPin,
   Calendar,
   Briefcase,
   FileText,
   Star,
-  Tag,
   Clock,
   CheckCircle,
   AlertCircle,
-  ChevronRight,
-  Trash2,
   Plus,
   Download,
   ExternalLink,
@@ -30,12 +26,7 @@ import {
   ChevronDown,
   Sparkles,
   Brain,
-  ListChecks,
-  TrendingUp,
-  Clock3,
-  MessageSquare,
-  Video,
-  ClipboardCheck
+  TrendingUp
 } from 'lucide-react';
 import { Applicant, Resume, ResumeParsedData } from '../lib/supabase';
 
