@@ -29,6 +29,9 @@ export function RulesAndTerms({ onAccept }: RulesAndTermsProps) {
 
       if (error) throw error;
 
+      // Save to localStorage for reliable tracking
+      localStorage.setItem('rules_accepted', 'true');
+      
       updateApplicant({
         rules_accepted: true,
         rules_accepted_at: new Date().toISOString(),

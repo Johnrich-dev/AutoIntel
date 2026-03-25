@@ -159,6 +159,23 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
   const progressPercent = Math.round((completedCount / totalAssessments) * 100);
   const expiryHours = getExpiryHours();
   const isExpiringSoon = expiryHours < 24;
+  const hasProfilePhoto = !!applicant?.photo_url;
+
+  const handleStartVideo = () => {
+    if (!hasProfilePhoto) {
+      alert('Please upload a profile photo before starting the Video Assessment.');
+      return;
+    }
+    onStartVideo();
+  };
+
+  const handleStartPersonalityTest = () => {
+    if (!hasProfilePhoto) {
+      alert('Please upload a profile photo before starting the Work Style Assessment.');
+      return;
+    }
+    onStartPersonalityTest();
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -292,7 +309,15 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
           
           {/* Integrated instruction text */}
           <p className="text-sm text-gray-500 mb-3">
-            Please complete all required assessments before the access token expires.
+            {!hasProfilePhoto ? (
+              <span className="text-amber-600 font-medium">
+                ⚠️ Please upload your profile photo first to unlock assessments.
+              </span>
+            ) : (
+              <span>
+                Please complete all required assessments before the access token expires.
+              </span>
+            )}
           </p>
           
           {/* Progress Bar */}
@@ -345,8 +370,11 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
                 </div>
               ) : (
                 <button
-                  onClick={onStartVideo}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-5 rounded-lg transition-colors text-sm max-w-[160px] flex items-center justify-center gap-2"
+                  onClick={handleStartVideo}
+                  disabled={!hasProfilePhoto}
+                  className={`bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-5 rounded-lg transition-colors text-sm max-w-[160px] flex items-center justify-center gap-2 ${
+                    !hasProfilePhoto ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 >
                   Start Assessment
                   <ArrowRight className="w-4 h-4" />
@@ -391,8 +419,11 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
                 </div>
               ) : (
                 <button
-                  onClick={onStartPersonalityTest}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-5 rounded-lg transition-colors text-sm max-w-[160px] flex items-center justify-center gap-2"
+                  onClick={handleStartPersonalityTest}
+                  disabled={!hasProfilePhoto}
+                  className={`bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-5 rounded-lg transition-colors text-sm max-w-[160px] flex items-center justify-center gap-2 ${
+                    !hasProfilePhoto ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 >
                   Start Assessment
                   <ArrowRight className="w-4 h-4" />

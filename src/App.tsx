@@ -42,6 +42,12 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    // Debug: log current state
+    console.log('[ViewEffect] loading:', loading, 'applicant:', !!applicant, 'view:', view);
+    
+    // Skip if still loading or no applicant yet
+    if (loading || !applicant) return;
+    
     const urlParams = new URLSearchParams(window.location.search);
     const mode = urlParams.get('mode');
 
@@ -57,14 +63,25 @@ function AppContent() {
       return;
     }
 
-    if (applicant && !loading) {
-      if (!applicant.rules_accepted) {
-        setView('rules');
-      } else {
-        setView('dashboard');
-      }
-    } else if (!loading) {
-      setView('choice');
+    // Check localStorage first for rules acceptance (more reliable)
+    const localRulesAccepted = localStorage.getItem('rules_accepted') === 'true';
+    
+    // Also check database value
+    const dbRulesAccepted = applicant.rules_accepted === true;
+    
+    // Use localStorage as the primary check, fallback to database
+    const rulesAccepted = localRulesAccepted || dbRulesAccepted;
+    
+    console.log('[ViewEffect] localStorage rules_accepted:', localRulesAccepted);
+    console.log('[ViewEffect] database rules_accepted:', dbRulesAccepted);
+    console.log('[ViewEffect] final rulesAccepted:', rulesAccepted);
+    
+    if (!rulesAccepted) {
+      console.log('[ViewEffect] Setting view to rules');
+      setView('rules');
+    } else {
+      console.log('[ViewEffect] Setting view to dashboard');
+      setView('dashboard');
     }
   }, [applicant, loading, isAdminAuthenticated]);
 
@@ -107,10 +124,15 @@ function AppContent() {
     return <AdminDashboard />;
   }
 
+  // Early return for unauthenticated state
   if (!applicant) {
-    return <ApplicantLogin onLoginSuccess={() => setView('rules')} />;
+    return <ApplicantLogin onLoginSuccess={() => {
+      // Don't do anything here - the useEffect will detect the new applicant
+      // and set the correct view based on rules_accepted
+    }} />;
   }
 
+  // Handle specific views - only if applicant is authenticated
   if (view === 'rules') {
     return <RulesAndTerms onAccept={() => setView('dashboard')} />;
   }
@@ -133,6 +155,7 @@ function AppContent() {
     );
   }
 
+  // Default to assessment dashboard
   return (
     <AssessmentDashboard
       onStartVideo={() => setView('video')}

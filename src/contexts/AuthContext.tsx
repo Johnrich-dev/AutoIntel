@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (token: string, email: string): Promise<boolean> => {
     setLoading(true);
-    console.log('Attempting login with token:', token, 'email:', email);
+    console.log('[Login] Attempting login with token:', token, 'email:', email);
     try {
       const client = getSupabaseClient(token);
       const { data, error } = await client
@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('email', email)
         .maybeSingle();
 
-      console.log('Query result - data:', data, 'error:', error);
+      console.log('[Login] Query result - data:', data, 'error:', error);
 
       if (error) throw error;
 
