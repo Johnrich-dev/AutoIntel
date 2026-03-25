@@ -253,3 +253,43 @@ export interface JobPostingFormData {
   min_years_experience: number | '';
   max_years_experience: number | '';
 }
+
+export interface AdminUserWithSettings {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  created_at: string;
+  last_login_at: string | null;
+  // General Settings
+  company_name: string;
+  timezone: string;
+  date_format: string;
+  language: string;
+  // Notification Settings
+  email_new_applicant: boolean;
+  email_assessment_complete: boolean;
+  email_daily_digest: boolean;
+  browser_notifications: boolean;
+  slack_webhook: string | null;
+  // Security Settings
+  two_factor_auth: boolean;
+  password_expiry: string;
+  session_timeout: string;
+  ip_whitelist: string | null;
+  // Scoring Weights
+  resume_weight: number;
+  video_weight: number;
+  profile_weight: number;
+  auto_reject_threshold: number;
+  auto_shortlist_threshold: number;
+  // Appearance Settings
+  theme: string;
+  sidebar_collapsed: boolean;
+  compact_view: boolean;
+  // Advanced Settings
+  data_retention: string;
+  auto_archive: boolean;
+  api_access: boolean;
+  debug_mode: boolean;
+}
