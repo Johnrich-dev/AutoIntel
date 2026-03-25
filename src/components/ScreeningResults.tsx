@@ -272,6 +272,9 @@ export function ScreeningResults() {
           let matchedSkills: string[] = [];
           let missingSkills: string[] = [];
           
+          // Common technical skills to look for in resumes
+          const commonSkills = ['Python', 'SQL', 'Java', 'JavaScript', 'TypeScript', 'React', 'Node.js', 'AWS', 'Azure', 'GCP', 'Docker', 'Kubernetes', 'Spark', 'Hadoop', 'TensorFlow', 'PyTorch', 'Machine Learning', 'Deep Learning', 'NLP', 'PostgreSQL', 'MySQL', 'MongoDB', 'Tableau', 'PowerBI', 'Excel', 'Airflow', 'Snowflake', 'Kafka', 'Git', 'Linux', 'Agile', 'Scrum'];
+          
           // Use real component scores from resume_scores if available
           let skillsScore = resumeScore?.skills_score ?? 0;
           let experienceScore = resumeScore?.experience_score ?? 0;
@@ -280,17 +283,69 @@ export function ScreeningResults() {
           // If no resume scores, calculate from resume parsed data
           if (!resumeScore && resume?.parsed_data && typeof resume.parsed_data === 'object') {
             const parsedData = resume.parsed_data as any;
+            
+            // Try to extract skills from various possible structures
             if (parsedData.skills?.hard_skills) {
-              matchedSkills = parsedData.skills.hard_skills.slice(0, 5);
+              matchedSkills = parsedData.skills.hard_skills.slice(0, 10);
+            } else if (parsedData.skills) {
+              // Try different skill structures
+              const skillsObj = parsedData.skills;
+              if (Array.isArray(skillsObj)) {
+                matchedSkills = skillsObj.slice(0, 10);
+              } else if (typeof skillsObj === 'object') {
+                matchedSkills = Object.values(skillsObj).flat().slice(0, 10) as string[];
+              }
             }
+            
+            // If still no skills, search the entire parsed data for skill keywords
+            if (matchedSkills.length === 0) {
+              const parsedString = JSON.stringify(parsedData).toLowerCase();
+              matchedSkills = commonSkills.filter(skill => 
+                parsedString.includes(skill.toLowerCase())
+              ).slice(0, 10);
+            }
+            
             const totalSkills = matchedSkills.length;
-            skillsScore = Math.min((totalSkills / 20) * 100, 100);
+            skillsScore = Math.min((totalSkills / 15) * 100, 100);
             
             const expCount = parsedData.experience?.length || 0;
             experienceScore = Math.min((expCount / 5) * 100, 100);
             
             const eduCount = parsedData.education?.length || 0;
             educationScore = Math.min((eduCount / 3) * 100, 100);
+            
+            // Determine missing skills based on position
+            if (applicant.position) {
+              const positionLower = applicant.position.toLowerCase();
+              let requiredSkills: string[] = [];
+              
+              if (positionLower.includes('data engineer') || positionLower.includes('data eng')) {
+                requiredSkills = ['Python', 'SQL', 'Spark', 'Airflow', 'AWS', 'Kafka'];
+              } else if (positionLower.includes('data scientist') || positionLower.includes('data science')) {
+                requiredSkills = ['Python', 'Machine Learning', 'TensorFlow', 'SQL', 'Statistics'];
+              } else if (positionLower.includes('data analyst')) {
+                requiredSkills = ['Excel', 'SQL', 'Tableau', 'PowerBI', 'Python'];
+              } else if (positionLower.includes('backend') || positionLower.includes('backend developer')) {
+                requiredSkills = ['Python', 'Java', 'Node.js', 'PostgreSQL', 'Docker'];
+              } else if (positionLower.includes('frontend') || positionLower.includes('frontend developer')) {
+                requiredSkills = ['JavaScript', 'React', 'TypeScript', 'CSS', 'HTML'];
+              } else if (positionLower.includes('full stack')) {
+                requiredSkills = ['JavaScript', 'React', 'Node.js', 'SQL', 'Docker'];
+              } else if (positionLower.includes('devops')) {
+                requiredSkills = ['Docker', 'Kubernetes', 'AWS', 'Linux', 'CI/CD'];
+              } else if (positionLower.includes('ml') || positionLower.includes('machine learning')) {
+                requiredSkills = ['Python', 'TensorFlow', 'PyTorch', 'Machine Learning', 'SQL'];
+              } else {
+                // Default requirements based on common tech stack
+                requiredSkills = ['Python', 'SQL', 'JavaScript', 'Git'];
+              }
+              
+              // Find missing skills (required but not in matched)
+              const matchedLower = matchedSkills.map(s => s.toLowerCase());
+              missingSkills = requiredSkills.filter(skill => 
+                !matchedLower.some(ms => ms.includes(skill.toLowerCase()) || skill.toLowerCase().includes(ms))
+              );
+            }
           }
           
           return {

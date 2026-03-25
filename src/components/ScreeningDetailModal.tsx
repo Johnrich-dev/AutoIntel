@@ -10,6 +10,7 @@ import {
   Check,
   AlertCircle,
   Clock,
+  Lightbulb,
 } from 'lucide-react';
 import { Applicant, Resume } from '../lib/supabase';
 
@@ -61,6 +62,71 @@ function StatusBadge({ status }: { status: string }) {
       {config.label}
     </span>
   );
+}
+
+// Helper functions for AI insights
+function getAlternativeRoles(skills: string[]): string[] {
+  const skillLower = skills.map(s => s.toLowerCase());
+  
+  const roleMappings: Record<string, string[]> = {
+    'python': ['Data Scientist', 'ML Engineer', 'Backend Developer'],
+    'sql': ['Data Analyst', 'Business Analyst', 'Database Administrator'],
+    'tableau': ['Data Analyst', 'BI Developer', 'Analytics Manager'],
+    'powerbi': ['BI Analyst', 'Data Analyst', 'Analytics Manager'],
+    'excel': ['Data Analyst', 'Financial Analyst', 'Business Analyst'],
+    'machine learning': ['ML Engineer', 'Data Scientist', 'AI Developer'],
+    'deep learning': ['AI Engineer', 'Data Scientist', 'Research Scientist'],
+    'nlp': ['NLP Engineer', 'AI Developer', 'Computational Linguist'],
+    'aws': ['Cloud Engineer', 'DevOps Engineer', 'Solutions Architect'],
+    'azure': ['Cloud Developer', 'Data Engineer', 'Solutions Architect'],
+    'gcp': ['Cloud Engineer', 'Data Engineer', 'ML Engineer'],
+    'spark': ['Data Engineer', 'Big Data Developer', 'ML Engineer'],
+    'hadoop': ['Big Data Engineer', 'Data Scientist', 'Systems Administrator'],
+    'kafka': ['Data Engineer', 'Backend Developer', 'DevOps Engineer'],
+    'airflow': ['Data Engineer', 'ML Ops Engineer', 'Analytics Engineer'],
+    'docker': ['DevOps Engineer', 'Backend Developer', 'Cloud Engineer'],
+    'kubernetes': ['DevOps Engineer', 'Cloud Engineer', 'Platform Engineer'],
+    'snowflake': ['Data Engineer', 'Analytics Engineer', 'BI Developer'],
+    'postgresql': ['Backend Developer', 'Database Administrator', 'Data Engineer'],
+    'mongodb': ['Backend Developer', 'Full Stack Developer', 'Data Engineer'],
+  };
+
+  const roles = new Set<string>();
+  
+  for (const skill of skillLower) {
+    for (const [key, value] of Object.entries(roleMappings)) {
+      if (skill.includes(key) || key.includes(skill)) {
+        value.forEach(role => roles.add(role));
+      }
+    }
+  }
+
+  const defaultRoles = ['Data Analyst', 'Business Analyst', 'Junior Developer', 'Technical Support'];
+  
+  if (roles.size === 0) {
+    return defaultRoles.slice(0, 3);
+  }
+
+  return Array.from(roles).slice(0, 3);
+}
+
+function getStrengthsInsight(applicant: ScreenedApplicant): string {
+  const scores = [
+    { name: 'Skills', score: applicant.skills_score || 0 },
+    { name: 'Experience', score: applicant.experience_score || 0 },
+    { name: 'Education', score: applicant.education_score || 0 },
+  ].sort((a, b) => b.score - a.score);
+
+  const topStrength = scores[0];
+  const secondStrength = scores[1];
+
+  if (topStrength.score >= 80) {
+    return `Strong ${topStrength.name.toLowerCase()} foundation (${Math.round(topStrength.score)}%). ${secondStrength.name.toLowerCase()} is also solid at ${Math.round(secondStrength.score)}%.`;
+  } else if (topStrength.score >= 60) {
+    return `Good potential in ${topStrength.name.toLowerCase()} (${Math.round(topStrength.score)}%). Consider developing ${secondStrength.name.toLowerCase()} skills further.`;
+  } else {
+    return `Area for growth across all dimensions. Recommended to focus on foundational skills development before advancing to senior roles.`;
+  }
 }
 
 interface ScreeningDetailModalProps {
@@ -214,6 +280,47 @@ export function ScreeningDetailModal({
               </p>
             </div>
           )}
+
+          {/* AI Insights */}
+          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-4 border border-purple-100">
+            <h4 className="text-sm font-semibold text-purple-800 mb-3 flex items-center gap-2">
+              <Lightbulb className="w-4 h-4" />
+              AI Career Insights
+            </h4>
+            <div className="space-y-3">
+              <div className="bg-white/70 rounded-lg p-3">
+                <p className="text-xs font-medium text-purple-700 mb-1">Alternative Roles</p>
+                <p className="text-sm text-gray-700">
+                  {matchedSkills.length > 0 
+                    ? `Based on the applicant's skills profile (${matchedSkills.slice(0, 5).join(', ')}), they could also excel in:`
+                    : 'Based on the applicant\'s experience and background, they could also excel in:'
+                  }
+                </p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {getAlternativeRoles(matchedSkills).map((role, idx) => (
+                    <span key={idx} className="px-2 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
+                      {role}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-white/70 rounded-lg p-3">
+                <p className="text-xs font-medium text-purple-700 mb-1">Strengths</p>
+                <p className="text-sm text-gray-700">
+                  {getStrengthsInsight(applicant)}
+                </p>
+              </div>
+              {matchedSkills.length > 0 && missingSkills.length > 0 && (
+                <div className="bg-white/70 rounded-lg p-3">
+                  <p className="text-xs font-medium text-purple-700 mb-1">Growth Potential</p>
+                  <p className="text-sm text-gray-700">
+                    With {matchedSkills.length} matched skills, this candidate shows strong alignment with technical requirements. 
+                    Consider upskilling in {missingSkills.slice(0, 2).join(', ')} to unlock more senior opportunities.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Actions */}
