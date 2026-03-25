@@ -211,17 +211,35 @@ export function ScreeningResults() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (applicantsError) throw applicantsError;
+      if (applicantsError) {
+        console.error('Error loading applicants:', applicantsError);
+        throw applicantsError;
+      }
+      
+      console.log('Loaded applicants:', applicantsData?.length);
 
       // Load resumes
-      const { data: resumesData } = await adminClient
+      const { data: resumesData, error: resumesError } = await adminClient
         .from('resumes')
         .select('*');
+
+      if (resumesError) {
+        console.error('Error loading resumes:', resumesError);
+      }
+      
+      console.log('Loaded resumes:', resumesData?.length);
 
       // Load resume scores for component scores
       const { data: resumeScoresData } = await adminClient
         .from('resume_scores')
         .select('*');
+
+      // Load job postings to get required skills for each position
+      const { data: jobPostingsData } = await adminClient
+        .from('job_postings')
+        .select('id, title, skills');
+
+      console.log('Loaded job postings:', jobPostingsData?.length);
 
       // Load video assessments to check if applicant has submitted video
       const { data: videoAssessmentsData } = await adminClient
@@ -280,22 +298,49 @@ export function ScreeningResults() {
           let experienceScore = resumeScore?.experience_score ?? 0;
           let educationScore = resumeScore?.education_score ?? 0;
           
-          // If no resume scores, calculate from resume parsed data
-          if (!resumeScore && resume?.parsed_data && typeof resume.parsed_data === 'object') {
-            const parsedData = resume.parsed_data as any;
-            
-            // Try to extract skills from various possible structures
-            if (parsedData.skills?.hard_skills) {
-              matchedSkills = parsedData.skills.hard_skills.slice(0, 10);
-            } else if (parsedData.skills) {
-              // Try different skill structures
-              const skillsObj = parsedData.skills;
-              if (Array.isArray(skillsObj)) {
-                matchedSkills = skillsObj.slice(0, 10);
-              } else if (typeof skillsObj === 'object') {
-                matchedSkills = Object.values(skillsObj).flat().slice(0, 10) as string[];
+          // Always try to extract skills from resume parsed data if available
+          let parsedData: any = null;
+          
+          // Handle both object and string formats for parsed_data
+          if (resume?.parsed_data) {
+            if (typeof resume.parsed_data === 'object') {
+              parsedData = resume.parsed_data;
+            } else if (typeof resume.parsed_data === 'string') {
+              try {
+                parsedData = JSON.parse(resume.parsed_data);
+              } catch (e) {
+                console.error('Failed to parse resume parsed_data:', e);
               }
             }
+          }
+          
+          if (parsedData) {
+            console.log('Found resume with parsed_data for applicant:', applicant.name, 'position:', applicant.position);
+            console.log('Parsed data keys:', Object.keys(parsedData));
+            
+            // Try to extract skills from various possible structures
+            // 1. Old format: parsedData.skills.hard_skills
+            if (parsedData.skills?.hard_skills && Array.isArray(parsedData.skills.hard_skills)) {
+              console.log('Found hard_skills:', parsedData.skills.hard_skills);
+              matchedSkills = parsedData.skills.hard_skills.slice(0, 10);
+            } 
+            // 2. New NER format: parsedData.skills is a dict like {category: [skills]}
+            else if (parsedData.skills && typeof parsedData.skills === 'object' && !Array.isArray(parsedData.skills)) {
+              console.log('Found skills object (NER format):', parsedData.skills);
+              const allSkills: string[] = [];
+              Object.values(parsedData.skills).forEach((value: any) => {
+                if (Array.isArray(value)) {
+                  allSkills.push(...value);
+                } else if (typeof value === 'string') {
+                  allSkills.push(value);
+                }
+              });
+              matchedSkills = allSkills.slice(0, 10);
+            }
+            
+            console.log('Matched skills after extraction:', matchedSkills);
+            
+            console.log('Matched skills after extraction:', matchedSkills);
             
             // If still no skills, search the entire parsed data for skill keywords
             if (matchedSkills.length === 0) {
@@ -305,14 +350,17 @@ export function ScreeningResults() {
               ).slice(0, 10);
             }
             
-            const totalSkills = matchedSkills.length;
-            skillsScore = Math.min((totalSkills / 15) * 100, 100);
-            
-            const expCount = parsedData.experience?.length || 0;
-            experienceScore = Math.min((expCount / 5) * 100, 100);
-            
-            const eduCount = parsedData.education?.length || 0;
-            educationScore = Math.min((eduCount / 3) * 100, 100);
+            // If no resume scores, calculate from resume parsed data
+            if (skillsScore === 0 && experienceScore === 0 && educationScore === 0) {
+              const totalSkills = matchedSkills.length;
+              skillsScore = Math.min((totalSkills / 15) * 100, 100);
+              
+              const expCount = parsedData.experience?.length || 0;
+              experienceScore = Math.min((expCount / 5) * 100, 100);
+              
+              const eduCount = parsedData.education?.length || 0;
+              educationScore = Math.min((eduCount / 3) * 100, 100);
+            }
             
             // Determine missing skills based on position
             if (applicant.position) {
@@ -340,12 +388,43 @@ export function ScreeningResults() {
                 requiredSkills = ['Python', 'SQL', 'JavaScript', 'Git'];
               }
               
+              // First, try to get skills from job_postings table (AdminJobManagement)
+              if (jobPostingsData && applicant.position) {
+                const matchingJob = jobPostingsData.find(job => 
+                  job.title && applicant.position && 
+                  job.title.toLowerCase() === applicant.position.toLowerCase()
+                );
+                
+                if (matchingJob && matchingJob.skills && Array.isArray(matchingJob.skills) && matchingJob.skills.length > 0) {
+                  console.log('Using job posting skills for', applicant.position, ':', matchingJob.skills);
+                  requiredSkills = matchingJob.skills;
+                } else {
+                  // Try partial match
+                  const partialMatch = jobPostingsData.find(job => 
+                    job.title && applicant.position && 
+                    job.title.toLowerCase().includes(applicant.position.toLowerCase()) ||
+                    applicant.position.toLowerCase().includes(job.title?.toLowerCase() || '')
+                  );
+                  if (partialMatch && partialMatch.skills && Array.isArray(partialMatch.skills) && partialMatch.skills.length > 0) {
+                    console.log('Using partial match job posting skills for', applicant.position, ':', partialMatch.skills);
+                    requiredSkills = partialMatch.skills;
+                  }
+                }
+              }
+              
               // Find missing skills (required but not in matched)
               const matchedLower = matchedSkills.map(s => s.toLowerCase());
               missingSkills = requiredSkills.filter(skill => 
                 !matchedLower.some(ms => ms.includes(skill.toLowerCase()) || skill.toLowerCase().includes(ms))
               );
             }
+          }
+          
+          // If still no scores at all, use overall score as a fallback for all
+          if (skillsScore === 0 && experienceScore === 0 && educationScore === 0 && overallScore > 0) {
+            skillsScore = Math.min(overallScore, 100);
+            experienceScore = Math.min(overallScore - 10, 100);
+            educationScore = Math.min(overallScore - 20, 100);
           }
           
           return {

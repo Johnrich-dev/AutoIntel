@@ -110,24 +110,36 @@ function getAlternativeRoles(skills: string[]): string[] {
   return Array.from(roles).slice(0, 3);
 }
 
-function getStrengthsInsight(applicant: ScreenedApplicant): string {
-  const scores = [
-    { name: 'Skills', score: applicant.skills_score || 0 },
-    { name: 'Experience', score: applicant.experience_score || 0 },
-    { name: 'Education', score: applicant.education_score || 0 },
-  ].sort((a, b) => b.score - a.score);
+  // Get strengths insight based on available scores
+  const getStrengthsInsight = (applicant: ScreenedApplicant): string => {
+    const skills = applicant.skills_score || 0;
+    const experience = applicant.experience_score || 0;
+    const education = applicant.education_score || 0;
+    const overall = applicant.overall_score || 0;
+    
+    // If no scores at all, provide a generic insight
+    if (skills === 0 && experience === 0 && education === 0) {
+      return 'No detailed score data available. The overall screening score is ' + Math.round(overall) + '%.';
+    }
+    
+    // Find highest score
+    const scores = [
+      { name: 'Skills', score: skills },
+      { name: 'Experience', score: experience },
+      { name: 'Education', score: education },
+    ].sort((a, b) => b.score - a.score);
 
-  const topStrength = scores[0];
-  const secondStrength = scores[1];
+    const topStrength = scores[0];
+    const secondStrength = scores[1];
 
-  if (topStrength.score >= 80) {
-    return `Strong ${topStrength.name.toLowerCase()} foundation (${Math.round(topStrength.score)}%). ${secondStrength.name.toLowerCase()} is also solid at ${Math.round(secondStrength.score)}%.`;
-  } else if (topStrength.score >= 60) {
-    return `Good potential in ${topStrength.name.toLowerCase()} (${Math.round(topStrength.score)}%). Consider developing ${secondStrength.name.toLowerCase()} skills further.`;
-  } else {
-    return `Area for growth across all dimensions. Recommended to focus on foundational skills development before advancing to senior roles.`;
-  }
-}
+    if (topStrength.score >= 80) {
+      return `Strong ${topStrength.name.toLowerCase()} foundation (${Math.round(topStrength.score)}%). ${secondStrength.name.toLowerCase()} is also solid at ${Math.round(secondStrength.score)}%. Overall score: ${Math.round(overall)}%.`;
+    } else if (topStrength.score >= 60) {
+      return `Good potential in ${topStrength.name.toLowerCase()} (${Math.round(topStrength.score)}%). Consider developing ${secondStrength.name.toLowerCase()} skills further. Overall score: ${Math.round(overall)}%.`;
+    } else {
+      return `Area for growth across all dimensions. Overall score: ${Math.round(overall)}%. Recommended to focus on foundational skills development.`;
+    }
+  };
 
 interface ScreeningDetailModalProps {
   applicant: ScreenedApplicant;
@@ -143,6 +155,10 @@ export function ScreeningDetailModal({
 
   const matchedSkills = applicant.matched_skills || [];
   const missingSkills = applicant.missing_skills || [];
+  
+  console.log('ScreeningDetailModal - applicant:', applicant.name);
+  console.log('ScreeningDetailModal - matched_skills:', matchedSkills);
+  console.log('ScreeningDetailModal - skills_score:', applicant.skills_score);
 
   return (
     <>
@@ -181,7 +197,7 @@ export function ScreeningDetailModal({
               </div>
               <div className="text-right">
                 <p className="text-sm text-blue-600 font-medium">Status</p>
-                <StatusBadge status={applicant.screening_status || 'failed'} />
+                <StatusBadge status={applicant.screening_status || 'in_progress'} />
               </div>
             </div>
           </div>
