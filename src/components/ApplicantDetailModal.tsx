@@ -391,11 +391,11 @@ export function ApplicantDetailModal({
         </div>
 
         {/* ===== CONTENT AREA ===== */}
-        <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
+        <div className="flex-1 overflow-y-auto px-6 py-6 bg-gray-50/30">
           
           {/* ===== SUMMARY TAB ===== */}
           {activeTab === 'summary' && (
-            <div className="space-y-6 max-w-5xl">
+            <div className="space-y-6">
               
               {/* Section 1: AI Evaluation Summary */}
               {/* Pipeline Progress Bar */}
@@ -403,11 +403,10 @@ export function ApplicantDetailModal({
                 <h3 className="font-semibold text-gray-900 mb-4">Application Progress</h3>
                 <div className="flex items-center justify-between">
                   {[
-                    { step: 1, label: 'Application', icon: User, complete: !!applicant?.created_at },
-                    { step: 2, label: 'Resume', icon: FileText, complete: !!applicant?.resume },
-                    { step: 3, label: 'Screening', icon: Brain, complete: isScreeningComplete && !!applicant?.resumeScore },
-                    { step: 4, label: 'Video', icon: Video, complete: !!(applicant as any)?.video?.submitted_at },
-                    { step: 5, label: 'Assessment', icon: ClipboardList, complete: !!(applicant as any)?.test?.submitted_at },
+                    { step: 1, label: 'Applied', icon: User, complete: !!applicant?.created_at },
+                    { step: 2, label: 'Screening', icon: Brain, complete: isScreeningComplete },
+                    { step: 3, label: 'Video', icon: Video, complete: !!(applicant as any)?.video?.submitted_at },
+                    { step: 4, label: 'Assessment', icon: ClipboardList, complete: !!(applicant as any)?.test?.submitted_at },
                   ].map((item, idx) => (
                     <div key={idx} className="flex flex-col items-center">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
@@ -432,11 +431,10 @@ export function ApplicantDetailModal({
                       width: `${(() => {
                         let completed = 0;
                         if (applicant?.created_at) completed++;
-                        if (applicant?.resume) completed++;
-                        if (isScreeningComplete && applicant?.resumeScore) completed++;
+                        if (isScreeningComplete) completed++;
                         if ((applicant as any)?.video?.submitted_at) completed++;
                         if ((applicant as any)?.test?.submitted_at) completed++;
-                        return (completed / 5) * 100;
+                        return (completed / 4) * 100;
                       })()}%` 
                     }}
                   />
@@ -636,7 +634,7 @@ export function ApplicantDetailModal({
 
           {/* ===== RESUME TAB ===== */}
           {activeTab === 'resume' && parsedResume && (
-            <div className="space-y-6 max-w-5xl">
+            <div className="space-y-6">
               
               {/* Resume File Card */}
               {applicant.resume?.resume_url && (
