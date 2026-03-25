@@ -9,24 +9,17 @@ import {
   FileText,
   Star,
   Clock,
-  CheckCircle,
-  AlertCircle,
-  Plus,
-  Download,
-  ExternalLink,
   User,
   GraduationCap,
   Award,
   Target,
-  Zap,
   Shield,
-  AlertTriangle,
   Check,
-  MoreHorizontal,
-  ChevronDown,
   Sparkles,
   Brain,
-  TrendingUp
+  TrendingUp,
+  Video,
+  ClipboardList
 } from 'lucide-react';
 import { Applicant, Resume, ResumeParsedData } from '../lib/supabase';
 
@@ -55,9 +48,6 @@ function getParsedResumeData(resume: Resume | undefined): ResumeParsedData | nul
   }
 }
 
-// Available tags
-const AVAILABLE_TAGS = ['Priority', 'Referral', 'Follow-up', 'Top Pick', 'Fast Track', 'Interview Scheduled', 'Background Check', 'Offer Sent'];
-
 // Status configurations
 const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string; dotColor: string }> = {
   passed: { label: 'Passed', color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200', dotColor: 'bg-emerald-500' },
@@ -75,20 +65,6 @@ const getStatusConfig = (status: string) => {
   return STATUS_CONFIG[status] || STATUS_CONFIG.pending;
 };
 
-const getTagColor = (tag: string) => {
-  const colors: Record<string, string> = {
-    'Priority': 'bg-red-100 text-red-700 border-red-200',
-    'Referral': 'bg-blue-100 text-blue-700 border-blue-200',
-    'Follow-up': 'bg-amber-100 text-amber-700 border-amber-200',
-    'Top Pick': 'bg-purple-100 text-purple-700 border-purple-200',
-    'Fast Track': 'bg-green-100 text-green-700 border-green-200',
-    'Interview Scheduled': 'bg-indigo-100 text-indigo-700 border-indigo-200',
-    'Background Check': 'bg-orange-100 text-orange-700 border-orange-200',
-    'Offer Sent': 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  };
-  return colors[tag] || 'bg-gray-100 text-gray-700 border-gray-200';
-};
-
 export function ApplicantDetailModal({
   applicantId,
   applicant: initialApplicant,
@@ -96,9 +72,6 @@ export function ApplicantDetailModal({
   onClose
 }: ApplicantDetailModalProps) {
   const [activeTab, setActiveTab] = useState<'summary' | 'resume'>('summary');
-  const [tags, setTags] = useState<string[]>([]);
-  const [showTagDropdown, setShowTagDropdown] = useState(false);
-  const [showActionsDropdown, setShowActionsDropdown] = useState(false);
   
   // Data fetching state
   const [applicant, setApplicant] = useState<ApplicantWithDetails | null>(initialApplicant || null);
@@ -145,12 +118,7 @@ export function ApplicantDetailModal({
       };
       
       setApplicant(fullApplicant);
-      
-      // Load local storage data
-      const savedTags = localStorage.getItem(`applicant_tags_${id}`);
-      
-      if (savedTags) setTags(JSON.parse(savedTags));
-      
+       
     } catch (err) {
       console.error('Error fetching applicant data:', err);
       setFetchError(err instanceof Error ? err.message : 'Failed to load applicant data');
@@ -168,9 +136,6 @@ export function ApplicantDetailModal({
       } else if (initialApplicant) {
         // Use the pre-loaded applicant data
         setApplicant(initialApplicant);
-        const savedTags = localStorage.getItem(`applicant_tags_${initialApplicant.id}`);
-        
-        if (savedTags) setTags(JSON.parse(savedTags));
       }
     }
   }, [isOpen, applicantId]);
@@ -217,19 +182,6 @@ export function ApplicantDetailModal({
     };
   }, [isOpen, applicant?.id]);
 
-  // Save tags to localStorage
-  const saveTags = (newTags: string[]) => {
-    if (applicant) {
-      localStorage.setItem(`applicant_tags_${applicant.id}`, JSON.stringify(newTags));
-      setTags(newTags);
-    }
-  };
-
-  const handleRemoveTag = (tag: string) => {
-    const newTags = tags.filter(t => t !== tag);
-    saveTags(newTags);
-  };
-
   const getScoreLabel = (score: number | undefined): { label: string; color: string } => {
     if (score === undefined || score === null) return { label: 'No Data', color: 'text-gray-500' };
     if (score >= 80) return { label: 'Strong Match', color: 'text-emerald-600' };
@@ -249,44 +201,51 @@ export function ApplicantDetailModal({
   const parsedResume = applicant ? getParsedResumeData(applicant.resume) : null;
   const isScreeningComplete = !!applicant?.resume;
 
-  // Generate key insights from available data
-  const getKeyInsights = () => {
-    const insights: Array<{ type: 'strength' | 'concern' | 'info'; icon: React.ReactNode; text: string }> = [];
+  // Generate recent activity from available data
+  const getRecentActivity = () => {
+    const activities: Array<{ date: string; icon: React.ReactNode; text: string }> = [];
     
-    if (applicant?.resumeScore && applicant.resumeScore >= 70) {
-      insights.push({
-        type: 'strength',
-        icon: <CheckCircle className="w-4 h-4" />,
-        text: `Strong resume with ${Math.round(applicant.resumeScore)}% score`
+    // Applicant created (application submitted)
+    if (applicant?.created_at) {
+      const date = new Date(applicant.created_at);
+      activities.push({
+        date: date.toLocaleDateString(),
+        icon: <User className="w-4 h-4" />,
+        text: 'Application submitted'
       });
     }
     
-    if (parsedResume?.experience && parsedResume.experience.length > 0) {
-      insights.push({
-        type: 'info',
-        icon: <Briefcase className="w-4 h-4" />,
-        text: `${parsedResume.experience.length} professional experience${parsedResume.experience.length > 1 ? 's' : ''} detected`
+    // Resume uploaded
+    if (applicant?.resume?.uploaded_at) {
+      const date = new Date(applicant.resume.uploaded_at);
+      activities.push({
+        date: date.toLocaleDateString(),
+        icon: <FileText className="w-4 h-4" />,
+        text: 'Resume uploaded'
       });
     }
     
-    if (parsedResume?.skills) {
-      const skillCount = Object.values(parsedResume.skills as Record<string, string | string[]>).flat().length;
-      insights.push({
-        type: 'info',
-        icon: <Award className="w-4 h-4" />,
-        text: `${skillCount} skills identified`
+    // Video assessment submitted
+    if ((applicant as any)?.video?.submitted_at) {
+      const date = new Date((applicant as any).video.submitted_at);
+      activities.push({
+        date: date.toLocaleDateString(),
+        icon: <Video className="w-4 h-4" />,
+        text: 'Video assessment completed'
       });
     }
     
-    if (applicant?.overall && applicant.overall < 50) {
-      insights.push({
-        type: 'concern',
-        icon: <AlertTriangle className="w-4 h-4" />,
-        text: 'Overall score below threshold'
+    // Personality test submitted
+    if ((applicant as any)?.test?.submitted_at) {
+      const date = new Date((applicant as any).test.submitted_at);
+      activities.push({
+        date: date.toLocaleDateString(),
+        icon: <Brain className="w-4 h-4" />,
+        text: 'Personality test completed'
       });
     }
     
-    return insights;
+    return activities;
   };
 
   if (!isOpen) return null;
@@ -314,7 +273,7 @@ export function ApplicantDetailModal({
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
-              <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+              <Brain className="w-12 h-12 text-red-400 mx-auto mb-4" />
               <p className="text-gray-900 font-semibold mb-2">Failed to load applicant</p>
               <p className="text-gray-500 text-sm mb-4">{fetchError || 'Applicant not found'}</p>
               <button
@@ -363,44 +322,6 @@ export function ApplicantDetailModal({
                   <Briefcase className="w-4 h-4" />
                   <span className="text-sm">{applicant.position}</span>
                 </div>
-                {/* Tags */}
-                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                  {tags.map(tag => (
-                    <span key={tag} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${getTagColor(tag)}`}>
-                      {tag}
-                      <button onClick={() => handleRemoveTag(tag)} className="hover:text-red-500 ml-0.5">
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowTagDropdown(!showTagDropdown)}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                      <Plus className="w-3 h-3" /> Add Tag
-                    </button>
-                    {showTagDropdown && (
-                      <div className="absolute left-0 top-full mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-200 z-20 py-1">
-                        {AVAILABLE_TAGS.filter(t => !tags.includes(t)).map(tag => (
-                          <button
-                            key={tag}
-                            onClick={() => {
-                              if (!tags.includes(tag)) {
-                                const newTags = [...tags, tag];
-                                saveTags(newTags);
-                              }
-                              setShowTagDropdown(false);
-                            }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
-                          >
-                            {tag}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -443,61 +364,6 @@ export function ApplicantDetailModal({
             )}
           </div>
           <div className="flex items-center gap-2">
-            {/* Decision Actions - Only enabled when screening is complete */}
-            {isScreeningComplete ? (
-              <>
-                <button className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors text-sm font-medium shadow-sm">
-                  <AlertCircle className="w-4 h-4" />
-                  Needs Review
-                </button>
-                <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium shadow-sm">
-                  <CheckCircle className="w-4 h-4" />
-                  Shortlist
-                </button>
-                <button className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium border border-red-200">
-                  <X className="w-4 h-4" />
-                  Reject
-                </button>
-              </>
-            ) : (
-              <>
-                <button disabled className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm font-medium cursor-not-allowed opacity-60">
-                  <AlertCircle className="w-4 h-4" />
-                  Needs Review
-                </button>
-                <button disabled className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm font-medium cursor-not-allowed opacity-60">
-                  <CheckCircle className="w-4 h-4" />
-                  Shortlist
-                </button>
-                <button disabled className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-400 rounded-lg text-sm font-medium cursor-not-allowed opacity-60">
-                  <X className="w-4 h-4" />
-                  Reject
-                </button>
-              </>
-            )}
-            
-            {/* Secondary Actions Dropdown - Always available but some disabled */}
-            <div className="relative">
-              <button
-                onClick={() => setShowActionsDropdown(!showActionsDropdown)}
-                className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
-              >
-                <MoreHorizontal className="w-4 h-4" />
-                <ChevronDown className="w-3 h-3" />
-              </button>
-              {showActionsDropdown && (
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-gray-200 z-20 py-1">
-                  <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors">
-                    <Download className="w-4 h-4 text-gray-400" />
-                    Export Report
-                  </button>
-                  <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors">
-                    <ExternalLink className="w-4 h-4 text-gray-400" />
-                    Open in New Tab
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         </div>
 
@@ -531,7 +397,52 @@ export function ApplicantDetailModal({
           {activeTab === 'summary' && (
             <div className="space-y-6 max-w-5xl">
               
-              {/* Section 1: AI Evaluation Summary - Only show when screening complete */}
+              {/* Section 1: AI Evaluation Summary */}
+              {/* Pipeline Progress Bar */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                <h3 className="font-semibold text-gray-900 mb-4">Application Progress</h3>
+                <div className="flex items-center justify-between">
+                  {[
+                    { step: 1, label: 'Application', icon: User, complete: !!applicant?.created_at },
+                    { step: 2, label: 'Resume', icon: FileText, complete: !!applicant?.resume },
+                    { step: 3, label: 'Screening', icon: Brain, complete: isScreeningComplete && !!applicant?.resumeScore },
+                    { step: 4, label: 'Video', icon: Video, complete: !!(applicant as any)?.video?.submitted_at },
+                    { step: 5, label: 'Assessment', icon: ClipboardList, complete: !!(applicant as any)?.test?.submitted_at },
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex flex-col items-center">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                        item.complete 
+                          ? 'bg-emerald-100 border-emerald-500 text-emerald-600' 
+                          : 'bg-gray-50 border-gray-200 text-gray-400'
+                      }`}>
+                        <item.icon className="w-5 h-5" />
+                      </div>
+                      <p className={`text-xs mt-2 font-medium ${item.complete ? 'text-emerald-600' : 'text-gray-400'}`}>
+                        {item.label}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                {/* Progress Line */}
+                <div className="relative mt-2">
+                  <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-200 -translate-y-1/2" />
+                  <div 
+                    className="absolute top-1/2 left-0 h-0.5 bg-emerald-500 -translate-y-1/2 transition-all duration-500"
+                    style={{ 
+                      width: `${(() => {
+                        let completed = 0;
+                        if (applicant?.created_at) completed++;
+                        if (applicant?.resume) completed++;
+                        if (isScreeningComplete && applicant?.resumeScore) completed++;
+                        if ((applicant as any)?.video?.submitted_at) completed++;
+                        if ((applicant as any)?.test?.submitted_at) completed++;
+                        return (completed / 5) * 100;
+                      })()}%` 
+                    }}
+                  />
+                </div>
+              </div>
+
               {isScreeningComplete ? (
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-indigo-50/50 to-white">
@@ -687,41 +598,33 @@ export function ApplicantDetailModal({
                   </div>
                 </div>
 
-                {/* Section 3: Key Insights */}
+                {/* Section 3: Recent Activity */}
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                  <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50/50 to-white">
+                  <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50/50 to-white">
                     <div className="flex items-center gap-2">
-                      <Zap className="w-5 h-5 text-amber-600" />
-                      <h3 className="font-semibold text-gray-900">Key Insights</h3>
+                      <Clock className="w-5 h-5 text-blue-600" />
+                      <h3 className="font-semibold text-gray-900">Recent Activity</h3>
                     </div>
                   </div>
                   <div className="p-5">
-                    {getKeyInsights().length > 0 ? (
+                    {getRecentActivity().length > 0 ? (
                       <div className="space-y-3">
-                        {getKeyInsights().map((insight, idx) => (
-                          <div key={idx} className={`flex items-start gap-3 p-3 rounded-lg ${
-                            insight.type === 'strength' ? 'bg-emerald-50/50' : 
-                            insight.type === 'concern' ? 'bg-red-50/50' : 'bg-blue-50/50'
-                          }`}>
-                            <div className={`flex-shrink-0 mt-0.5 ${
-                              insight.type === 'strength' ? 'text-emerald-600' : 
-                              insight.type === 'concern' ? 'text-red-600' : 'text-blue-600'
-                            }`}>
-                              {insight.icon}
+                        {getRecentActivity().map((activity, idx) => (
+                          <div key={idx} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50">
+                            <div className="flex-shrink-0 mt-0.5 text-blue-600">
+                              {activity.icon}
                             </div>
-                            <p className={`text-sm ${
-                              insight.type === 'strength' ? 'text-emerald-800' : 
-                              insight.type === 'concern' ? 'text-red-800' : 'text-gray-700'
-                            }`}>
-                              {insight.text}
-                            </p>
+                            <div className="flex-1">
+                              <p className="text-sm text-gray-700">{activity.text}</p>
+                              <p className="text-xs text-gray-400 mt-1">{activity.date}</p>
+                            </div>
                           </div>
                         ))}
                       </div>
                     ) : (
                       <div className="text-center py-6 text-gray-400">
-                        <Brain className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">No insights available yet</p>
+                        <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No activity recorded yet</p>
                       </div>
                     )}
                   </div>
@@ -754,7 +657,6 @@ export function ApplicantDetailModal({
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium shadow-sm"
                     >
-                      <Download className="w-4 h-4" />
                       View Resume
                     </a>
                   </div>
