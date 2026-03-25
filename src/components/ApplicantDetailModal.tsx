@@ -21,10 +21,12 @@ import {
   Video,
   ClipboardList
 } from 'lucide-react';
-import { Applicant, Resume, ResumeParsedData } from '../lib/supabase';
+import { Applicant, Resume, ResumeParsedData, VideoAssessment, PersonalityTest } from '../lib/supabase';
 
 interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
+  video?: VideoAssessment;
+  test?: PersonalityTest;
   resumeScore?: number;
   overall?: number;
   status?: string;
@@ -109,12 +111,28 @@ export function ApplicantDetailModal({
         .from('resumes')
         .select('*')
         .eq('applicant_id', id)
-        .single();
+        .maybeSingle();
+      
+      // Fetch video assessment data
+      const { data: videoData } = await supabase
+        .from('video_assessments')
+        .select('*')
+        .eq('applicant_id', id)
+        .maybeSingle();
+      
+      // Fetch personality test (work style assessment) data
+      const { data: testData } = await supabase
+        .from('work_style_assessments')
+        .select('*')
+        .eq('applicant_id', id)
+        .maybeSingle();
       
       // Combine all data
       const fullApplicant: ApplicantWithDetails = {
         ...applicantData,
         resume: resumeData || undefined,
+        video: videoData || undefined,
+        test: testData || undefined,
       };
       
       setApplicant(fullApplicant);
@@ -172,6 +190,34 @@ export function ApplicantDetailModal({
         (payload) => {
           if (payload.new) {
             setApplicant(prev => prev ? { ...prev, resume: payload.new as any } : null);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'video_assessments',
+          filter: `applicant_id=eq.${applicant.id}`
+        },
+        (payload) => {
+          if (payload.new) {
+            setApplicant(prev => prev ? { ...prev, video: payload.new as any } : null);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'work_style_assessments',
+          filter: `applicant_id=eq.${applicant.id}`
+        },
+        (payload) => {
+          if (payload.new) {
+            setApplicant(prev => prev ? { ...prev, test: payload.new as any } : null);
           }
         }
       )
@@ -354,7 +400,12 @@ export function ApplicantDetailModal({
         <div className="px-6 py-3 border-b border-gray-100 bg-white flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <Mail className="w-4 h-4" />
-            <span className="truncate max-w-[200px]">{applicant.email}</span>
+            <a 
+              href={`mailto:${applicant.email}`} 
+              className="truncate max-w-[200px] text-indigo-600 hover:text-indigo-800 hover:underline"
+            >
+              {applicant.email}
+            </a>
             {parsedResume?.phone && (
               <>
                 <span className="text-gray-300">•</span>
@@ -450,61 +501,104 @@ export function ApplicantDetailModal({
                     </div>
                   </div>
                   <div className="p-5">
-                  {/* Score Cards Grid */}
-                  <div className="grid grid-cols-4 gap-4 mb-5">
-                    {[
-                      { label: 'Resume Score', score: applicant.resumeScore, icon: FileText, color: 'emerald' },
-                      { label: 'Overall Score', score: applicant.overall, icon: Star, color: 'indigo', highlight: true },
-                    ].map((item, idx) => (
-                      <div key={idx} className={`rounded-xl p-4 ${item.highlight ? 'bg-indigo-50 border border-indigo-100' : 'bg-gray-50/50 border border-gray-100'}`}>
-                        <div className={`w-10 h-10 mx-auto mb-3 rounded-lg flex items-center justify-center ${item.highlight ? 'bg-indigo-100' : 'bg-gray-100'}`}>
-                          <item.icon className={`w-5 h-5 ${item.highlight ? 'text-indigo-600' : 'text-gray-500'}`} />
-                        </div>
-                        <div className="text-center">
-                          <p className={`text-2xl font-bold ${item.highlight ? 'text-indigo-700' : 'text-gray-900'}`}>
-                            {item.score ? Math.round(item.score) : '-'}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-0.5">{item.label}</p>
-                          {item.score && (
-                            <p className={`text-xs font-medium mt-1 ${getScoreLabel(item.score).color}`}>
-                              {getScoreLabel(item.score).label}
-                            </p>
+                    {/* Overall Recommendation */}
+                    <div className={`rounded-xl p-4 mb-5 ${applicant.overall && applicant.overall >= 60 ? 'bg-emerald-50 border border-emerald-100' : 'bg-amber-50 border border-amber-100'}`}>
+                      <div className="flex items-start gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${applicant.overall && applicant.overall >= 60 ? 'bg-emerald-100' : 'bg-amber-100'}`}>
+                          {applicant.overall && applicant.overall >= 60 ? (
+                            <Check className="w-5 h-5 text-emerald-600" />
+                          ) : (
+                            <Sparkles className="w-5 h-5 text-amber-600" />
                           )}
                         </div>
-                        {/* Progress Bar */}
-                        {item.score !== undefined && item.score !== null && (
-                          <div className="mt-3 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${getScoreBarColor(item.score)} transition-all`}
-                              style={{ width: `${item.score}%` }}
-                            />
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900 mb-1">
+                            {applicant.overall && applicant.overall >= 80 ? 'Excellent Match' : 
+                             applicant.overall && applicant.overall >= 60 ? 'Good Match' : 
+                             applicant.overall && applicant.overall >= 40 ? 'Needs Review' : 'Below Threshold'}
+                          </h4>
+                          <p className="text-sm text-gray-600">
+                            {applicant.overall && applicant.overall >= 80 ? 
+                              `${applicant.name} is an excellent candidate with strong alignment to the role requirements. Highly recommended for immediate consideration.` :
+                             applicant.overall && applicant.overall >= 60 ?
+                              `${applicant.name} shows good potential and meets most key requirements. Recommended for further evaluation.` :
+                             applicant.overall && applicant.overall >= 40 ?
+                              `${applicant.name} has some relevant qualifications but may need additional assessment. Manual review recommended.` :
+                              `${applicant.name} does not meet the minimum threshold for this position. Consider other candidates.`}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-2xl font-bold ${applicant.overall && applicant.overall >= 60 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                            {applicant.overall ? Math.round(applicant.overall) : '-'}
+                          </p>
+                          <p className="text-xs text-gray-500">Overall Score</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Key Strengths */}
+                    <div className="mb-5">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <Award className="w-4 h-4 text-emerald-600" />
+                        Key Strengths
+                      </h4>
+                      <div className="space-y-2">
+                        {parsedResume?.skills && parsedResume.skills.hard_skills && parsedResume.skills.hard_skills.length > 0 && (
+                          <div className="flex items-start gap-2 p-3 bg-emerald-50 rounded-lg">
+                            <Check className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm text-gray-700">
+                              <span className="font-medium">Technical Skills:</span> Demonstrates {parsedResume.skills.hard_skills.length} relevant technical skills
+                            </p>
+                          </div>
+                        )}
+                        {parsedResume?.experience && parsedResume.experience.length > 0 && (
+                          <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
+                            <Briefcase className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm text-gray-700">
+                              <span className="font-medium">Work Experience:</span> {parsedResume.experience.length} position{parsedResume.experience.length > 1 ? 's' : ''} of relevant experience
+                            </p>
+                          </div>
+                        )}
+                        {parsedResume?.education && parsedResume.education.length > 0 && (
+                          <div className="flex items-start gap-2 p-3 bg-purple-50 rounded-lg">
+                            <GraduationCap className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm text-gray-700">
+                              <span className="font-medium">Education:</span> {parsedResume.education[0]?.course_or_strand || parsedResume.education[0]?.school || 'Completed'}
+                            </p>
+                          </div>
+                        )}
+                        {applicant.resumeScore && applicant.resumeScore >= 70 && (
+                          <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg">
+                            <Star className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm text-gray-700">
+                              <span className="font-medium">Resume Quality:</span> Strong resume with {Math.round(applicant.resumeScore)}% score - well-structured and comprehensive
+                            </p>
                           </div>
                         )}
                       </div>
-                    ))}
-                  </div>
-                  
-                  {/* Score Breakdown Legend */}
-                  <div className="flex items-center gap-4 text-xs text-gray-500 justify-center">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                      <span>Strong (80+)</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-amber-500" />
-                      <span>Moderate (60-79)</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-orange-500" />
-                      <span>Review (40-59)</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-red-500" />
-                      <span>Low (&lt;40)</span>
+
+                    {/* Why This Candidate */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <Target className="w-4 h-4 text-indigo-600" />
+                        Why This Candidate is Good for the Position
+                      </h4>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                          {applicant.name} demonstrates strong qualifications for the {applicant.position} role. 
+                          {parsedResume?.experience && parsedResume.experience.length > 0 && 
+                            ` With ${parsedResume.experience.length} year${parsedResume.experience.length > 1 ? 's' : ''} of professional experience, `}
+                          {parsedResume?.skills && parsedResume.skills.hard_skills && parsedResume.skills.hard_skills.length > 0 &&
+                            `they bring ${parsedResume.skills.hard_skills.length} technical skill${parsedResume.skills.hard_skills.length > 1 ? 's' : ''} that align with job requirements. `}
+                          {applicant.overall && applicant.overall >= 60 ? 
+                            `Overall evaluation shows good fit for the position. Recommended for interview process.` :
+                            `While there are some areas for improvement, the candidate shows potential and could benefit from further evaluation.`}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
               ) : (
                 /* Placeholder when screening not complete */
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
