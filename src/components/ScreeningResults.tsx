@@ -731,16 +731,6 @@ export function ScreeningResults() {
                           <Eye className="w-4 h-4" />
                         </button>
 
-                        {applicant.screening_status === 'needs_review' && (
-                          <button
-                            onClick={() => handleApprove(applicant.id)}
-                            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all"
-                            title="Approve"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                          </button>
-                        )}
-
 
                       </div>
                     </td>
@@ -793,6 +783,7 @@ export function ScreeningResults() {
         )}
       </div>
 
+      {/* Detail Modal */}
       {/* Detail Modal */}
       {showDetailModal && selectedApplicant && (
         <ScreeningDetailModal
