@@ -22,7 +22,7 @@ type View =
 
 function AppContent() {
   const { applicant, loading, isAdminAuthenticated, adminSession } = useAuth();
-  const [view, setView] = useState<View>('login');
+  const [view, setView] = useState<View>('choice');
 
   // Apply saved theme on mount
   useEffect(() => {
