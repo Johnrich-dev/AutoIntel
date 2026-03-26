@@ -607,6 +607,280 @@ def schedule_interview():
         }), 500
 
 
+@app.route('/api/grant-access', methods=['POST'])
+def grant_access():
+    """
+    Grant access to an applicant and send email notification with access token.
+    
+    Request Body:
+    {
+        "applicant_id": "string (required)",
+        "applicant_email": "string (required)",
+        "applicant_name": "string (required)",
+        "position": "string (required)",
+        "overall_score": 85.5,
+        "skills_score": 90.0,
+        "experience_score": 80.0,
+        "education_score": 85.0,
+        "requirement_match_score": 75.0,
+        "count_score": 95.0,
+        "requirement_breakdown": {...},
+        "count_breakdown": {...},
+        "weights_used": {...}
+    }
+    
+    Response:
+    {
+        "success": true,
+        "message": "Access granted and email sent successfully",
+        "access_token": "newly-generated-uuid",
+        "token_expires_at": "2026-03-27T16:59:00Z",
+        "email_sent": true,
+        "status": "success"
+    }
+    """
+    try:
+        # Import required modules
+        import email_service
+        from datetime import datetime, timedelta
+        from dotenv import load_dotenv
+        load_dotenv()
+        
+        # Get Supabase client
+        from supabase import create_client
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        
+        if not supabase_url or not supabase_key:
+            return jsonify({"error": "Supabase configuration missing. Set SUPABASE_URL and SUPABASE_SERVICE_KEY in .env"}), 500
+        
+        supabase = create_client(supabase_url, supabase_key)
+        
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        # Extract required fields
+        applicant_id = data.get('applicant_id')
+        applicant_email = data.get('applicant_email')
+        applicant_name = data.get('applicant_name')
+        position = data.get('position')
+        
+        # Validate required fields
+        if not applicant_id:
+            return jsonify({"error": "applicant_id is required"}), 400
+        if not applicant_email:
+            return jsonify({"error": "applicant_email is required"}), 400
+        if not applicant_name:
+            return jsonify({"error": "applicant_name is required"}), 400
+        if not position:
+            return jsonify({"error": "position is required"}), 400
+        
+        # Extract optional score fields
+        overall_score = data.get('overall_score', 0)
+        skills_score = data.get('skills_score', 0)
+        experience_score = data.get('experience_score', 0)
+        education_score = data.get('education_score', 0)
+        requirement_match_score = data.get('requirement_match_score')
+        count_score = data.get('count_score')
+        requirement_breakdown = data.get('requirement_breakdown')
+        count_breakdown = data.get('count_breakdown')
+        weights_used = data.get('weights_used')
+        
+        # Generate access token
+        access_token = email_service.generate_access_token()
+        token_expiry_hours = int(os.getenv("TOKEN_EXPIRY_HOURS", "24"))
+        token_expires = datetime.now() + timedelta(hours=token_expiry_hours)
+        
+        # Update database
+        update_data = {
+            "screening_status": "passed",
+            "screening_stage": "shortlisted",
+            "access_token": access_token,
+            "access_expires_at": token_expires.isoformat(),
+            "updated_at": datetime.now().isoformat()
+        }
+        
+        print(f"Attempting to update applicant {applicant_id} with data: {update_data}")
+        
+        try:
+            result = supabase.table("applicants").update(update_data).eq("id", applicant_id).execute()
+            print(f"Database update result: {result}")
+            print(f"Result data: {result.data}")
+            print(f"Result count: {result.count}")
+            
+            if not result.data:
+                print(f"WARNING: No rows were updated for applicant {applicant_id}")
+                return jsonify({"error": "Database update failed - no rows affected"}), 500
+                
+        except Exception as db_error:
+            print(f"Database update error: {db_error}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": f"Database update failed: {str(db_error)}"}), 500
+        
+        # Send email notification
+        email_sent = email_service.send_pass_notification(
+            applicant_name=applicant_name,
+            applicant_email=applicant_email,
+            job_title=position,
+            score=overall_score,
+            access_token=access_token,
+            requirement_match_score=requirement_match_score,
+            count_score=count_score,
+            requirement_breakdown=requirement_breakdown,
+            count_breakdown=count_breakdown,
+            weights_used=weights_used
+        )
+        
+        return jsonify({
+            "success": True,
+            "message": "Access granted and email sent successfully",
+            "access_token": access_token,
+            "token_expires_at": token_expires.isoformat(),
+            "email_sent": email_sent,
+            "status": "success"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+
+@app.route('/api/reject-applicant', methods=['POST'])
+def reject_applicant():
+    """
+    Reject an applicant and send email notification.
+    
+    Request Body:
+    {
+        "applicant_id": "string (required)",
+        "applicant_email": "string (required)",
+        "applicant_name": "string (required)",
+        "position": "string (required)",
+        "overall_score": 85.5,
+        "skills_score": 90.0,
+        "experience_score": 80.0,
+        "education_score": 85.0,
+        "requirement_match_score": 75.0,
+        "count_score": 95.0,
+        "requirement_breakdown": {...},
+        "count_breakdown": {...},
+        "weights_used": {...}
+    }
+    
+    Response:
+    {
+        "success": true,
+        "message": "Applicant rejected and email sent successfully",
+        "email_sent": true,
+        "status": "success"
+    }
+    """
+    try:
+        # Import required modules
+        import email_service
+        from datetime import datetime
+        from dotenv import load_dotenv
+        load_dotenv()
+        
+        # Get Supabase client
+        from supabase import create_client
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        
+        if not supabase_url or not supabase_key:
+            return jsonify({"error": "Supabase configuration missing. Set SUPABASE_URL and SUPABASE_SERVICE_KEY in .env"}), 500
+        
+        supabase = create_client(supabase_url, supabase_key)
+        
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        # Extract required fields
+        applicant_id = data.get('applicant_id')
+        applicant_email = data.get('applicant_email')
+        applicant_name = data.get('applicant_name')
+        position = data.get('position')
+        
+        # Validate required fields
+        if not applicant_id:
+            return jsonify({"error": "applicant_id is required"}), 400
+        if not applicant_email:
+            return jsonify({"error": "applicant_email is required"}), 400
+        if not applicant_name:
+            return jsonify({"error": "applicant_name is required"}), 400
+        if not position:
+            return jsonify({"error": "position is required"}), 400
+        
+        # Extract optional score fields
+        overall_score = data.get('overall_score', 0)
+        skills_score = data.get('skills_score', 0)
+        experience_score = data.get('experience_score', 0)
+        education_score = data.get('education_score', 0)
+        requirement_match_score = data.get('requirement_match_score')
+        count_score = data.get('count_score')
+        requirement_breakdown = data.get('requirement_breakdown')
+        count_breakdown = data.get('count_breakdown')
+        weights_used = data.get('weights_used')
+        
+        # Update database
+        update_data = {
+            "screening_status": "failed",
+            "screening_stage": "screened",
+            "updated_at": datetime.now().isoformat()
+        }
+        
+        print(f"Attempting to update applicant {applicant_id} with data: {update_data}")
+        
+        try:
+            result = supabase.table("applicants").update(update_data).eq("id", applicant_id).execute()
+            print(f"Database update result: {result}")
+            print(f"Result data: {result.data}")
+            print(f"Result count: {result.count}")
+            
+            if not result.data:
+                print(f"WARNING: No rows were updated for applicant {applicant_id}")
+                return jsonify({"error": "Database update failed - no rows affected"}), 500
+                
+        except Exception as db_error:
+            print(f"Database update error: {db_error}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": f"Database update failed: {str(db_error)}"}), 500
+        
+        # Send email notification
+        email_sent = email_service.send_fail_notification(
+            applicant_name=applicant_name,
+            applicant_email=applicant_email,
+            job_title=position,
+            score=overall_score,
+            requirement_match_score=requirement_match_score,
+            count_score=count_score,
+            requirement_breakdown=requirement_breakdown,
+            count_breakdown=count_breakdown,
+            weights_used=weights_used
+        )
+        
+        return jsonify({
+            "success": True,
+            "message": "Applicant rejected and email sent successfully",
+            "email_sent": email_sent,
+            "status": "success"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+
 # Import work style scorer
 try:
     import work_style_scorer
@@ -848,6 +1122,132 @@ def not_found(error):
 def internal_error(error):
     """Handle 500 errors."""
     return jsonify({"error": "Internal server error", "status": "error"}), 500
+
+
+@app.route('/api/hr/decision', methods=['POST'])
+def hr_decision():
+    """
+    Handle HR decision for applicants in 'in_review' status.
+    
+    Request body:
+    {
+        "applicant_id": "uuid",
+        "decision": "approved" | "rejected",
+        "applicant_name": "string",
+        "applicant_email": "string",
+        "job_title": "string",
+        "score": float
+    }
+    
+    Returns:
+    {
+        "success": true/false,
+        "message": "...",
+        "status": "success" | "error"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                "success": False,
+                "message": "No data provided",
+                "status": "error"
+            }), 400
+        
+        applicant_id = data.get('applicant_id')
+        decision = data.get('decision')
+        applicant_name = data.get('applicant_name', 'Applicant')
+        applicant_email = data.get('applicant_email')
+        job_title = data.get('job_title', 'the position')
+        score = data.get('score', 0)
+        
+        if not applicant_id or not decision:
+            return jsonify({
+                "success": False,
+                "message": "Missing required fields: applicant_id and decision",
+                "status": "error"
+            }), 400
+        
+        if decision not in ['approved', 'rejected']:
+            return jsonify({
+                "success": False,
+                "message": "Invalid decision. Must be 'approved' or 'rejected'",
+                "status": "error"
+            }), 400
+        
+        # Import email service
+        try:
+            import email_service
+        except ImportError as e:
+            return jsonify({
+                "success": False,
+                "message": f"Could not import email_service: {e}",
+                "status": "error"
+            }), 500
+        
+        if decision == 'approved':
+            # Generate access token and send pass notification
+            access_token = email_service.generate_access_token()
+            TOKEN_EXPIRY_HOURS = 72
+            expiry_time = datetime.now() + timedelta(hours=TOKEN_EXPIRY_HOURS)
+            expiry_str = expiry_time.strftime("%B %d, %Y at %I:%M %p")
+            
+            # Send approval email with access token
+            email_sent = email_service.send_pass_notification(
+                applicant_name=applicant_name,
+                applicant_email=applicant_email,
+                job_title=job_title,
+                score=score,
+                access_token=access_token
+            )
+            
+            # Update database status to 'passed'
+            # Note: This would require Supabase client in Python
+            # For now, we just send the email
+            
+            if email_sent:
+                return jsonify({
+                    "success": True,
+                    "message": f"Access granted and notification sent to {applicant_email}",
+                    "status": "success"
+                }), 200
+            else:
+                return jsonify({
+                    "success": False,
+                    "message": "Failed to send approval email",
+                    "status": "error"
+                }), 500
+                
+        elif decision == 'rejected':
+            # Send rejection notification
+            email_sent = email_service.send_fail_notification(
+                applicant_name=applicant_name,
+                applicant_email=applicant_email,
+                job_title=job_title,
+                score=score
+            )
+            
+            if email_sent:
+                return jsonify({
+                    "success": True,
+                    "message": f"Rejection notification sent to {applicant_email}",
+                    "status": "success"
+                }), 200
+            else:
+                return jsonify({
+                    "success": False,
+                    "message": "Failed to send rejection email",
+                    "status": "error"
+                }), 500
+                
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "status": "error"
+        }), 500
 
 
 if __name__ == "__main__":

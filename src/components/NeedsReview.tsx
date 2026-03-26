@@ -46,7 +46,7 @@ interface NeedsReviewApplicant {
   experience_score?: number;
   education_score?: number;
   projects_score?: number;
-  screening_status?: 'for_review';
+  screening_status?: 'in_review';
   screened_at?: string;
   matched_skills?: string[];
   missing_skills?: string[];
@@ -641,14 +641,14 @@ export function NeedsReview() {
         setError(null);
         const adminClient = getSupabaseAdminClient();
 
-        // Fetch applicants that have been screened (have screening_score) but are not in final state
+        // Fetch applicants in 'in_review' status (borderline scores requiring manual HR evaluation)
+        // These are applicants who scored between review_threshold and qualified_threshold
+        // AND have completed both video and work style assessments
         const { data: applicantsData, error: applicantsError } = await adminClient
           .from('applicants')
           .select('*')
-          .not('status', 'eq', 'shortlisted')
-          .not('status', 'eq', 'rejected')
-          .not('status', 'eq', 'hired')
-          .order('created_at', { ascending: false });
+          .eq('screening_status', 'in_review')
+          .order('screening_score', { ascending: false });
 
         if (applicantsError) throw applicantsError;
 
@@ -675,7 +675,7 @@ export function NeedsReview() {
             ...applicant,
             resume: resumesMap[applicant.id],
             overall_score: applicant.screening_score || 0,
-            screened_at: applicant.updated_at || applicant.created_at,
+            screened_at: applicant.screened_at || applicant.updated_at || applicant.created_at,
             video_completed: !!applicant.video_assessment_score,
             profiling_completed: !!applicant.work_style_score,
             // Determine key issue based on screening_fit_category or score

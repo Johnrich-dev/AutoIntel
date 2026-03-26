@@ -35,7 +35,7 @@ interface ScreenedApplicant extends Applicant {
   skills_score?: number;
   experience_score?: number;
   education_score?: number;
-  screening_status?: 'for_review' | 'in_progress';
+  screening_status?: 'passed' | 'in_review' | 'failed';
   screening_stage?: 'screened' | 'review' | 'shortlisted';
   screened_at?: string;
   matched_skills?: string[];
@@ -51,7 +51,7 @@ interface JobOption {
   count: number;
 }
 
-type StatusFilter = 'all' | 'for_review' | 'in_progress';
+type StatusFilter = 'all' | 'passed' | 'in_review' | 'failed';
 type SortOption = 'score_desc' | 'score_asc' | 'date_desc' | 'date_asc' | 'name_asc';
 
 interface StatusConfig {
@@ -63,19 +63,26 @@ interface StatusConfig {
 }
 
 const STATUS_CONFIGS: Record<string, StatusConfig> = {
-  for_review: {
-    label: 'For Review',
+  passed: {
+    label: 'Passed',
+    bg: 'bg-green-50',
+    text: 'text-green-700',
+    border: 'border-green-200',
+    icon: CheckCircle,
+  },
+  in_review: {
+    label: 'In Review',
     bg: 'bg-yellow-50',
     text: 'text-yellow-700',
     border: 'border-yellow-200',
     icon: AlertCircle,
   },
-  in_progress: {
-    label: 'In Progress',
-    bg: 'bg-blue-50',
-    text: 'text-blue-700',
-    border: 'border-blue-200',
-    icon: Clock,
+  failed: {
+    label: 'Failed',
+    bg: 'bg-red-50',
+    text: 'text-red-700',
+    border: 'border-red-200',
+    icon: XCircle,
   },
 };
 
@@ -160,7 +167,7 @@ function ScoreBadge({ score }: { score: number }) {
 
 // Status badge component
 function StatusBadge({ status }: { status: string }) {
-  const config = STATUS_CONFIGS[status] || STATUS_CONFIGS.in_progress;
+  const config = STATUS_CONFIGS[status] || STATUS_CONFIGS.failed;
   const Icon = config.icon;
 
   return (
@@ -204,6 +211,19 @@ export function ScreeningResults() {
     try {
       setLoading(true);
       const adminClient = getSupabaseAdminClient();
+
+      // Load scoring settings first
+      const { data: settingsData } = await adminClient
+        .from('scoring_settings')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const qualifiedThreshold = settingsData?.qualified_threshold ?? 78;
+      const reviewThreshold = settingsData?.review_threshold ?? 65;
+
+      console.log('Scoring thresholds - Qualified:', qualifiedThreshold, 'Review:', reviewThreshold);
 
       // Load applicants with screening data
       const { data: applicantsData, error: applicantsError } = await adminClient
@@ -270,20 +290,18 @@ export function ScreeningResults() {
           // Use actual scores from the database
           const overallScore = applicant.screening_score ?? 0;
           
-          // Determine status from database or calculate based on score
-          // needs_review: applicants who have completed video and work style assessments
-          // These require human review of the video
-          let status: 'for_review' | 'in_progress' = applicant.screening_status as 'for_review' | 'in_progress' || 'in_progress';
+          // Determine status based on configurable scoring thresholds
+          // Passed: score >= qualified_threshold
+          // In Review: score >= review_threshold AND score < qualified_threshold  
+          // Failed: score < review_threshold
+          let status: 'passed' | 'in_review' | 'failed';
           
-          // If not explicitly set, determine based on completion
-          if (!applicant.screening_status) {
-            if (hasVideoSubmitted && hasWorkStyleCompleted) {
-              // Has completed video and work style - needs human review
-              status = 'for_review';
-            } else {
-              // Not yet completed assessments
-              status = 'in_progress';
-            }
+          if (overallScore >= qualifiedThreshold) {
+            status = 'passed';
+          } else if (overallScore >= reviewThreshold) {
+            status = 'in_review';
+          } else {
+            status = 'failed';
           }
           
           // Extract matched skills from resume if available
@@ -435,7 +453,7 @@ export function ScreeningResults() {
             experience_score: Math.round(experienceScore),
             education_score: Math.round(educationScore),
             screening_status: status,
-            screening_stage: status === 'for_review' ? 'review' : 'screened',
+            screening_stage: status === 'in_review' ? 'review' : status === 'passed' ? 'shortlisted' : 'screened',
             screened_at: applicant.screened_at || new Date().toISOString(),
             matched_skills: matchedSkills,
             missing_skills: missingSkills,
@@ -474,7 +492,7 @@ export function ScreeningResults() {
     }
   };
 
-  // Generate mock scores for demonstration
+  // Generate mock scores for demonstration (not currently used - real data is loaded from database)
   const generateMockScores = (id: string) => {
     // Use id hash for consistent demo data
     const hash = id.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
@@ -483,9 +501,14 @@ export function ScreeningResults() {
     const experience = 45 + (hash % 45);
     const education = 50 + (hash % 40);
 
-    let status: 'for_review' | 'in_progress';
-    if (overall >= 75) status = 'for_review';
-    else status = 'in_progress';
+    // Use configurable thresholds from settings
+    const qualifiedThreshold = 78;
+    const reviewThreshold = 65;
+    
+    let status: 'passed' | 'in_review' | 'failed';
+    if (overall >= qualifiedThreshold) status = 'passed';
+    else if (overall >= reviewThreshold) status = 'in_review';
+    else status = 'failed';
 
     const matchedSkills = ['JavaScript', 'React', 'TypeScript', 'Node.js', 'Python'].slice(0, 2 + (hash % 3));
     const missingSkills = ['AWS', 'Docker', 'Kubernetes', 'GraphQL', 'PostgreSQL'].slice(0, 3 - (hash % 2));
@@ -496,7 +519,7 @@ export function ScreeningResults() {
       experience_score: experience,
       education_score: education,
       screening_status: status,
-      screening_stage: status === 'for_review' ? 'review' : 'screened',
+      screening_stage: status === 'passed' ? 'shortlisted' : status === 'in_review' ? 'review' : 'screened',
       screened_at: new Date(Date.now() - (hash % 30) * 24 * 60 * 60 * 1000).toISOString(),
       matched_skills: matchedSkills,
       missing_skills: missingSkills,
@@ -562,18 +585,39 @@ export function ScreeningResults() {
     setShowDetailModal(true);
   };
 
+  // Handle status update from modal (for in_review -> passed/failed decisions)
+  const handleUpdateStatus = async (applicantId: string, newStatus: 'passed' | 'failed') => {
+    try {
+      // Update local state only (database was already updated by the API)
+      setApplicants((prev) =>
+        prev.map((app) =>
+          app.id === applicantId 
+            ? { ...app, screening_status: newStatus, screening_stage: newStatus === 'passed' ? 'shortlisted' : 'screened' } 
+            : app
+        )
+      );
+
+      // Update selected applicant if it's the same
+      if (selectedApplicant?.id === applicantId) {
+        setSelectedApplicant(prev => prev ? { ...prev, screening_status: newStatus } : null);
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+    }
+  };
+
   const handleApprove = async (id: string) => {
     try {
       const adminClient = getSupabaseAdminClient();
       await adminClient
         .from('applicants')
-        .update({ screening_stage: 'shortlisted', screening_status: 'for_review' })
+        .update({ screening_stage: 'shortlisted', screening_status: 'passed' })
         .eq('id', id);
 
       // Update local state
       setApplicants((prev) =>
         prev.map((app) =>
-          app.id === id ? { ...app, screening_stage: 'shortlisted', screening_status: 'for_review' } : app
+          app.id === id ? { ...app, screening_stage: 'shortlisted', screening_status: 'passed' } : app
         )
       );
     } catch (error) {
@@ -584,13 +628,14 @@ export function ScreeningResults() {
 
   // Stats
   const stats = useMemo(() => {
-    const forReview = applicants.filter((a) => a.screening_status === 'for_review').length;
-    const inProgress = applicants.filter((a) => a.screening_status === 'in_progress').length;
+    const passed = applicants.filter((a) => a.screening_status === 'passed').length;
+    const inReview = applicants.filter((a) => a.screening_status === 'in_review').length;
+    const failed = applicants.filter((a) => a.screening_status === 'failed').length;
     const avgScore = applicants.length > 0
       ? Math.round(applicants.reduce((sum, a) => sum + (a.overall_score || 0), 0) / applicants.length)
       : 0;
 
-    return { forReview, inProgress, total: applicants.length, avgScore };
+    return { passed, inReview, failed, total: applicants.length, avgScore };
   }, [applicants]);
 
   return (
@@ -611,12 +656,16 @@ export function ScreeningResults() {
             <p className="text-lg font-bold text-gray-900">{stats.total}</p>
           </div>
           <div className="bg-green-50 rounded-xl px-4 py-2 border border-green-200 shadow-sm">
-            <p className="text-xs text-green-600">For Review</p>
-            <p className="text-lg font-bold text-green-700">{stats.forReview}</p>
+            <p className="text-xs text-green-600">Passed</p>
+            <p className="text-lg font-bold text-green-700">{stats.passed}</p>
           </div>
           <div className="bg-yellow-50 rounded-xl px-4 py-2 border border-yellow-200 shadow-sm">
-            <p className="text-xs text-yellow-600">In Progress</p>
-            <p className="text-lg font-bold text-yellow-700">{stats.inProgress}</p>
+            <p className="text-xs text-yellow-600">In Review</p>
+            <p className="text-lg font-bold text-yellow-700">{stats.inReview}</p>
+          </div>
+          <div className="bg-red-50 rounded-xl px-4 py-2 border border-red-200 shadow-sm">
+            <p className="text-xs text-red-600">Failed</p>
+            <p className="text-lg font-bold text-red-700">{stats.failed}</p>
           </div>
         </div>
       </div>
@@ -655,7 +704,7 @@ export function ScreeningResults() {
 
           {/* Status Filter Tabs */}
           <div className="flex items-center bg-gray-100 rounded-xl p-1">
-            {(['all', 'for_review', 'in_progress'] as StatusFilter[]).map((status) => (
+            {(['all', 'passed', 'in_review', 'failed'] as StatusFilter[]).map((status) => (
               <button
                 key={status}
                 onClick={() => setStatusFilter(status)}
@@ -665,7 +714,7 @@ export function ScreeningResults() {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                {status === 'all' ? 'All' : status === 'for_review' ? 'For Review' : status === 'in_progress' ? 'In Progress' : status}
+                {status === 'all' ? 'All' : status === 'passed' ? 'Passed' : status === 'in_review' ? 'In Review' : status === 'failed' ? 'Failed' : status}
               </button>
             ))}
           </div>
@@ -825,7 +874,7 @@ export function ScreeningResults() {
 
                     {/* Status */}
                     <td className="px-4 py-5 text-center">
-                      <StatusBadge status={applicant.screening_status || 'in_progress'} />
+                      <StatusBadge status={applicant.screening_status || 'failed'} />
                     </td>
 
                     {/* Stage */}
@@ -926,6 +975,7 @@ export function ScreeningResults() {
         <ScreeningDetailModal
           applicant={selectedApplicant}
           onClose={() => setShowDetailModal(false)}
+          onUpdateStatus={handleUpdateStatus}
         />
       )}
 
