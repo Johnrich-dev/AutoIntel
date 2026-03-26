@@ -9,7 +9,6 @@ import {
   Award,
   Check,
   AlertCircle,
-  Clock,
   Lightbulb,
 } from 'lucide-react';
 import { Applicant, Resume } from '../lib/supabase';
@@ -20,7 +19,7 @@ interface ScreenedApplicant extends Applicant {
   skills_score?: number;
   experience_score?: number;
   education_score?: number;
-  screening_status?: 'for_review' | 'in_progress';
+  screening_status?: 'passed' | 'in_review' | 'failed';
   screening_stage?: 'screened' | 'review' | 'shortlisted';
   screened_at?: string;
   matched_skills?: string[];
@@ -36,24 +35,31 @@ interface StatusConfig {
 }
 
 const STATUS_CONFIGS: Record<string, StatusConfig> = {
-  for_review: {
-    label: 'For Review',
+  passed: {
+    label: 'Passed',
+    bg: 'bg-green-50',
+    text: 'text-green-700',
+    border: 'border-green-200',
+    icon: CheckCircle,
+  },
+  in_review: {
+    label: 'In Review',
     bg: 'bg-yellow-50',
     text: 'text-yellow-700',
     border: 'border-yellow-200',
     icon: AlertCircle,
   },
-  in_progress: {
-    label: 'In Progress',
-    bg: 'bg-blue-50',
-    text: 'text-blue-700',
-    border: 'border-blue-200',
-    icon: Clock,
+  failed: {
+    label: 'Failed',
+    bg: 'bg-red-50',
+    text: 'text-red-700',
+    border: 'border-red-200',
+    icon: XCircle,
   },
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const config = STATUS_CONFIGS[status] || STATUS_CONFIGS.in_progress;
+  const config = STATUS_CONFIGS[status] || STATUS_CONFIGS.failed;
   const Icon = config.icon;
 
   return (
@@ -197,7 +203,7 @@ export function ScreeningDetailModal({
               </div>
               <div className="text-right">
                 <p className="text-sm text-blue-600 font-medium">Status</p>
-                <StatusBadge status={applicant.screening_status || 'in_progress'} />
+                <StatusBadge status={applicant.screening_status || 'failed'} />
               </div>
             </div>
           </div>
@@ -272,27 +278,41 @@ export function ScreeningDetailModal({
           </div>
 
           {/* Summary */}
-          {applicant.screening_status === 'for_review' && (
-            <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-100">
-              <h4 className="text-sm font-semibold text-yellow-800 mb-2 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" />
-                Requires Human Review
+          {applicant.screening_status === 'passed' && (
+            <div className="bg-green-50 rounded-xl p-4 border border-green-100">
+              <h4 className="text-sm font-semibold text-green-800 mb-2 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4" />
+                Passed Screening
               </h4>
-              <p className="text-sm text-yellow-700">
-                This candidate has completed video and work style assessments with a score of {Math.round(applicant.overall_score || 0)}%. 
-                Manual review is recommended to make a final determination.
+              <p className="text-sm text-green-700">
+                This candidate has passed the initial screening with a score of {Math.round(applicant.overall_score || 0)}%. 
+                They have been automatically granted access to complete preliminary assessments (video and work style tests).
               </p>
             </div>
           )}
 
-          {applicant.screening_status === 'in_progress' && (
-            <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-              <h4 className="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                Assessment In Progress
+          {applicant.screening_status === 'in_review' && (
+            <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-100">
+              <h4 className="text-sm font-semibold text-yellow-800 mb-2 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                Requires Manual Review
               </h4>
-              <p className="text-sm text-blue-700">
-                This candidate is still completing required assessments. Current score: {Math.round(applicant.overall_score || 0)}%.
+              <p className="text-sm text-yellow-700">
+                This candidate falls below the qualified threshold ({Math.round(applicant.overall_score || 0)}%) and requires manual HR evaluation. 
+                HR can decide whether to grant access to assessments or not.
+              </p>
+            </div>
+          )}
+
+          {applicant.screening_status === 'failed' && (
+            <div className="bg-red-50 rounded-xl p-4 border border-red-100">
+              <h4 className="text-sm font-semibold text-red-800 mb-2 flex items-center gap-2">
+                <XCircle className="w-4 h-4" />
+                Did Not Pass Screening
+              </h4>
+              <p className="text-sm text-red-700">
+                This candidate scored {Math.round(applicant.overall_score || 0)}% which is below the review threshold. 
+                They do not proceed further in the pipeline.
               </p>
             </div>
           )}
@@ -350,7 +370,11 @@ export function ScreeningDetailModal({
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-500">
-              Status: <span className="font-medium text-gray-700">{applicant.screening_status === 'for_review' ? 'For Review' : 'In Progress'}</span>
+              Status: <span className="font-medium text-gray-700">
+                {applicant.screening_status === 'passed' ? 'Passed' : 
+                 applicant.screening_status === 'in_review' ? 'In Review' : 
+                 applicant.screening_status === 'failed' ? 'Failed' : 'Unknown'}
+              </span>
             </span>
           </div>
         </div>
