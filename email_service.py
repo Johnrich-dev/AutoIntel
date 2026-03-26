@@ -717,6 +717,150 @@ def send_duplicate_rejection_notification(
     )
 
 
+def send_interview_notification(
+    applicant_name: str,
+    applicant_email: str,
+    job_title: str,
+    interview_date: str,
+    interview_time: str,
+    interview_type: str,
+    meeting_link: Optional[str] = None,
+    location: Optional[str] = None,
+    interviewer_name: Optional[str] = None,
+    notes: Optional[str] = None
+) -> bool:
+    """
+    Send interview scheduling notification to the applicant.
+    
+    Args:
+        applicant_name: Full name of the applicant
+        applicant_email: Email address of the applicant
+        job_title: Position being interviewed for
+        interview_date: Interview date (YYYY-MM-DD)
+        interview_time: Interview time (HH:MM)
+        interview_type: 'online' or 'in-person'
+        meeting_link: URL for online meeting (optional)
+        location: Physical location for in-person interview (optional)
+        interviewer_name: Name of the interviewer (optional)
+        notes: Additional notes about the interview (optional)
+    
+    Returns:
+        True if sent successfully
+    """
+    subject = f"Interview Scheduled - {job_title}"
+    
+    # Format date and time for display
+    try:
+        formatted_date = datetime.strptime(interview_date, "%Y-%m-%d").strftime("%B %d, %Y")
+    except:
+        formatted_date = interview_date
+    
+    # Build meeting/location info HTML
+    if interview_type == "online" and meeting_link:
+        meeting_info = f"""
+            <div class="meeting-info" style="background: #e0f2fe; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                <h3 style="margin: 0 0 10px 0;">📹 Meeting Link</h3>
+                <p style="margin: 0;"><a href="{meeting_link}" style="color: #0284c7; font-weight: bold;">{meeting_link}</a></p>
+            </div>
+        """
+    elif interview_type == "in-person" and location:
+        meeting_info = f"""
+            <div class="location-info" style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                <h3 style="margin: 0 0 10px 0;">📍 Location</h3>
+                <p style="margin: 0;">{location}</p>
+            </div>
+        """
+    else:
+        meeting_info = ""
+    
+    # Build notes HTML
+    notes_html = ""
+    if notes:
+        notes_html = f"""
+            <div class="notes" style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                <h3 style="margin: 0 0 10px 0;">📝 Notes</h3>
+                <p style="margin: 0;">{notes}</p>
+            </div>
+        """
+    
+    body_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background: #4F46E5; color: white; padding: 20px; text-align: center; }}
+        .content {{ padding: 20px; background: #f9f9f9; }}
+        .details-box {{ background: white; padding: 20px; border-radius: 8px; margin: 15px 0; }}
+        .detail-row {{ display: flex; margin: 12px 0; border-bottom: 1px solid #e5e7eb; padding-bottom: 12px; }}
+        .detail-row:last-child {{ border-bottom: none; }}
+        .detail-label {{ font-weight: bold; width: 120px; flex-shrink: 0; }}
+        .detail-value {{ flex: 1; }}
+        .footer {{ text-align: center; padding: 20px; color: #666; font-size: 12px; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📅 Interview Scheduled</h1>
+        </div>
+        <div class="content">
+            <p>Dear <strong>{applicant_name}</strong>,</p>
+            
+            <p>Your interview for the position of <strong>{job_title}</strong> has been scheduled.</p>
+            
+            <div class="details-box">
+                <div class="detail-row">
+                    <span class="detail-label">📅 Date:</span>
+                    <span class="detail-value">{formatted_date}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">🕐 Time:</span>
+                    <span class="detail-value">{interview_time}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">💻 Type:</span>
+                    <span class="detail-value">{interview_type.capitalize()}</span>
+                </div>
+                {f"""
+                <div class="detail-row">
+                    <span class="detail-label">👤 Interviewer:</span>
+                    <span class="detail-value">{interviewer_name}</span>
+                </div>
+                """ if interviewer_name else ""}
+            </div>
+            
+            {meeting_info}
+            
+            {notes_html}
+            
+            <div style="background: #e0e7ff; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                <h3 style="margin: 0 0 10px 0;">⏰ Next Steps</h3>
+                <ol style="margin: 0; padding-left: 20px;">
+                    <li>Add this interview to your calendar</li>
+                    <li>Join at the scheduled time using the meeting link/location above</li>
+                    <li>Prepare for the interview as needed</li>
+                </ol>
+            </div>
+            
+            <p>We look forward to meeting with you!</p>
+            
+            <p>Best regards,<br>
+            <strong>AutoIntel Recruitment Team</strong></p>
+        </div>
+        <div class="footer">
+            <p>This is an automated message. Please do not reply to this email.</p>
+            <p>© {datetime.now().year} AutoIntel. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+    
+    return send_email(to_email=applicant_email, subject=subject, body=body_html)
+
+
 if __name__ == "__main__":
     # Test email sending (requires SMTP configuration in .env)
     print("Email Service for AutoIntel")
@@ -732,5 +876,6 @@ if __name__ == "__main__":
     print("  - send_pass_notification()")
     print("  - send_fail_notification()")
     print("  - send_review_notification()")
+    print("  - send_interview_notification()")
     print("  - process_screening_decision()")
     print("  - generate_access_token()")

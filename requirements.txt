@@ -22,6 +22,10 @@ soundfile>=0.12.0
 flask>=2.3.0
 flask-cors>=4.0.0
 
+# Google Calendar API
+google-api-python-client>=2.100.0
+google-auth>=2.20.0
+
 # Semantic matching dependencies (BERT-based job alignment)
 sentence-transformers>=2.2.0
 scikit-learn>=1.3.0

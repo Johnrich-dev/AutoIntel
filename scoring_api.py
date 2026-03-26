@@ -446,7 +446,7 @@ def get_job_level_presets():
 @app.route('/api/schedule-interview', methods=['POST'])
 def schedule_interview():
     """
-    Schedule an interview and send email notification to applicant.
+    Schedule an interview, create Google Calendar event, and send email notification to applicant.
     
     Request Body:
     {
@@ -455,23 +455,38 @@ def schedule_interview():
         "position": "string (required)",
         "interview_date": "string - ISO date format (required)",
         "interview_time": "string - HH:MM format (required)",
-        "interview_platform": "string (optional)",
-        "interview_notes": "string (optional)"
+        "interview_type": "string - 'online' or 'in-person' (required)",
+        "meeting_link": "string (optional)",
+        "location": "string (optional for in-person)",
+        "interviewer_name": "string (optional)",
+        "interviewer_email": "string (optional)",
+        "interview_notes": "string (optional)",
+        "duration_minutes": "int (optional, default: 60)"
     }
     
     Response:
     {
         "success": true,
-        "message": "Interview scheduled and email sent",
+        "message": "Interview scheduled successfully",
+        "calendar_event_id": "string",
+        "calendar_event_link": "string",
+        "meet_link": "string (if online)",
+        "email_sent": true,
         "status": "success"
     }
     """
     try:
-        # Import email service
+        # Import services
         try:
             import email_service
         except ImportError as e:
             return jsonify({"error": f"Could not import email_service: {e}"}), 500
+        
+        try:
+            import calendar_service
+        except ImportError as e:
+            print(f"Warning: Could not import calendar_service: {e}")
+            calendar_service = None
         
         data = request.get_json()
         
@@ -484,8 +499,13 @@ def schedule_interview():
         position = data.get('position')
         interview_date = data.get('interview_date')
         interview_time = data.get('interview_time')
-        interview_platform = data.get('interview_platform', 'Google Meet')
+        interview_type = data.get('interview_type', 'online')
+        meeting_link = data.get('meeting_link', '')
+        location = data.get('location', '')
+        interviewer_name = data.get('interviewer_name', '')
+        interviewer_email = data.get('interviewer_email', '')
         interview_notes = data.get('interview_notes', '')
+        duration_minutes = data.get('duration_minutes', 60)
         
         # Validate required fields
         if not applicant_email:
@@ -498,96 +518,88 @@ def schedule_interview():
             return jsonify({"error": "interview_date is required"}), 400
         if not interview_time:
             return jsonify({"error": "interview_time is required"}), 400
+        if not interview_type:
+            return jsonify({"error": "interview_type is required (online or in-person)"}), 400
         
-        # Format the interview date/time
-        try:
-            # Parse the date
-            date_obj = datetime.fromisoformat(interview_date.replace('Z', '+00:00'))
-            formatted_date = date_obj.strftime('%B %d, %Y')
-        except:
-            formatted_date = interview_date
+        # Track results
+        calendar_event_id = None
+        calendar_event_link = None
+        meet_link = None
+        email_sent = False
+        calendar_created = False
         
-        # Build email content
-        subject = f"Interview Scheduled - {position} at AutoIntel"
-        
-        body_html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px 10px 0 0; }}
-                .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }}
-                .details {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }}
-                .detail-row {{ display: flex; margin-bottom: 10px; }}
-                .detail-label {{ font-weight: bold; width: 120px; color: #666; }}
-                .detail-value {{ color: #333; }}
-                .button {{ display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 20px; }}
-                .footer {{ text-align: center; margin-top: 20px; color: #999; font-size: 12px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1 style="margin: 0;">Interview Scheduled! 🎉</h1>
-                    <p>AutoIntel Recruitment</p>
-                </div>
-                <div class="content">
-                    <p>Dear <strong>{applicant_name}</strong>,</p>
-                    <p>We are pleased to inform you that your interview for the <strong>{position}</strong> position has been scheduled.</p>
-                    
-                    <div class="details">
-                        <div class="detail-row">
-                            <span class="detail-label">Date:</span>
-                            <span class="detail-value">{formatted_date}</span>
-                        </div>
-                        <div class="detail-row">
-                            <span class="detail-label">Time:</span>
-                            <span class="detail-value">{interview_time}</span>
-                        </div>
-                        <div class="detail-row">
-                            <span class="detail-label">Platform:</span>
-                            <span class="detail-value">{interview_platform}</span>
-                        </div>
-                        {f'<div class="detail-row"><span class="detail-label">Notes:</span><span class="detail-value">{interview_notes}</span></div>' if interview_notes else ''}
-                    </div>
-                    
-                    <p>Please ensure you:</p>
-                    <ul>
-                        <li>Test your audio and video before the interview</li>
-                        <li>Find a quiet and well-lit location</li>
-                        <li>Have your resume ready for reference</li>
-                    </ul>
-                    
-                    <p>We look forward to speaking with you!</p>
-                    
-                    <div class="footer">
-                        <p>This is an automated message from AutoIntel Recruitment System</p>
-                        <p>© {datetime.now().year} AutoIntel. All rights reserved.</p>
-                    </div>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        
-        # Send the email
-        success = email_service.send_email(applicant_email, subject, body_html)
-        
-        if success:
-            return jsonify({
-                "success": True,
-                "message": "Interview scheduled and email sent successfully",
-                "status": "success"
-            }), 200
-        else:
-            return jsonify({
-                "success": False,
-                "message": "Failed to send email. Please check email configuration.",
-                "status": "error"
-            }), 500
+        # Step 1: Create Google Calendar event (if calendar_service is available)
+        if calendar_service:
+            calendar_result = calendar_service.create_interview_event(
+                applicant_name=applicant_name,
+                applicant_email=applicant_email,
+                job_title=position,
+                interview_date=interview_date,
+                interview_time=interview_time,
+                interview_type=interview_type,
+                meeting_link=meeting_link if meeting_link else None,
+                location=location if location else None,
+                interviewer_name=interviewer_name if interviewer_name else None,
+                interviewer_email=interviewer_email if interviewer_email else None,
+                notes=interview_notes if interview_notes else None,
+                duration_minutes=duration_minutes
+            )
             
+            if calendar_result.get("success"):
+                calendar_created = True
+                calendar_event_id = calendar_result.get("event_id")
+                calendar_event_link = calendar_result.get("event_link")
+                meet_link = calendar_result.get("meet_link")
+                # Use the meet_link from calendar if not provided
+                if not meeting_link and meet_link:
+                    meeting_link = meet_link
+                print(f"Calendar event created: {calendar_event_id}")
+            else:
+                print(f"Calendar creation failed: {calendar_result.get('error')}")
+        else:
+            print("Calendar service not available - skipping calendar event creation")
+        
+        # Step 2: Send email notification to applicant
+        email_result = email_service.send_interview_notification(
+            applicant_name=applicant_name,
+            applicant_email=applicant_email,
+            job_title=position,
+            interview_date=interview_date,
+            interview_time=interview_time,
+            interview_type=interview_type,
+            meeting_link=meeting_link if meeting_link else None,
+            location=location if location else None,
+            interviewer_name=interviewer_name if interviewer_name else None,
+            notes=interview_notes if interview_notes else None
+        )
+        
+        email_sent = email_result
+        
+        # Determine success message
+        if calendar_created and email_sent:
+            message = "Interview scheduled, calendar event created, and email sent successfully"
+            status_code = 200
+        elif calendar_created and not email_sent:
+            message = "Calendar event created but email failed to send"
+            status_code = 200
+        elif not calendar_created and email_sent:
+            message = "Email sent but calendar event creation failed"
+            status_code = 200
+        else:
+            message = "Failed to schedule interview - both calendar and email failed"
+            status_code = 500
+        
+        return jsonify({
+            "success": calendar_created or email_sent,
+            "message": message,
+            "calendar_event_id": calendar_event_id,
+            "calendar_event_link": calendar_event_link,
+            "meet_link": meet_link,
+            "email_sent": email_sent,
+            "calendar_created": calendar_created,
+            "status": "success" if (calendar_created or email_sent) else "error"
+        }), status_code
+        
     except Exception as e:
         return jsonify({
             "error": str(e),

@@ -54,6 +54,14 @@ interface JobPosting {
   department?: string;
 }
 
+interface HRManager {
+  id: string;
+  name: string;
+  email: string;
+  role?: string;
+  department?: string;
+}
+
 interface InterviewFormData {
   applicantId: string;
   jobId: string;
@@ -245,7 +253,9 @@ function InterviewModal({
   onSave,
   interview,
   applicants,
-  jobs
+  jobs,
+  hrManagers,
+  isScheduling = false
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -253,6 +263,8 @@ function InterviewModal({
   interview?: ScheduledInterview | null;
   applicants: Applicant[];
   jobs: JobPosting[];
+  hrManagers?: HRManager[];
+  isScheduling?: boolean;
 }) {
   const [formData, setFormData] = useState<InterviewFormData>({
     applicantId: '',
@@ -448,11 +460,20 @@ function InterviewModal({
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Select Interviewer</option>
-                {mockInterviewers.map((interviewer) => (
-                  <option key={interviewer.id} value={interviewer.id}>
-                    {interviewer.name}
-                  </option>
-                ))}
+                {(hrManagers && hrManagers.length > 0) ? (
+                  hrManagers.map((interviewer) => (
+                    <option key={interviewer.id} value={interviewer.id}>
+                      {interviewer.name}
+                    </option>
+                  ))
+                ) : (
+                  // Fallback to mock data if hrManagers not available
+                  mockInterviewers.map((interviewer) => (
+                    <option key={interviewer.id} value={interviewer.id}>
+                      {interviewer.name}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
@@ -481,9 +502,20 @@ function InterviewModal({
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                disabled={isScheduling}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                {interview ? 'Update Interview' : 'Schedule Interview'}
+                {isScheduling ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Scheduling...
+                  </>
+                ) : (
+                  interview ? 'Update Interview' : 'Schedule Interview'
+                )}
               </button>
             </div>
           </form>
@@ -783,7 +815,10 @@ export function InterviewScheduling() {
   const [viewingInterview, setViewingInterview] = useState<ScheduledInterview | null>(null);
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
   const [applicants, setApplicants] = useState<Applicant[]>([]);
+  const [hrManagers, setHRManagers] = useState<HRManager[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
 
   const itemsPerPage = 5;
 
@@ -804,6 +839,17 @@ export function InterviewScheduling() {
       
       if (applicantsData) {
         setApplicants(applicantsData);
+      }
+      
+      // Load HR managers for the interviewer dropdown
+      const { data: hrManagersData } = await adminClient
+        .from('hr_managers')
+        .select('*')
+        .eq('is_active', true)
+        .order('name', { ascending: true });
+      
+      if (hrManagersData) {
+        setHRManagers(hrManagersData);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -849,56 +895,82 @@ export function InterviewScheduling() {
     currentPage * itemsPerPage
   );
 
-  const handleScheduleInterview = (data: InterviewFormData) => {
+  const handleScheduleInterview = async (data: InterviewFormData) => {
     const selectedApplicant = applicants.find((a) => a.id === data.applicantId);
     const selectedJobPosting = mockJobs.find((j) => j.id === data.jobId);
-    const selectedInterviewer = mockInterviewers.find((i) => i.id === data.interviewerId);
+    const selectedInterviewer = hrManagers.find((i) => i.id === data.interviewerId);
 
-    if (editingInterview) {
-      // Update existing interview
-      setInterviews((prev) =>
-        prev.map((interview) =>
-          interview.id === editingInterview.id
-            ? {
-                ...interview,
-                interviewDate: data.interviewDate,
-                interviewTime: data.interviewTime,
-                interviewType: data.interviewType,
-                meetingLink: data.meetingLink,
-                location: data.location,
-                interviewerId: data.interviewerId,
-                interviewerName: selectedInterviewer?.name,
-                notes: data.notes
-              }
-            : interview
-        )
-      );
-      alert('Interview rescheduled successfully!');
-    } else {
-      // Create new interview
-      const newInterview: ScheduledInterview = {
-        id: `interview-${Date.now()}`,
-        applicantId: data.applicantId,
-        applicantName: selectedApplicant?.name || 'Unknown Applicant',
-        applicantEmail: selectedApplicant?.email || '',
-        jobTitle: selectedJobPosting?.title || 'Unknown Position',
-        interviewDate: data.interviewDate,
-        interviewTime: data.interviewTime,
-        interviewType: data.interviewType,
-        meetingLink: data.meetingLink || undefined,
-        location: data.location || undefined,
-        interviewerId: data.interviewerId || undefined,
-        interviewerName: selectedInterviewer?.name,
-        status: 'scheduled',
-        notes: data.notes,
-        createdAt: new Date().toISOString()
-      };
+    // Show loading state
+    setIsScheduling(true);
+    setNotification(null);
 
-      setInterviews((prev) => [...prev, newInterview]);
-      alert('Interview scheduled successfully!');
+    try {
+      // Call the Flask API to schedule the interview
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${apiUrl}/api/schedule-interview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          applicant_email: selectedApplicant?.email || '',
+          applicant_name: selectedApplicant?.name || data.applicantId,
+          position: selectedJobPosting?.title || 'Unknown Position',
+          interview_date: data.interviewDate,
+          interview_time: data.interviewTime,
+          interview_type: data.interviewType,
+          meeting_link: data.meetingLink || '',
+          location: data.location || '',
+          interviewer_name: selectedInterviewer?.name || '',
+          interviewer_email: selectedInterviewer?.email || '',
+          interview_notes: data.notes || '',
+          duration_minutes: 60
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success || result.email_sent) {
+        // Build the interview object
+        const newInterview: ScheduledInterview = {
+          id: result.calendar_event_id || `interview-${Date.now()}`,
+          applicantId: data.applicantId,
+          applicantName: selectedApplicant?.name || 'Unknown Applicant',
+          applicantEmail: selectedApplicant?.email || '',
+          jobTitle: selectedJobPosting?.title || 'Unknown Position',
+          interviewDate: data.interviewDate,
+          interviewTime: data.interviewTime,
+          interviewType: data.interviewType,
+          meetingLink: result.meet_link || data.meetingLink || undefined,
+          location: data.location || undefined,
+          interviewerId: data.interviewerId || undefined,
+          interviewerName: selectedInterviewer?.name,
+          status: 'scheduled',
+          notes: data.notes,
+          createdAt: new Date().toISOString()
+        };
+
+        setInterviews((prev) => [...prev, newInterview]);
+
+        // Show success notification
+        let message = 'Interview scheduled successfully!';
+        if (result.calendar_created && result.email_sent) {
+          message = 'Interview scheduled! Calendar event created and email sent to applicant.';
+        } else if (result.calendar_created) {
+          message = 'Interview scheduled! Calendar event created but email failed.';
+        } else if (result.email_sent) {
+          message = 'Interview scheduled! Email sent but calendar event creation failed.';
+        }
+        setNotification({ type: 'success', message });
+      } else {
+        setNotification({ type: 'error', message: result.error || 'Failed to schedule interview' });
+      }
+    } catch (error) {
+      console.error('Error scheduling interview:', error);
+      setNotification({ type: 'error', message: 'Failed to schedule interview. Please check if the API server is running.' });
+    } finally {
+      setIsScheduling(false);
     }
-
-    setEditingInterview(null);
   };
 
   const handleCancelInterview = (interviewId: string) => {
@@ -943,6 +1015,32 @@ export function InterviewScheduling() {
           Manage and schedule interviews for shortlisted candidates
         </p>
       </div>
+
+      {/* Notification Banner */}
+      {notification && (
+        <div className={`p-4 rounded-lg border ${
+          notification.type === 'success' 
+            ? 'bg-green-50 border-green-200 text-green-800' 
+            : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {notification.type === 'success' ? (
+                <CheckCircle className="w-5 h-5" />
+              ) : (
+                <X className="w-5 h-5" />
+              )}
+              <span>{notification.message}</span>
+            </div>
+            <button 
+              onClick={() => setNotification(null)}
+              className="text-sm hover:opacity-70"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Top Section: Filters and Actions */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
@@ -1303,6 +1401,8 @@ export function InterviewScheduling() {
         interview={editingInterview}
         applicants={applicants}
         jobs={mockJobs}
+        hrManagers={hrManagers}
+        isScheduling={isScheduling}
       />
 
       {/* View Details Modal */}
