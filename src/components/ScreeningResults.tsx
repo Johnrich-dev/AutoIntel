@@ -453,7 +453,7 @@ export function ScreeningResults() {
             experience_score: Math.round(experienceScore),
             education_score: Math.round(educationScore),
             screening_status: status,
-            screening_stage: status === 'for_review' ? 'review' : 'screened',
+            screening_stage: status === 'in_review' ? 'review' : status === 'passed' ? 'shortlisted' : 'screened',
             screened_at: applicant.screened_at || new Date().toISOString(),
             matched_skills: matchedSkills,
             missing_skills: missingSkills,
@@ -583,6 +583,27 @@ export function ScreeningResults() {
   const handleViewDetails = (applicant: ScreenedApplicant) => {
     setSelectedApplicant(applicant);
     setShowDetailModal(true);
+  };
+
+  // Handle status update from modal (for in_review -> passed/failed decisions)
+  const handleUpdateStatus = async (applicantId: string, newStatus: 'passed' | 'failed') => {
+    try {
+      // Update local state only (database was already updated by the API)
+      setApplicants((prev) =>
+        prev.map((app) =>
+          app.id === applicantId 
+            ? { ...app, screening_status: newStatus, screening_stage: newStatus === 'passed' ? 'shortlisted' : 'screened' } 
+            : app
+        )
+      );
+
+      // Update selected applicant if it's the same
+      if (selectedApplicant?.id === applicantId) {
+        setSelectedApplicant(prev => prev ? { ...prev, screening_status: newStatus } : null);
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+    }
   };
 
   const handleApprove = async (id: string) => {
@@ -954,6 +975,7 @@ export function ScreeningResults() {
         <ScreeningDetailModal
           applicant={selectedApplicant}
           onClose={() => setShowDetailModal(false)}
+          onUpdateStatus={handleUpdateStatus}
         />
       )}
 

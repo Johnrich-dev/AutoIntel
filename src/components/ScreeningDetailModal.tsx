@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   X,
   CheckCircle,
@@ -150,14 +151,89 @@ function getAlternativeRoles(skills: string[]): string[] {
 interface ScreeningDetailModalProps {
   applicant: ScreenedApplicant;
   onClose: () => void;
+  onUpdateStatus?: (applicantId: string, newStatus: 'passed' | 'failed') => void;
 }
 
 export function ScreeningDetailModal({
   applicant,
   onClose,
+  onUpdateStatus,
 }: ScreeningDetailModalProps) {
+  const [isProcessing, setIsProcessing] = useState(false);
+  
   const hasResumeData = applicant.resume?.parsed_data && typeof applicant.resume?.parsed_data === 'object';
   const parsedData = hasResumeData ? applicant.resume?.parsed_data : null;
+
+  // Handle HR decision for in_review applicants
+  const handleDecision = async (decision: 'approved' | 'rejected') => {
+    console.log('handleDecision called with decision:', decision);
+    console.log('Applicant ID:', applicant.id);
+    console.log('Applicant email:', applicant.email);
+    
+    if (!applicant.id || !applicant.email) {
+      console.error('Missing applicant ID or email');
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      // Prepare request data with safe defaults
+      const requestData = {
+        applicant_id: applicant.id,
+        applicant_email: applicant.email,
+        applicant_name: applicant.name,
+        position: applicant.position,
+        overall_score: applicant.overall_score || 0,
+        skills_score: applicant.skills_score || 0,
+        experience_score: applicant.experience_score || 0,
+        education_score: applicant.education_score || 0,
+        requirement_match_score: applicant.requirement_match_score || null,
+        count_score: applicant.count_score || null,
+        requirement_breakdown: applicant.requirement_breakdown || null,
+        count_breakdown: applicant.count_breakdown || null,
+        weights_used: applicant.weights_used || null,
+      };
+
+      console.log('Request data:', requestData);
+
+      // Call API endpoint
+      const endpoint = decision === 'approved' ? '/api/grant-access' : '/api/reject-applicant';
+      const apiUrl = `http://localhost:5000${endpoint}`;
+      console.log('Calling API:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+      });
+
+      console.log('API response status:', response.status);
+      const result = await response.json();
+      console.log('API response:', result);
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to process request');
+      }
+
+      // Call the onUpdateStatus callback to update local state
+      const newStatus = decision === 'approved' ? 'passed' : 'failed';
+      if (onUpdateStatus) {
+        onUpdateStatus(applicant.id, newStatus);
+      }
+      
+      const message = decision === 'approved' 
+        ? `Access granted! Email sent to ${applicant.email} with access token.`
+        : `Applicant rejected. Email sent to ${applicant.email}.`;
+      alert(message);
+    } catch (error) {
+      console.error('Error processing decision:', error);
+      alert(`Error processing request: ${error.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const matchedSkills = applicant.matched_skills || [];
   const missingSkills = applicant.missing_skills || [];
@@ -369,13 +445,43 @@ export function ScreeningDetailModal({
             })}
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">
-              Status: <span className="font-medium text-gray-700">
-                {applicant.screening_status === 'passed' ? 'Passed' : 
-                 applicant.screening_status === 'in_review' ? 'In Review' : 
-                 applicant.screening_status === 'failed' ? 'Failed' : 'Unknown'}
+            {applicant.screening_status === 'in_review' && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDecision('rejected')}
+                  disabled={isProcessing}
+                  className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  Reject
+                </button>
+                <button
+                  onClick={() => handleDecision('approved')}
+                  disabled={isProcessing}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isProcessing ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Grant Access
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+            {applicant.screening_status !== 'in_review' && applicant.screening_status !== undefined && (
+              <span className="text-sm text-gray-500">
+                Status: <span className="font-medium text-gray-700">
+                  {applicant.screening_status === 'passed' ? 'Passed' : 
+                   applicant.screening_status === 'in_review' ? 'In Review' : 
+                   applicant.screening_status === 'failed' ? 'Failed' : 'Unknown'}
+                </span>
               </span>
-            </span>
+            )}
           </div>
         </div>
       </div>
