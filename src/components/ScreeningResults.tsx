@@ -36,7 +36,6 @@ interface ScreenedApplicant extends Applicant {
   experience_score?: number;
   education_score?: number;
   screening_status?: 'passed' | 'in_review' | 'failed';
-  screening_stage?: 'screened' | 'review' | 'shortlisted';
   screened_at?: string;
   matched_skills?: string[];
   missing_skills?: string[];
@@ -462,7 +461,6 @@ export function ScreeningResults() {
             experience_score: Math.round(experienceScore),
             education_score: Math.round(educationScore),
             screening_status: status,
-            screening_stage: status === 'in_review' ? 'review' : status === 'passed' ? 'shortlisted' : 'screened',
             screened_at: applicant.screened_at || new Date().toISOString(),
             matched_skills: matchedSkills,
             missing_skills: missingSkills,
@@ -528,7 +526,6 @@ export function ScreeningResults() {
       experience_score: experience,
       education_score: education,
       screening_status: status,
-      screening_stage: status === 'passed' ? 'shortlisted' : status === 'in_review' ? 'review' : 'screened',
       screened_at: new Date(Date.now() - (hash % 30) * 24 * 60 * 60 * 1000).toISOString(),
       matched_skills: matchedSkills,
       missing_skills: missingSkills,
@@ -601,7 +598,7 @@ export function ScreeningResults() {
       setApplicants((prev) =>
         prev.map((app) =>
           app.id === applicantId 
-            ? { ...app, screening_status: newStatus, screening_stage: newStatus === 'passed' ? 'shortlisted' : 'screened' } 
+            ? { ...app, screening_status: newStatus } 
             : app
         )
       );
@@ -620,13 +617,13 @@ export function ScreeningResults() {
       const adminClient = getSupabaseAdminClient();
       await adminClient
         .from('applicants')
-        .update({ screening_stage: 'shortlisted', screening_status: 'passed' })
+        .update({ screening_status: 'passed' })
         .eq('id', id);
 
       // Update local state
       setApplicants((prev) =>
         prev.map((app) =>
-          app.id === id ? { ...app, screening_stage: 'shortlisted', screening_status: 'passed' } : app
+          app.id === id ? { ...app, screening_status: 'passed' } : app
         )
       );
     } catch (error) {
@@ -831,9 +828,7 @@ export function ScreeningResults() {
                 <th className="px-4 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-4 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Stage
-                </th>
+
                 <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Date Screened
                 </th>
@@ -886,16 +881,7 @@ export function ScreeningResults() {
                       <StatusBadge status={applicant.screening_status || 'failed'} />
                     </td>
 
-                    {/* Stage */}
-                    <td className="px-4 py-5 text-center">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-700">
-                        {applicant.screening_stage === 'shortlisted'
-                          ? 'Shortlisted'
-                          : applicant.screening_stage === 'review'
-                          ? 'Under Review'
-                          : 'Screened'}
-                      </span>
-                    </td>
+
 
                     {/* Date Screened */}
                     <td className="px-4 py-5">
