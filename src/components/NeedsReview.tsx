@@ -258,13 +258,13 @@ export function NeedsReview() {
         setError(null);
         const adminClient = getSupabaseAdminClient();
 
-        // Fetch applicants in 'in_review' status (borderline scores requiring manual HR evaluation)
-        // These are applicants who scored between review_threshold and qualified_threshold
-        // AND have completed both video and work style assessments
+        // Fetch applicants that need review (not shortlisted, rejected, or hired)
         const { data: applicantsData, error: applicantsError } = await adminClient
           .from('applicants')
           .select('*')
-          .eq('screening_status', 'in_review')
+          .not('status', 'eq', 'shortlisted')
+          .not('status', 'eq', 'rejected')
+          .not('status', 'eq', 'hired')
           .order('screening_score', { ascending: false });
 
         if (applicantsError) throw applicantsError;
