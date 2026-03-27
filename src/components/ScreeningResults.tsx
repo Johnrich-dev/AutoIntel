@@ -291,17 +291,26 @@ export function ScreeningResults() {
           const overallScore = applicant.screening_score ?? 0;
           
           // Determine status based on configurable scoring thresholds
-          // Passed: score >= qualified_threshold
-          // In Review: score >= review_threshold AND score < qualified_threshold  
-          // Failed: score < review_threshold
+          // IMPORTANT: Use the database screening_status if it exists (manual HR decision)
+          // Only calculate based on score for new applicants that haven't been manually reviewed
           let status: 'passed' | 'in_review' | 'failed';
           
-          if (overallScore >= qualifiedThreshold) {
-            status = 'passed';
-          } else if (overallScore >= reviewThreshold) {
-            status = 'in_review';
+          // Check if there's a manual status override in the database
+          if (applicant.screening_status && ['passed', 'in_review', 'failed'].includes(applicant.screening_status)) {
+            // Use the database status (preserves manual HR decisions)
+            status = applicant.screening_status as 'passed' | 'in_review' | 'failed';
           } else {
-            status = 'failed';
+            // Calculate status based on score for new applicants
+            // Passed: score >= qualified_threshold
+            // In Review: score >= review_threshold AND score < qualified_threshold  
+            // Failed: score < review_threshold
+            if (overallScore >= qualifiedThreshold) {
+              status = 'passed';
+            } else if (overallScore >= reviewThreshold) {
+              status = 'in_review';
+            } else {
+              status = 'failed';
+            }
           }
           
           // Extract matched skills from resume if available
