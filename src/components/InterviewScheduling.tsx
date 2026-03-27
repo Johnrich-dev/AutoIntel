@@ -22,7 +22,8 @@ import {
   User,
   Mail,
   FileText,
-  Check
+  Check,
+  ExternalLink
 } from 'lucide-react';
 import { getSupabaseAdminClient, Applicant, Resume } from '../lib/supabase';
 
@@ -67,7 +68,7 @@ interface InterviewFormData {
   jobId: string;
   interviewDate: string;
   interviewTime: string;
-  interviewType: 'online' | 'in-person';
+  interviewType: '' | 'online' | 'in-person';
   meetingLink: string;
   location: string;
   interviewerId: string;
@@ -212,6 +213,24 @@ function StatusBadge({ status }: { status: ScheduledInterview['status'] }) {
 }
 
 // ============================================================================
+// Google Meet Link Generator
+// ============================================================================
+
+function generateGoogleMeetLink(): string {
+  // Generate a random Google Meet code (3 segments: 3-4-3 characters)
+  const chars = 'abcdefghijklmnopqrstuvwxyz';
+  const getSegment = (len: number) => {
+    let segment = '';
+    for (let i = 0; i < len; i++) {
+      segment += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return segment;
+  };
+  const meetCode = `${getSegment(3)}-${getSegment(4)}-${getSegment(3)}`;
+  return `https://meet.google.com/${meetCode}`;
+}
+
+// ============================================================================
 // Action Button Component
 // ============================================================================
 
@@ -271,7 +290,7 @@ function InterviewModal({
     jobId: '',
     interviewDate: '',
     interviewTime: '',
-    interviewType: 'online',
+    interviewType: '' as '' | 'online' | 'in-person',
     meetingLink: '',
     location: '',
     interviewerId: '',
@@ -297,7 +316,7 @@ function InterviewModal({
         jobId: '',
         interviewDate: '',
         interviewTime: '',
-        interviewType: 'online',
+        interviewType: '' as '' | 'online' | 'in-person',
         meetingLink: '',
         location: '',
         interviewerId: '',
@@ -339,7 +358,27 @@ function InterviewModal({
               </label>
               <select
                 value={formData.applicantId}
-                onChange={(e) => setFormData({ ...formData, applicantId: e.target.value })}
+                onChange={(e) => {
+                  const selectedId = e.target.value;
+                  setFormData(prev => {
+                    // Find the selected applicant
+                    const selectedApp = applicants.find(a => a.id === selectedId);
+                    
+                    // Auto-fill job based on selected applicant's position
+                    let jobIdValue = prev.jobId;
+                    if (selectedApp?.position) {
+                      // Try to find matching job in the jobs list
+                      const matchingJob = jobs.find(j => j.title === selectedApp.position);
+                      jobIdValue = matchingJob?.id || selectedApp.position;
+                    }
+                    
+                    return { 
+                      ...prev, 
+                      applicantId: selectedId,
+                      jobId: jobIdValue
+                    };
+                  });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
               >
@@ -356,24 +395,21 @@ function InterviewModal({
               </select>
             </div>
 
-            {/* Job Selection */}
+            {/* Job Selection - Auto-filled based on applicant */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Job Applied <span className="text-red-500">*</span>
               </label>
-              <select
-                value={formData.jobId}
-                onChange={(e) => setFormData({ ...formData, jobId: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                <option value="">Select Job</option>
-                {jobs.map((job) => (
-                  <option key={job.id} value={job.id}>
-                    {job.title} {job.department ? `(${job.department})` : ''}
-                  </option>
-                ))}
-              </select>
+              <input
+                type="text"
+                value={(() => {
+                  const selectedApp = applicants.find(a => a.id === formData.applicantId);
+                  return selectedApp?.position || '';
+                })()}
+                readOnly
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                placeholder="Select an applicant to auto-fill"
+              />
             </div>
 
             {/* Date and Time */}
@@ -411,17 +447,28 @@ function InterviewModal({
               </label>
               <select
                 value={formData.interviewType}
-                onChange={(e) => setFormData({ ...formData, interviewType: e.target.value as 'online' | 'in-person' })}
+                onChange={(e) => {
+                  const newType = e.target.value as 'online' | 'in-person';
+                  setFormData({ 
+                    ...formData, 
+                    interviewType: newType,
+                    // Auto-generate Google Meet link when switching to online
+                    meetingLink: newType === 'online' ? generateGoogleMeetLink() : '',
+                    // Clear location when switching to online
+                    location: newType === 'online' ? '' : formData.location
+                  });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
               >
+                <option value="">Select Type</option>
                 <option value="online">Online</option>
                 <option value="in-person">In-person</option>
               </select>
             </div>
 
             {/* Meeting Link or Location */}
-            {formData.interviewType === 'online' ? (
+            {formData.interviewType === 'online' || formData.interviewType === '' ? (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Meeting Link
@@ -437,7 +484,7 @@ function InterviewModal({
             ) : (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Location
+                  Location <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -445,6 +492,7 @@ function InterviewModal({
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                   placeholder="Conference Room, Floor, Building..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
                 />
               </div>
             )}
@@ -452,12 +500,13 @@ function InterviewModal({
             {/* Interviewer */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Assign Hiring Manager / Interviewer
+                Assign Hiring Manager / Interviewer <span className="text-red-500">*</span>
               </label>
               <select
                 value={formData.interviewerId}
                 onChange={(e) => setFormData({ ...formData, interviewerId: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                required
               >
                 <option value="">Select Interviewer</option>
                 {(hrManagers && hrManagers.length > 0) ? (
@@ -602,7 +651,7 @@ function ViewDetailsModal({
 
               {interview.interviewType === 'online' && interview.meetingLink && (
                 <div className="flex items-center gap-3">
-                  <Link className="w-4 h-4 text-gray-400" />
+                  <ExternalLink className="w-4 h-4 text-gray-400" />
                   <a
                     href={interview.meetingLink}
                     target="_blank"
@@ -816,6 +865,7 @@ export function InterviewScheduling() {
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [hrManagers, setHRManagers] = useState<HRManager[]>([]);
+  const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [loading, setLoading] = useState(true);
   const [isScheduling, setIsScheduling] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
@@ -850,6 +900,17 @@ export function InterviewScheduling() {
       
       if (hrManagersData) {
         setHRManagers(hrManagersData);
+      }
+      
+      // Load job postings for the filter dropdown
+      const { data: jobsData } = await adminClient
+        .from('job_postings')
+        .select('*')
+        .eq('is_active', true)
+        .order('title', { ascending: true });
+      
+      if (jobsData) {
+        setJobs(jobsData);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -931,6 +992,13 @@ export function InterviewScheduling() {
       const result = await response.json();
 
       if (result.success || result.email_sent) {
+        // Validate interview type
+        if (!data.interviewType) {
+          setNotification({ type: 'error', message: 'Please select an interview type' });
+          setIsScheduling(false);
+          return;
+        }
+
         // Build the interview object
         const newInterview: ScheduledInterview = {
           id: result.calendar_event_id || `interview-${Date.now()}`,
@@ -940,7 +1008,7 @@ export function InterviewScheduling() {
           jobTitle: selectedJobPosting?.title || 'Unknown Position',
           interviewDate: data.interviewDate,
           interviewTime: data.interviewTime,
-          interviewType: data.interviewType,
+          interviewType: data.interviewType as 'online' | 'in-person',
           meetingLink: result.meet_link || data.meetingLink || undefined,
           location: data.location || undefined,
           interviewerId: data.interviewerId || undefined,
@@ -1055,7 +1123,7 @@ export function InterviewScheduling() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="all">All Jobs</option>
-                {mockJobs.map((job) => (
+                {jobs.map((job) => (
                   <option key={job.id} value={job.title}>
                     {job.title}
                   </option>
@@ -1414,3 +1482,4 @@ export function InterviewScheduling() {
     </div>
   );
 }
+
