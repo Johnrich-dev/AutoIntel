@@ -272,6 +272,8 @@ export function NeedsReview() {
         // Fetch resumes for these applicants
         const applicantIds = (applicantsData || []).map(a => a.id);
         let resumesMap: Record<string, Resume> = {};
+        let videoAssessmentsMap: Record<string, boolean> = {};
+        let personalityTestsMap: Record<string, boolean> = {};
         
         if (applicantIds.length > 0) {
           const { data: resumesData } = await adminClient
@@ -284,20 +286,54 @@ export function NeedsReview() {
               resumesMap[resume.applicant_id] = resume;
             });
           }
+
+          // Fetch video assessments to check completion status
+          const { data: videoAssessmentsData } = await adminClient
+            .from('video_assessments')
+            .select('applicant_id, status, submitted_at')
+            .in('applicant_id', applicantIds);
+          
+          if (videoAssessmentsData) {
+            videoAssessmentsData.forEach(assessment => {
+              // Consider completed if status is 'submitted' or 'completed' or if submitted_at exists
+              videoAssessmentsMap[assessment.applicant_id] = 
+                assessment.status === 'submitted' || 
+                assessment.status === 'completed' || 
+                !!assessment.submitted_at;
+            });
+          }
+
+          // Fetch work style assessments (personality tests) to check completion status
+          const { data: workStyleAssessmentsData } = await adminClient
+            .from('work_style_assessments')
+            .select('applicant_id, status, submitted_at')
+            .in('applicant_id', applicantIds);
+          
+          if (workStyleAssessmentsData) {
+            workStyleAssessmentsData.forEach(test => {
+              // Consider completed if status is 'submitted' or 'completed' or if submitted_at exists
+              personalityTestsMap[test.applicant_id] = 
+                test.status === 'submitted' || 
+                test.status === 'completed' || 
+                !!test.submitted_at;
+            });
+          }
         }
 
-        // Map applicants with their data
+        // Map applicants with their data and filter to only those who completed both assessments
         if (applicantsData) {
-          const mappedApplicants: NeedsReviewApplicant[] = applicantsData.map(applicant => ({
-            ...applicant,
-            resume: resumesMap[applicant.id],
-            overall_score: applicant.screening_score || 0,
-            screened_at: applicant.screened_at || applicant.updated_at || applicant.created_at,
-            video_completed: !!applicant.video_assessment_score,
-            profiling_completed: !!applicant.work_style_score,
-            // Determine key issue based on screening_fit_category or score
-            key_issue: applicant.screening_fit_category || determineKeyIssue(applicant.screening_score || 0),
-          }));
+          const mappedApplicants: NeedsReviewApplicant[] = applicantsData
+            .map(applicant => ({
+              ...applicant,
+              resume: resumesMap[applicant.id],
+              overall_score: applicant.screening_score || 0,
+              screened_at: applicant.screened_at || applicant.updated_at || applicant.created_at,
+              video_completed: videoAssessmentsMap[applicant.id] || false,
+              profiling_completed: personalityTestsMap[applicant.id] || false,
+              // Determine key issue based on screening_fit_category or score
+              key_issue: applicant.screening_fit_category || determineKeyIssue(applicant.screening_score || 0),
+            }))
+            .filter(applicant => applicant.video_completed && applicant.profiling_completed);
 
           setApplicants(mappedApplicants);
         }
@@ -374,83 +410,7 @@ export function NeedsReview() {
   );
 
   // Handlers
-  const handleApprove = async (id: string) => {
-    try {
-      const adminClient = getSupabaseAdminClient();
-      const { error: updateError } = await adminClient
-        .from('applicants')
-        .update({ status: 'shortlisted' })
-        .eq('id', id);
 
-      if (updateError) throw updateError;
-      
-      setApplicants(prev => prev.filter(a => a.id !== id));
-      setShowDetailPanel(false);
-      setSelectedApplicant(null);
-    } catch (err) {
-      console.error('Error approving applicant:', err);
-      alert('Failed to approve applicant. Please try again.');
-    }
-  };
-
-  const handleReject = async (id: string) => {
-    try {
-      const adminClient = getSupabaseAdminClient();
-      const { error: updateError } = await adminClient
-        .from('applicants')
-        .update({ status: 'rejected' })
-        .eq('id', id);
-
-      if (updateError) throw updateError;
-      
-      setApplicants(prev => prev.filter(a => a.id !== id));
-      setShowDetailPanel(false);
-      setSelectedApplicant(null);
-    } catch (err) {
-      console.error('Error rejecting applicant:', err);
-      alert('Failed to reject applicant. Please try again.');
-    }
-  };
-
-  const handleBulkApprove = async () => {
-    try {
-      const adminClient = getSupabaseAdminClient();
-      const idsToApprove = Array.from(selectedApplicants);
-      
-      for (const id of idsToApprove) {
-        await adminClient
-          .from('applicants')
-          .update({ status: 'shortlisted' })
-          .eq('id', id);
-      }
-      
-      setApplicants(prev => prev.filter(a => !selectedApplicants.has(a.id)));
-      setSelectedApplicants(new Set());
-    } catch (err) {
-      console.error('Error bulk approving applicants:', err);
-      alert('Failed to approve applicants. Please try again.');
-    }
-  };
-
-  const handleBulkReject = async () => {
-    try {
-      const adminClient = getSupabaseAdminClient();
-      const idsToReject = Array.from(selectedApplicants);
-      
-      for (const id of idsToReject) {
-        await adminClient
-          .from('applicants')
-          .update({ status: 'rejected' })
-          .eq('id', id);
-      }
-      
-      setApplicants(prev => prev.filter(a => !selectedApplicants.has(a.id)));
-      setSelectedApplicants(new Set());
-    } catch (err) {
-      console.error('Error bulk rejecting applicants:', err);
-      alert('Failed to reject applicants. Please try again.');
-    }
-  };
 
   const toggleApplicantSelection = (id: string) => {
     const newSelected = new Set(selectedApplicants);
@@ -495,6 +455,8 @@ export function NeedsReview() {
 
         const applicantIds = (applicantsData || []).map(a => a.id);
         let resumesMap: Record<string, Resume> = {};
+        let videoAssessmentsMap: Record<string, boolean> = {};
+        let personalityTestsMap: Record<string, boolean> = {};
         
         if (applicantIds.length > 0) {
           const { data: resumesData } = await adminClient
@@ -507,18 +469,52 @@ export function NeedsReview() {
               resumesMap[resume.applicant_id] = resume;
             });
           }
+
+          // Fetch video assessments to check completion status
+          const { data: videoAssessmentsData } = await adminClient
+            .from('video_assessments')
+            .select('applicant_id, status, submitted_at')
+            .in('applicant_id', applicantIds);
+          
+          if (videoAssessmentsData) {
+            videoAssessmentsData.forEach(assessment => {
+              // Consider completed if status is 'submitted' or 'completed' or if submitted_at exists
+              videoAssessmentsMap[assessment.applicant_id] = 
+                assessment.status === 'submitted' || 
+                assessment.status === 'completed' || 
+                !!assessment.submitted_at;
+            });
+          }
+
+          // Fetch work style assessments (personality tests) to check completion status
+          const { data: workStyleAssessmentsData } = await adminClient
+            .from('work_style_assessments')
+            .select('applicant_id, status, submitted_at')
+            .in('applicant_id', applicantIds);
+          
+          if (workStyleAssessmentsData) {
+            workStyleAssessmentsData.forEach(test => {
+              // Consider completed if status is 'submitted' or 'completed' or if submitted_at exists
+              personalityTestsMap[test.applicant_id] = 
+                test.status === 'submitted' || 
+                test.status === 'completed' || 
+                !!test.submitted_at;
+            });
+          }
         }
 
         if (applicantsData) {
-          const mappedApplicants: NeedsReviewApplicant[] = applicantsData.map(applicant => ({
-            ...applicant,
-            resume: resumesMap[applicant.id],
-            overall_score: applicant.screening_score || 0,
-            screened_at: applicant.updated_at || applicant.created_at,
-            video_completed: !!applicant.video_assessment_score,
-            profiling_completed: !!applicant.work_style_score,
-            key_issue: applicant.screening_fit_category || determineKeyIssue(applicant.screening_score || 0),
-          }));
+          const mappedApplicants: NeedsReviewApplicant[] = applicantsData
+            .map(applicant => ({
+              ...applicant,
+              resume: resumesMap[applicant.id],
+              overall_score: applicant.screening_score || 0,
+              screened_at: applicant.updated_at || applicant.created_at,
+              video_completed: videoAssessmentsMap[applicant.id] || false,
+              profiling_completed: personalityTestsMap[applicant.id] || false,
+              key_issue: applicant.screening_fit_category || determineKeyIssue(applicant.screening_score || 0),
+            }))
+            .filter(applicant => applicant.video_completed && applicant.profiling_completed);
 
           setApplicants(mappedApplicants);
         }
@@ -612,20 +608,6 @@ export function NeedsReview() {
             {selectedApplicants.size > 0 && (
               <div className="flex items-center gap-2 ml-auto">
                 <span className="text-sm text-gray-500">{selectedApplicants.size} selected</span>
-                <button
-                  onClick={handleBulkApprove}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  Approve All
-                </button>
-                <button
-                  onClick={handleBulkReject}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Reject All
-                </button>
               </div>
             )}
           </div>
@@ -805,20 +787,6 @@ export function NeedsReview() {
                           >
                             <Eye className="w-4 h-4 text-gray-500 group-hover:text-blue-600" />
                           </button>
-                          <button
-                            onClick={() => handleApprove(applicant.id)}
-                            className="p-2 hover:bg-green-50 rounded-lg transition-colors group"
-                            title="Approve"
-                          >
-                            <CheckCircle className="w-4 h-4 text-gray-500 group-hover:text-green-600" />
-                          </button>
-                          <button
-                            onClick={() => handleReject(applicant.id)}
-                            className="p-2 hover:bg-red-50 rounded-lg transition-colors group"
-                            title="Reject"
-                          >
-                            <XCircle className="w-4 h-4 text-gray-500 group-hover:text-red-600" />
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -884,8 +852,7 @@ export function NeedsReview() {
           setShowDetailPanel(false);
           setSelectedApplicant(null);
         }}
-        onApprove={handleApprove}
-        onReject={handleReject}
+
       />
     </div>
   );

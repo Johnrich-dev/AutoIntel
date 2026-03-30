@@ -58,15 +58,11 @@ interface NeedsReviewApplicant {
 export function NeedsReviewDetailPanel({
   applicant,
   isOpen,
-  onClose,
-  onApprove,
-  onReject
+  onClose
 }: {
   applicant: NeedsReviewApplicant | null;
   isOpen: boolean;
   onClose: () => void;
-  onApprove: (id: string) => void;
-  onReject: (id: string) => void;
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [notes, setNotes] = useState('');
@@ -400,29 +396,13 @@ export function NeedsReviewDetailPanel({
       </div>
 
       {/* Footer Actions */}
-      <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-between">
+      <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-end">
         <button
           onClick={onClose}
           className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium transition-colors"
         >
-          Cancel
+          Close
         </button>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => onReject(applicant.id)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl font-medium transition-colors"
-          >
-            <XCircle className="w-5 h-5" />
-            Reject
-          </button>
-          <button
-            onClick={() => onApprove(applicant.id)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white hover:bg-green-700 rounded-xl font-medium transition-colors shadow-lg shadow-green-200"
-          >
-            <CheckCircle className="w-5 h-5" />
-            Approve → Shortlisted
-          </button>
-        </div>
       </div>
     </div>
   );
