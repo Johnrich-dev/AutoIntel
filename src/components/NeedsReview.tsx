@@ -274,6 +274,8 @@ export function NeedsReview() {
         let resumesMap: Record<string, Resume> = {};
         let videoAssessmentsMap: Record<string, boolean> = {};
         let personalityTestsMap: Record<string, boolean> = {};
+        let videoScoresMap: Record<string, number> = {};
+        let workStyleScoresMap: Record<string, number> = {};
         
         if (applicantIds.length > 0) {
           const { data: resumesData } = await adminClient
@@ -287,10 +289,10 @@ export function NeedsReview() {
             });
           }
 
-          // Fetch video assessments to check completion status
+          // Fetch video assessments to check completion status and scores
           const { data: videoAssessmentsData } = await adminClient
             .from('video_assessments')
-            .select('applicant_id, status, submitted_at')
+            .select('applicant_id, status, submitted_at, transcript_score')
             .in('applicant_id', applicantIds);
           
           if (videoAssessmentsData) {
@@ -300,13 +302,17 @@ export function NeedsReview() {
                 assessment.status === 'submitted' || 
                 assessment.status === 'completed' || 
                 !!assessment.submitted_at;
+              // Store the score
+              if (assessment.transcript_score !== null && assessment.transcript_score !== undefined) {
+                videoScoresMap[assessment.applicant_id] = assessment.transcript_score;
+              }
             });
           }
 
-          // Fetch work style assessments (personality tests) to check completion status
+          // Fetch work style assessments (personality tests) to check completion status and scores
           const { data: workStyleAssessmentsData } = await adminClient
             .from('work_style_assessments')
-            .select('applicant_id, status, submitted_at')
+            .select('applicant_id, status, submitted_at, semantic_score')
             .in('applicant_id', applicantIds);
           
           if (workStyleAssessmentsData) {
@@ -316,6 +322,10 @@ export function NeedsReview() {
                 test.status === 'submitted' || 
                 test.status === 'completed' || 
                 !!test.submitted_at;
+              // Store the score
+              if (test.semantic_score !== null && test.semantic_score !== undefined) {
+                workStyleScoresMap[test.applicant_id] = test.semantic_score;
+              }
             });
           }
         }
@@ -330,6 +340,8 @@ export function NeedsReview() {
               screened_at: applicant.screened_at || applicant.updated_at || applicant.created_at,
               video_completed: videoAssessmentsMap[applicant.id] || false,
               profiling_completed: personalityTestsMap[applicant.id] || false,
+              video_assessment_score: videoScoresMap[applicant.id],
+              work_style_score: workStyleScoresMap[applicant.id],
               // Determine key issue based on screening_fit_category or score
               key_issue: applicant.screening_fit_category || determineKeyIssue(applicant.screening_score || 0),
             }))
@@ -457,6 +469,8 @@ export function NeedsReview() {
         let resumesMap: Record<string, Resume> = {};
         let videoAssessmentsMap: Record<string, boolean> = {};
         let personalityTestsMap: Record<string, boolean> = {};
+        let videoScoresMap: Record<string, number> = {};
+        let workStyleScoresMap: Record<string, number> = {};
         
         if (applicantIds.length > 0) {
           const { data: resumesData } = await adminClient
@@ -470,10 +484,10 @@ export function NeedsReview() {
             });
           }
 
-          // Fetch video assessments to check completion status
+          // Fetch video assessments to check completion status and scores
           const { data: videoAssessmentsData } = await adminClient
             .from('video_assessments')
-            .select('applicant_id, status, submitted_at')
+            .select('applicant_id, status, submitted_at, transcript_score')
             .in('applicant_id', applicantIds);
           
           if (videoAssessmentsData) {
@@ -483,13 +497,17 @@ export function NeedsReview() {
                 assessment.status === 'submitted' || 
                 assessment.status === 'completed' || 
                 !!assessment.submitted_at;
+              // Store the score
+              if (assessment.transcript_score !== null && assessment.transcript_score !== undefined) {
+                videoScoresMap[assessment.applicant_id] = assessment.transcript_score;
+              }
             });
           }
 
-          // Fetch work style assessments (personality tests) to check completion status
+          // Fetch work style assessments (personality tests) to check completion status and scores
           const { data: workStyleAssessmentsData } = await adminClient
             .from('work_style_assessments')
-            .select('applicant_id, status, submitted_at')
+            .select('applicant_id, status, submitted_at, semantic_score')
             .in('applicant_id', applicantIds);
           
           if (workStyleAssessmentsData) {
@@ -499,6 +517,10 @@ export function NeedsReview() {
                 test.status === 'submitted' || 
                 test.status === 'completed' || 
                 !!test.submitted_at;
+              // Store the score
+              if (test.semantic_score !== null && test.semantic_score !== undefined) {
+                workStyleScoresMap[test.applicant_id] = test.semantic_score;
+              }
             });
           }
         }
@@ -512,6 +534,8 @@ export function NeedsReview() {
               screened_at: applicant.updated_at || applicant.created_at,
               video_completed: videoAssessmentsMap[applicant.id] || false,
               profiling_completed: personalityTestsMap[applicant.id] || false,
+              video_assessment_score: videoScoresMap[applicant.id],
+              work_style_score: workStyleScoresMap[applicant.id],
               key_issue: applicant.screening_fit_category || determineKeyIssue(applicant.screening_score || 0),
             }))
             .filter(applicant => applicant.video_completed && applicant.profiling_completed);
