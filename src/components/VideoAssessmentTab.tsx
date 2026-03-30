@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Video, ExternalLink, X, User, FileText, Brain, Star, TrendingUp, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { Video, ExternalLink, X, User, FileText, Brain, Star, TrendingUp, AlertCircle, CheckCircle, Loader2, Shield, Check, AlertTriangle } from 'lucide-react';
 import { getSupabaseAdminClient } from '../lib/supabase';
 
 interface VideoAssessmentTabProps {
@@ -30,6 +30,10 @@ export function VideoAssessmentTab({ applicantId, videoScore, onClose }: VideoAs
   const [applicantData, setApplicantData] = useState<ApplicantData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Identity verification state
+  const [identityStatus, setIdentityStatus] = useState<'pending' | 'verified' | 'needs_review'>('pending');
+  const [identityNotes, setIdentityNotes] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -178,11 +182,19 @@ export function VideoAssessmentTab({ applicantId, videoScore, onClose }: VideoAs
 
         {/* Identity Verification Section */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h4 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <User className="w-4 h-4 text-indigo-600" />
-            Identity Verification
-          </h4>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Shield className="w-4 h-4 text-indigo-600" />
+            <h4 className="text-sm font-semibold text-gray-900">Identity Verification</h4>
+          </div>
+          
+          {/* Manual Verification Notice */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+            <p className="text-xs text-blue-800 font-medium">
+              Identity verification is to be performed by the reviewer.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mb-4">
             {/* Profile Image */}
             <div className="space-y-2">
               <p className="text-xs text-gray-500 font-medium">Profile Image</p>
@@ -219,8 +231,50 @@ export function VideoAssessmentTab({ applicantId, videoScore, onClose }: VideoAs
               </div>
             </div>
           </div>
-          <p className="text-xs text-gray-500 mt-3">
-            Compare the video recording with the profile image to verify applicant identity.
+
+          {/* Verification Status */}
+          <div className="space-y-3">
+            <p className="text-xs text-gray-500 font-medium">Verification Status</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setIdentityStatus('verified')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg border transition-colors ${
+                  identityStatus === 'verified'
+                    ? 'bg-green-50 border-green-300 text-green-700'
+                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <Check className="w-4 h-4" />
+                <span className="text-sm font-medium">Identity Verified</span>
+              </button>
+              <button
+                onClick={() => setIdentityStatus('needs_review')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg border transition-colors ${
+                  identityStatus === 'needs_review'
+                    ? 'bg-amber-50 border-amber-300 text-amber-700'
+                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <AlertTriangle className="w-4 h-4" />
+                <span className="text-sm font-medium">Needs Further Review</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Verification Notes */}
+          <div className="mt-4 space-y-2">
+            <p className="text-xs text-gray-500 font-medium">Verification Notes</p>
+            <textarea
+              value={identityNotes}
+              onChange={(e) => setIdentityNotes(e.target.value)}
+              placeholder="Add notes (e.g., 'Lighting unclear', 'Face partially obstructed')"
+              className="w-full h-20 p-3 border border-gray-200 rounded-lg text-sm resize-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Guideline */}
+          <p className="text-xs text-gray-400 mt-3 italic">
+            Ensure fair and unbiased verification based on visible consistency only.
           </p>
         </div>
 
