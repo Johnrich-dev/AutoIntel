@@ -581,11 +581,13 @@ function InterviewModal({
 function ViewDetailsModal({
   isOpen,
   onClose,
-  interview
+  interview,
+  isManagerView = false
 }: {
   isOpen: boolean;
   onClose: () => void;
   interview: ScheduledInterview | null;
+  isManagerView?: boolean;
 }) {
   if (!isOpen || !interview) return null;
 
@@ -681,7 +683,8 @@ function ViewDetailsModal({
                 <StatusBadge status={interview.status} />
               </div>
 
-              {interview.notes && (
+              {/* Notes - Only visible to hiring managers */}
+              {isManagerView && interview.notes && (
                 <div className="border-t pt-3">
                   <p className="text-sm text-gray-500 mb-1">Notes</p>
                   <p className="text-sm text-gray-700">{interview.notes}</p>
@@ -958,8 +961,11 @@ export function InterviewScheduling() {
 
   const handleScheduleInterview = async (data: InterviewFormData) => {
     const selectedApplicant = applicants.find((a) => a.id === data.applicantId);
-    const selectedJobPosting = mockJobs.find((j) => j.id === data.jobId);
+    const selectedJobPosting = jobs.find((j) => j.id === data.jobId);
     const selectedInterviewer = hrManagers.find((i) => i.id === data.interviewerId);
+
+    // Get job title from applicant position directly (more reliable)
+    const jobTitle = selectedApplicant?.position || selectedJobPosting?.title || 'Unknown Position';
 
     // Show loading state
     setIsScheduling(true);
@@ -976,7 +982,7 @@ export function InterviewScheduling() {
         body: JSON.stringify({
           applicant_email: selectedApplicant?.email || '',
           applicant_name: selectedApplicant?.name || data.applicantId,
-          position: selectedJobPosting?.title || 'Unknown Position',
+          position: jobTitle,
           interview_date: data.interviewDate,
           interview_time: data.interviewTime,
           interview_type: data.interviewType,
@@ -1478,6 +1484,7 @@ export function InterviewScheduling() {
         isOpen={!!viewingInterview}
         onClose={() => setViewingInterview(null)}
         interview={viewingInterview}
+        isManagerView={true}
       />
     </div>
   );

@@ -528,7 +528,34 @@ def schedule_interview():
         email_sent = False
         calendar_created = False
         
-        # Step 1: Create Google Calendar event (if calendar_service is available)
+        # Step 0: Create Microsoft Teams meeting link if online interview
+        teams_meeting_link = meeting_link
+        if interview_type == "online" and not meeting_link:
+            # Try to create Teams meeting via Microsoft Graph API
+            try:
+                import teams_meeting_service
+                teams_result = teams_meeting_service.create_interview_teams_meeting(
+                    applicant_name=applicant_name,
+                    applicant_email=applicant_email,
+                    job_title=position,
+                    interview_date=interview_date,
+                    interview_time=interview_time,
+                    interviewer_email=interviewer_email if interviewer_email else None,
+                    interviewer_name=interviewer_name if interviewer_name else None,
+                    duration_minutes=duration_minutes,
+                    notes=interview_notes if interview_notes else None
+                )
+                if teams_result and teams_result.get("success"):
+                    teams_meeting_link = teams_result.get("join_url")
+                    print(f"Teams meeting created: {teams_meeting_link}")
+                else:
+                    print(f"Teams meeting creation failed: {teams_result.get('error') if teams_result else 'Unknown error'}")
+            except ImportError:
+                print("Teams meeting service not available - using provided meeting link or none")
+            except Exception as e:
+                print(f"Error creating Teams meeting: {str(e)}")
+        
+        # Step 1: Create Google Calendar event with Teams meeting link
         if calendar_service:
             calendar_result = calendar_service.create_interview_event(
                 applicant_name=applicant_name,
@@ -537,7 +564,7 @@ def schedule_interview():
                 interview_date=interview_date,
                 interview_time=interview_time,
                 interview_type=interview_type,
-                meeting_link=meeting_link if meeting_link else None,
+                meeting_link=teams_meeting_link if teams_meeting_link else None,
                 location=location if location else None,
                 interviewer_name=interviewer_name if interviewer_name else None,
                 interviewer_email=interviewer_email if interviewer_email else None,
@@ -549,17 +576,14 @@ def schedule_interview():
                 calendar_created = True
                 calendar_event_id = calendar_result.get("event_id")
                 calendar_event_link = calendar_result.get("event_link")
-                meet_link = calendar_result.get("meet_link")
-                # Use the meet_link from calendar if not provided
-                if not meeting_link and meet_link:
-                    meeting_link = meet_link
+                meet_link = calendar_result.get("meet_link") or teams_meeting_link
                 print(f"Calendar event created: {calendar_event_id}")
             else:
                 print(f"Calendar creation failed: {calendar_result.get('error')}")
         else:
             print("Calendar service not available - skipping calendar event creation")
         
-        # Step 2: Send email notification to applicant
+        # Step 2: Send email notification to applicant with Teams meeting link
         email_result = email_service.send_interview_notification(
             applicant_name=applicant_name,
             applicant_email=applicant_email,
@@ -567,13 +591,34 @@ def schedule_interview():
             interview_date=interview_date,
             interview_time=interview_time,
             interview_type=interview_type,
-            meeting_link=meeting_link if meeting_link else None,
+            meeting_link=teams_meeting_link if teams_meeting_link else None,
             location=location if location else None,
             interviewer_name=interviewer_name if interviewer_name else None,
             notes=interview_notes if interview_notes else None
         )
         
         email_sent = email_result
+        
+        # Step 3: Send email notification to interviewer/manager (if provided)
+        interviewer_email_sent = False
+        if interviewer_email:
+            interviewer_result = email_service.send_interviewer_notification(
+                interviewer_name=interviewer_name if interviewer_name else 'Interviewer',
+                interviewer_email=interviewer_email,
+                applicant_name=applicant_name,
+                applicant_email=applicant_email,
+                job_title=position,
+                interview_date=interview_date,
+                interview_time=interview_time,
+                interview_type=interview_type,
+                meeting_link=teams_meeting_link if teams_meeting_link else None,
+                location=location if location else None,
+                notes=interview_notes if interview_notes else None
+            )
+            interviewer_email_sent = interviewer_result
+            print(f"Interviewer email sent: {interviewer_email_sent}")
+        else:
+            print("No interviewer email provided - skipping interviewer notification")
         
         # Determine success message
         if calendar_created and email_sent:
@@ -596,6 +641,7 @@ def schedule_interview():
             "calendar_event_link": calendar_event_link,
             "meet_link": meet_link,
             "email_sent": email_sent,
+            "interviewer_email_sent": interviewer_email_sent,
             "calendar_created": calendar_created,
             "status": "success" if (calendar_created or email_sent) else "error"
         }), status_code

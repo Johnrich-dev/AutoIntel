@@ -16,6 +16,10 @@ load_dotenv()
 # Google Calendar configuration
 GOOGLE_SERVICE_ACCOUNT_EMAIL = os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL", "")
 GOOGLE_PRIVATE_KEY = os.getenv("GOOGLE_PRIVATE_KEY", "")
+GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID", "")
+GOOGLE_PRIVATE_KEY_ID = os.getenv("GOOGLE_PRIVATE_KEY_ID", "")
+GOOGLE_TOKEN_URI = os.getenv("GOOGLE_TOKEN_URI", "https://oauth2.googleapis.com/token")
+GOOGLE_AUTH_URI = os.getenv("GOOGLE_AUTH_URI", "https://accounts.google.com/o/oauth2/auth")
 GOOGLE_CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID", "primary")
 
 # Try to import google libraries, handle gracefully if not installed
@@ -46,10 +50,15 @@ def get_calendar_service():
     
     try:
         # Create credentials from service account info
+        # Include all required fields for service account authentication
         credentials_info = {
             "type": "service_account",
-            "client_email": GOOGLE_SERVICE_ACCOUNT_EMAIL,
+            "project_id": GOOGLE_PROJECT_ID,
+            "private_key_id": GOOGLE_PRIVATE_KEY_ID,
             "private_key": GOOGLE_PRIVATE_KEY.replace("\\n", "\n"),
+            "client_email": GOOGLE_SERVICE_ACCOUNT_EMAIL,
+            "auth_uri": GOOGLE_AUTH_URI,
+            "token_uri": GOOGLE_TOKEN_URI,
         }
         
         credentials = service_account.Credentials.from_service_account_info(
@@ -128,11 +137,6 @@ def create_interview_event(
         start_time_str = start_datetime.isoformat()
         end_time_str = end_datetime.isoformat()
         
-        # Build attendees list
-        attendees = [{"email": applicant_email}]
-        if interviewer_email:
-            attendees.append({"email": interviewer_email})
-        
         # Build description
         description_parts = [
             f"Applicant: {applicant_name}",
@@ -151,7 +155,12 @@ def create_interview_event(
         # Build summary
         summary = f"Interview: {applicant_name} - {job_title}"
         
-        # Build event body
+        # Build attendees list for Gmail Event Card
+        attendees = [{"email": applicant_email}]
+        if interviewer_email:
+            attendees.append({"email": interviewer_email})
+        
+        # Build event body with attendees for Gmail Event Card
         event_body = {
             "summary": summary,
             "description": description,
@@ -163,7 +172,7 @@ def create_interview_event(
                 "dateTime": end_time_str,
                 "timeZone": time_zone
             },
-            "attendees": attendees,
+            "attendees": attendees,  # This triggers Gmail Event Card
             "reminders": {
                 "useDefault": False,
                 "overrides": [
@@ -177,30 +186,15 @@ def create_interview_event(
         if interview_type == "in-person" and location:
             event_body["location"] = location
         
-        # Add conference data for online interviews (Google Meet)
-        if interview_type == "online":
-            if meeting_link:
-                # Use custom meeting link if provided
-                event_body["conferenceData"] = {
-                    "createRequest": {
-                        "requestId": str(uuid.uuid4())[:8],
-                        "conferenceSolutionKey": {"type": "addOn", "legacyConferenceSolutionType": " Hangouts Meet"}
-                    }
-                }
-            else:
-                # Create Google Meet automatically
-                event_body["conferenceData"] = {
-                    "createRequest": {
-                        "requestId": str(uuid.uuid4())[:8],
-                        "conferenceSolutionKey": {"type": "hangoutsMeet"}
-                    }
-                }
+        # For online interviews with Microsoft Teams - add link as location
+        if interview_type == "online" and meeting_link:
+            event_body["location"] = meeting_link
         
-        # Create the event
+        # Create the event with attendees for Gmail Event Card
         event = service.events().insert(
             calendarId=GOOGLE_CALENDAR_ID,
             body=event_body,
-            sendUpdates="all"  # Send email notifications to attendees
+            sendUpdates="all"  # Send calendar invitations to attendees
         ).execute()
         
         # Extract response data
@@ -211,17 +205,10 @@ def create_interview_event(
             "created": event.get("created")
         }
         
-        # Extract Google Meet link if created
-        if interview_type == "online" and "conferenceData" in event:
-            conference_entry = event["conferenceData"].get("entryPoints", [])
-            for entry in conference_entry:
-                if entry.get("entryPointType") == "video":
-                    result["meet_link"] = entry.get("uri")
-        
-        # If custom meeting link was provided, include it
+        # Include meeting link if provided
         if meeting_link:
             result["meet_link"] = meeting_link
-            
+        
         print(f"Calendar event created successfully: {result.get('event_id')}")
         return result
         
@@ -268,14 +255,8 @@ def update_interview_event(
         }
     
     try:
-        # Parse date and time
         start_datetime = datetime.strptime(f"{interview_date} {interview_time}", "%Y-%m-%d %H:%M")
         end_datetime = start_datetime + timedelta(minutes=duration_minutes)
-        
-        # Build attendees
-        attendees = [{"email": applicant_email}]
-        if interviewer_email:
-            attendees.append({"email": interviewer_email})
         
         # Build description
         description_parts = [
@@ -303,8 +284,7 @@ def update_interview_event(
             "end": {
                 "dateTime": end_datetime.isoformat(),
                 "timeZone": time_zone
-            },
-            "attendees": attendees
+            }
         }
         
         if interview_type == "in-person" and location:
@@ -318,12 +298,12 @@ def update_interview_event(
                 }
             }
         
-        # Update the event
+        # Update the event (without attendees - service account limitation)
         event = service.events().update(
             calendarId=GOOGLE_CALENDAR_ID,
             eventId=event_id,
             body=event_body,
-            sendUpdates="all"
+            sendUpdates="none"
         ).execute()
         
         return {
@@ -357,10 +337,11 @@ def delete_interview_event(event_id: str) -> Dict[str, Any]:
         }
     
     try:
+        # Delete the event (without sending updates)
         service.events().delete(
             calendarId=GOOGLE_CALENDAR_ID,
             eventId=event_id,
-            sendUpdates="all"
+            sendUpdates="none"
         ).execute()
         
         return {

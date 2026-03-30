@@ -727,7 +727,8 @@ def send_interview_notification(
     meeting_link: Optional[str] = None,
     location: Optional[str] = None,
     interviewer_name: Optional[str] = None,
-    notes: Optional[str] = None
+    notes: Optional[str] = None,
+    ics_content: Optional[str] = None
 ) -> bool:
     """
     Send interview scheduling notification to the applicant.
@@ -743,11 +744,200 @@ def send_interview_notification(
         location: Physical location for in-person interview (optional)
         interviewer_name: Name of the interviewer (optional)
         notes: Additional notes about the interview (optional)
+        ics_content: ICS calendar file content (optional, for calendar invite)
     
     Returns:
         True if sent successfully
     """
-    subject = f"Interview Scheduled - {job_title}"
+    subject = f"Interview Invitation: {job_title}"
+    
+    # Format date and time for display
+    try:
+        formatted_date = datetime.strptime(interview_date, "%Y-%m-%d").strftime("%A, %B %d, %Y")
+    except:
+        formatted_date = interview_date
+    
+    # Format time for display
+    try:
+        time_obj = datetime.strptime(interview_time, "%H:%M")
+        formatted_time = time_obj.strftime("%I:%M %p")
+    except:
+        formatted_time = interview_time
+    
+    # Build interview details section
+    details_rows = f"""
+    <tr>
+        <td style="padding: 8px 0; color: #6b7280; width: 120px;">Position:</td>
+        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{job_title}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px 0; color: #6b7280;">Date:</td>
+        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{formatted_date}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px 0; color: #6b7280;">Time:</td>
+        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{formatted_time} (Asia/Manila Time)</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px 0; color: #6b7280;">Format:</td>
+        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{'Video Conference' if interview_type == 'online' else 'In-Person'}</td>
+    </tr>
+    """
+    
+    if interviewer_name:
+        details_rows += f"""
+    <tr>
+        <td style="padding: 8px 0; color: #6b7280;">Interviewer:</td>
+        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{interviewer_name}</td>
+    </tr>
+    """
+    
+    # Build meeting section
+    if interview_type == "online" and meeting_link:
+        meeting_section = f"""
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px; border-radius: 8px; margin: 24px 0;">
+            <p style="color: white; margin: 0 0 12px 0; font-size: 14px; opacity: 0.9;">Join your interview via Microsoft Teams</p>
+            <a href="{meeting_link}" style="display: inline-block; background: white; color: #667eea; padding: 14px 32px; text-decoration: none; font-weight: 600; border-radius: 6px; font-size: 15px;">Join Microsoft Teams Meeting</a>
+            <p style="color: white; margin: 16px 0 0 0; font-size: 11px; opacity: 0.7;">Or copy this link: {meeting_link}</p>
+        </div>
+        """
+    elif interview_type == "in-person" and location:
+        meeting_section = f"""
+        <div style="background: #fffbeb; border: 1px solid #fcd34d; padding: 20px; border-radius: 8px; margin: 24px 0;">
+            <p style="margin: 0 0 8px 0; color: #92400e; font-weight: 600;">📍 Interview Location</p>
+            <p style="margin: 0; color: #78350f;">{location}</p>
+        </div>
+        """
+    else:
+        meeting_section = ""
+    
+    # Build notes section (optional)
+    notes_section = ""
+    if notes:
+        notes_section = f"""
+        <div style="background: #f9fafb; border-left: 4px solid #6366f1; padding: 16px 20px; margin: 24px 0;">
+            <p style="margin: 0 0 8px 0; color: #4b5563; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Interviewer Notes</p>
+            <p style="margin: 0; color: #374151; line-height: 1.6;">{notes}</p>
+        </div>
+        """
+    
+    body_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 32px 40px; text-align: center;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">Interview Invitation</h1>
+                            <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">{job_title}</p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px;">
+                            <p style="margin: 0 0 24px 0; color: #374151; font-size: 15px; line-height: 1.6;">
+                                Dear <strong style="color: #111827;">{applicant_name}</strong>,
+                            </p>
+                            <p style="margin: 0 0 32px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
+                                We are pleased to inform you that your interview has been scheduled. Please find the details below and add this event to your calendar.
+                            </p>
+                            
+                            <!-- Interview Details Card -->
+                            <div style="background: #f9fafb; border-radius: 8px; padding: 24px; margin: 0 0 24px 0;">
+                                <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Interview Details</p>
+                                <table width="100%" cellspacing="0" cellpadding="0" border="0">
+                                    {details_rows}
+                                </table>
+                            </div>
+                            
+                            <!-- Meeting / Location -->
+                            {meeting_section}
+                            
+                            <!-- Notes -->
+                            {notes_section}
+                            
+                            <!-- CTA -->
+                            <div style="text-align: center; margin: 32px 0;">
+                                <p style="margin: 0 0 16px 0; color: #6b7280; font-size: 13px;">Please confirm your attendance by replying to this email.</p>
+                            </div>
+                            
+                            <!-- Footer Info -->
+                            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
+                            <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 13px;">
+                                <strong>What to prepare:</strong>
+                            </p>
+                            <ul style="margin: 0 0 24px 0; padding-left: 20px; color: #4b5563; font-size: 14px; line-height: 1.8;">
+                                <li>Bring a copy of your updated resume</li>
+                                <li>Prepare to discuss your relevant experience</li>
+                                <li>Have your questions ready for the interviewer</li>
+                            </ul>
+                            
+                            <p style="margin: 0; color: #374151; font-size: 15px; line-height: 1.6;">
+                                If you need to reschedule or have any questions, please contact us at your earliest convenience.
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background: #f9fafb; padding: 24px 40px; text-align: center; border-top: 1px solid #e5e7eb;">
+                            <p style="margin: 0 0 4px 0; color: #111827; font-weight: 600;">AutoIntel Recruitment</p>
+                            <p style="margin: 0; color: #6b7280; font-size: 12px;">This is an automated message. Please do not reply directly to this email.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+    
+    return send_email(to_email=applicant_email, subject=subject, body=body_html)
+
+
+def send_interviewer_notification(
+    interviewer_name: str,
+    interviewer_email: str,
+    applicant_name: str,
+    applicant_email: str,
+    job_title: str,
+    interview_date: str,
+    interview_time: str,
+    interview_type: str,
+    meeting_link: Optional[str] = None,
+    location: Optional[str] = None,
+    notes: Optional[str] = None
+) -> bool:
+    """
+    Send interview scheduling notification to the interviewer/manager.
+    
+    Args:
+        interviewer_name: Full name of the interviewer/manager
+        interviewer_email: Email address of the interviewer/manager
+        applicant_name: Full name of the applicant
+        applicant_email: Email address of the applicant
+        job_title: Position being interviewed for
+        interview_date: Interview date (YYYY-MM-DD)
+        interview_time: Interview time (HH:MM)
+        interview_type: 'online' or 'in-person'
+        meeting_link: URL for online meeting (optional)
+        location: Physical location for in-person interview (optional)
+        notes: Additional notes about the interview (optional)
+    
+    Returns:
+        True if sent successfully
+    """
+    subject = f"Interview Scheduled - {applicant_name} - {job_title}"
     
     # Format date and time for display
     try:
@@ -790,7 +980,7 @@ def send_interview_notification(
     <style>
         body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
         .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background: #4F46E5; color: white; padding: 20px; text-align: center; }}
+        .header {{ background: #059669; color: white; padding: 20px; text-align: center; }}
         .content {{ padding: 20px; background: #f9f9f9; }}
         .details-box {{ background: white; padding: 20px; border-radius: 8px; margin: 15px 0; }}
         .detail-row {{ display: flex; margin: 12px 0; border-bottom: 1px solid #e5e7eb; padding-bottom: 12px; }}
@@ -803,14 +993,22 @@ def send_interview_notification(
 <body>
     <div class="container">
         <div class="header">
-            <h1>📅 Interview Scheduled</h1>
+            <h1>📅 Interview Assigned</h1>
         </div>
         <div class="content">
-            <p>Dear <strong>{applicant_name}</strong>,</p>
+            <p>Dear <strong>{interviewer_name}</strong>,</p>
             
-            <p>Your interview for the position of <strong>{job_title}</strong> has been scheduled.</p>
+            <p>You have been assigned to conduct an interview for the position of <strong>{job_title}</strong>.</p>
             
             <div class="details-box">
+                <div class="detail-row">
+                    <span class="detail-label">👤 Applicant:</span>
+                    <span class="detail-value">{applicant_name}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">📧 Email:</span>
+                    <span class="detail-value">{applicant_email}</span>
+                </div>
                 <div class="detail-row">
                     <span class="detail-label">📅 Date:</span>
                     <span class="detail-value">{formatted_date}</span>
@@ -821,30 +1019,15 @@ def send_interview_notification(
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">💻 Type:</span>
-                    <span class="detail-value">{interview_type.capitalize()}</span>
+                    <span class="detail-value">{interview_type.title()}</span>
                 </div>
-                {f"""
-                <div class="detail-row">
-                    <span class="detail-label">👤 Interviewer:</span>
-                    <span class="detail-value">{interviewer_name}</span>
-                </div>
-                """ if interviewer_name else ""}
             </div>
             
             {meeting_info}
             
             {notes_html}
             
-            <div style="background: #e0e7ff; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                <h3 style="margin: 0 0 10px 0;">⏰ Next Steps</h3>
-                <ol style="margin: 0; padding-left: 20px;">
-                    <li>Add this interview to your calendar</li>
-                    <li>Join at the scheduled time using the meeting link/location above</li>
-                    <li>Prepare for the interview as needed</li>
-                </ol>
-            </div>
-            
-            <p>We look forward to meeting with you!</p>
+            <p>Please ensure you are available at the scheduled time and prepare accordingly.</p>
             
             <p>Best regards,<br>
             <strong>AutoIntel Recruitment Team</strong></p>
@@ -858,7 +1041,7 @@ def send_interview_notification(
 </html>
 """
     
-    return send_email(to_email=applicant_email, subject=subject, body=body_html)
+    return send_email(to_email=interviewer_email, subject=subject, body=body_html)
 
 
 if __name__ == "__main__":
