@@ -216,18 +216,10 @@ function StatusBadge({ status }: { status: ScheduledInterview['status'] }) {
 // Google Meet Link Generator
 // ============================================================================
 
-function generateGoogleMeetLink(): string {
-  // Generate a random Google Meet code (3 segments: 3-4-3 characters)
-  const chars = 'abcdefghijklmnopqrstuvwxyz';
-  const getSegment = (len: number) => {
-    let segment = '';
-    for (let i = 0; i < len; i++) {
-      segment += chars[Math.floor(Math.random() * chars.length)];
-    }
-    return segment;
-  };
-  const meetCode = `${getSegment(3)}-${getSegment(4)}-${getSegment(3)}`;
-  return `https://meet.google.com/${meetCode}`;
+function generateMeetingLink(): string {
+  // Return a placeholder indicating Teams meeting will be generated
+  // The actual Teams link will be created by the backend via Microsoft Graph API
+  return 'Teams Meeting (auto-generated after scheduling)';
 }
 
 // ============================================================================
@@ -447,13 +439,52 @@ function InterviewModal({
               </label>
               <select
                 value={formData.interviewType}
-                onChange={(e) => {
+                onChange={async (e) => {
                   const newType = e.target.value as 'online' | 'in-person';
+                  
+                  let newMeetingLink = '';
+                  
+                  // If switching to online, generate Teams meeting via API
+                  if (newType === 'online' && formData.applicantId) {
+                    const selectedApp = applicants.find(a => a.id === formData.applicantId);
+                    if (selectedApp && formData.interviewDate && formData.interviewTime) {
+                      // Show loading state and call API
+                      setFormData(prev => ({ ...prev, meetingLink: 'Generating Teams meeting...', interviewType: newType }));
+                      
+                      try {
+                        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                        const response = await fetch(`${apiUrl}/api/generate-teams-meeting`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            applicant_name: selectedApp.name,
+                            applicant_email: selectedApp.email,
+                            job_title: selectedApp.position || 'Interview',
+                            interview_date: formData.interviewDate,
+                            interview_time: formData.interviewTime,
+                            interviewer_email: hrManagers?.find(m => m.id === formData.interviewerId)?.email,
+                            interviewer_name: hrManagers?.find(m => m.id === formData.interviewerId)?.name,
+                            duration_minutes: 60
+                          })
+                        });
+                        const result = await response.json();
+                        if (result.success && result.meeting_link) {
+                          newMeetingLink = result.meeting_link;
+                        } else {
+                          console.error('Failed to generate Teams meeting:', result.error);
+                          newMeetingLink = 'Teams meeting generation failed';
+                        }
+                      } catch (err) {
+                        console.error('Error generating Teams meeting:', err);
+                        newMeetingLink = 'Error generating Teams meeting';
+                      }
+                    }
+                  }
+                  
                   setFormData({ 
                     ...formData, 
                     interviewType: newType,
-                    // Auto-generate Google Meet link when switching to online
-                    meetingLink: newType === 'online' ? generateGoogleMeetLink() : '',
+                    meetingLink: newMeetingLink || (newType === 'online' ? 'Select applicant first' : ''),
                     // Clear location when switching to online
                     location: newType === 'online' ? '' : formData.location
                   });
@@ -477,8 +508,9 @@ function InterviewModal({
                   type="url"
                   value={formData.meetingLink}
                   onChange={(e) => setFormData({ ...formData, meetingLink: e.target.value })}
-                  placeholder="https://meet.google.com/..."
+                  placeholder={formData.interviewType === 'online' ? "Select applicant to auto-generate Teams link" : "Select Online type first"}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={formData.interviewType === 'online' && formData.meetingLink.includes('Generating')}
                 />
               </div>
             ) : (

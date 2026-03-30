@@ -447,6 +447,7 @@ def get_job_level_presets():
 def schedule_interview():
     """
     Schedule an interview, create Google Calendar event, and send email notification to applicant.
+    Schedule an interview, create Google Calendar event, and send email notification to applicant.
     
     Request Body:
     {
@@ -646,6 +647,96 @@ def schedule_interview():
             "status": "success" if (calendar_created or email_sent) else "error"
         }), status_code
         
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+
+@app.route('/api/generate-teams-meeting', methods=['POST'])
+def generate_teams_meeting():
+    """
+    Generate a Microsoft Teams meeting link via Graph API.
+    This is called from the frontend when user selects 'Online' interview type.
+    
+    Request Body:
+    {
+        "applicant_name": "string (required)",
+        "applicant_email": "string (required)",
+        "job_title": "string (required)",
+        "interview_date": "string - YYYY-MM-DD (required)",
+        "interview_time": "string - HH:MM (required)",
+        "interviewer_email": "string (optional)",
+        "interviewer_name": "string (optional)",
+        "duration_minutes": "int (optional, default: 60)"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "meeting_link": "https://teams.microsoft.com/...",
+        "meeting_id": "string",
+        "message": "Teams meeting created successfully"
+    }
+    """
+    try:
+        import teams_meeting_service
+        
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        # Extract parameters
+        applicant_name = data.get('applicant_name')
+        applicant_email = data.get('applicant_email')
+        job_title = data.get('job_title')
+        interview_date = data.get('interview_date')
+        interview_time = data.get('interview_time')
+        interviewer_email = data.get('interviewer_email')
+        interviewer_name = data.get('interviewer_name')
+        duration_minutes = data.get('duration_minutes', 60)
+        
+        # Validate required fields
+        if not applicant_name:
+            return jsonify({"error": "applicant_name is required"}), 400
+        if not applicant_email:
+            return jsonify({"error": "applicant_email is required"}), 400
+        if not job_title:
+            return jsonify({"error": "job_title is required"}), 400
+        if not interview_date:
+            return jsonify({"error": "interview_date is required"}), 400
+        if not interview_time:
+            return jsonify({"error": "interview_time is required"}), 400
+        
+        # Create Teams meeting
+        teams_result = teams_meeting_service.create_interview_teams_meeting(
+            applicant_name=applicant_name,
+            applicant_email=applicant_email,
+            job_title=job_title,
+            interview_date=interview_date,
+            interview_time=interview_time,
+            interviewer_email=interviewer_email,
+            interviewer_name=interviewer_name,
+            duration_minutes=duration_minutes
+        )
+        
+        if teams_result and teams_result.get("success"):
+            return jsonify({
+                "success": True,
+                "meeting_link": teams_result.get("join_url"),
+                "meeting_id": teams_result.get("meeting_id"),
+                "message": "Teams meeting created successfully"
+            })
+        else:
+            error_msg = teams_result.get("error") if teams_result else "Unknown error"
+            return jsonify({
+                "success": False,
+                "error": error_msg,
+                "message": "Failed to create Teams meeting"
+            }), 500
+            
     except Exception as e:
         return jsonify({
             "error": str(e),

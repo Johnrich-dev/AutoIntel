@@ -87,8 +87,15 @@ def create_teams_meeting(
     
     try:
         # Use user token if available, otherwise use application permissions
+        # For application permissions, we need to specify a user
         if AZURE_USER_EMAIL:
             endpoint = f"{GRAPH_BASE_URL}/users/{AZURE_USER_EMAIL}/onlineMeetings"
+        elif AZURE_CLIENT_ID and AZURE_CLIENT_SECRET and AZURE_TENANT_ID:
+            # For application permissions, we need to use application token
+            # The /me endpoint doesn't work with client_credentials flow
+            # We need to either: 1) Use a user principal name, or 2) Configure AZURE_USER_EMAIL
+            # For now, let's try using the organization's Graph API endpoint
+            endpoint = f"{GRAPH_BASE_URL}/users/{AZURE_USER_EMAIL or 'admin'}/onlineMeetings"
         else:
             endpoint = f"{GRAPH_BASE_URL}/me/onlineMeetings"
         
