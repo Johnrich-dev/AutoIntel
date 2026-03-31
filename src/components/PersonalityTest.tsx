@@ -147,7 +147,7 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
               .update({
                 semantic_score: scoringResult.overall_alignment_score,
                 dimension_scores: scoringResult.dimension_scores,
-                role_family: scoringResult.matched_role_family,
+                department: scoringResult.matched_role_family,
                 strong_areas: scoringResult.strong_areas,
                 moderate_areas: scoringResult.moderate_areas,
                 development_areas: scoringResult.development_areas,

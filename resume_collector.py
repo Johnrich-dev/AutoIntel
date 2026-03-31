@@ -635,29 +635,29 @@ def process_emails():
                                 
                                 # Strategy 1: Exact/partial title match (existing)
                                 job_result = supabase.table('job_postings').select(
-                                    'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, role_family'
+                                    'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, department'
                                 ).ilike('title', f'%{position}%').execute()
                                 
-                                # Strategy 2: If no title match, try role_family match
+                                # Strategy 2: If no title match, try department match
                                 if not job_result.data or len(job_result.data) == 0:
-                                    # Extract role family hint from position (e.g., "Python Developer" -> "Developer")
+                                    # Extract department hint from position (e.g., "Python Developer" -> "Developer")
                                     position_lower = position.lower()
                                     role_hints = ['developer', 'engineer', 'manager', 'analyst', 'designer', 'specialist', 'coordinator', 'administrator']
-                                    role_family = None
+                                    department = None
                                     for hint in role_hints:
                                         if hint in position_lower:
-                                            role_family = hint
+                                            department = hint
                                             break
                                     
-                                    if role_family:
+                                    if department:
                                         job_result = supabase.table('job_postings').select(
-                                            'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, role_family'
-                                        ).ilike('role_family', f'%{role_family}%').execute()
+                                            'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, department'
+                                        ).ilike('department', f'%{department}%').execute()
                                 
                                 # Strategy 3: If still no match, try any active job (fallback)
                                 if not job_result.data or len(job_result.data) == 0:
                                     job_result = supabase.table('job_postings').select(
-                                        'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, role_family'
+                                        'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, department'
                                     ).eq('is_active', True).limit(1).execute()
                                     if job_result.data and len(job_result.data) > 0:
                                         print(f"[WARNING] No exact job match for '{position}', using fallback: {job_result.data[0].get('title')}")
