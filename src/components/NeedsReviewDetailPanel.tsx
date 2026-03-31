@@ -3,28 +3,27 @@ import {
   X,
   TrendingUp,
   Target,
-  User,
   Check,
   AlertTriangle,
   Video,
   ClipboardCheck,
   BookOpen,
-  Save,
-  ExternalLink,
   Maximize2,
   Minimize2,
   FolderOpen,
   Briefcase,
   AlertCircle,
   CheckCircle,
-  XCircle,
   FileText,
   BarChart3,
-  Users,
-  MessageSquare
+  MessageSquare,
+  GraduationCap,
+  Award,
+  Sparkles,
+  Shield,
+  Loader2
 } from 'lucide-react';
-import { VideoAssessmentTab } from './VideoAssessmentTab';
-import { WorkProfilingTab } from './WorkProfilingTab';
+import { getSupabaseAdminClient } from '../lib/supabase';
 
 // Interfaces - separate from Applicant to avoid requiring all base fields
 interface NeedsReviewApplicant {
@@ -62,8 +61,9 @@ interface NeedsReviewApplicant {
 // Tab configuration
 const TABS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
-  { id: 'assessments', label: 'Assessments', icon: ClipboardCheck },
-  { id: 'notes', label: 'Notes & Decision', icon: MessageSquare },
+  { id: 'resume', label: 'Resume', icon: FileText },
+  { id: 'video', label: 'Video', icon: Video },
+  { id: 'work', label: 'Work', icon: ClipboardCheck },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -79,30 +79,38 @@ export function NeedsReviewDetailPanel({
   onClose: () => void;
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [notes, setNotes] = useState('');
-  const [savedNotes, setSavedNotes] = useState('');
   const [activeTab, setActiveTab] = useState<TabId>('overview');
-  const [activeAssessmentTab, setActiveAssessmentTab] = useState<'video' | 'work' | null>(null);
+  const [videoData, setVideoData] = useState<any>(null);
+  const [loadingVideo, setLoadingVideo] = useState(false);
 
+  // Fetch video assessment data when video tab is active
   useEffect(() => {
-    if (applicant) {
-      const saved = localStorage.getItem(`needs_review_notes_${applicant.id}`);
-      if (saved) {
-        setNotes(saved);
-        setSavedNotes(saved);
-      } else {
-        setNotes('');
-        setSavedNotes('');
+    const fetchVideoData = async () => {
+      if (!applicant?.id) return;
+      
+      setLoadingVideo(true);
+      try {
+        const adminClient = getSupabaseAdminClient();
+        const { data, error } = await adminClient
+          .from('video_assessments')
+          .select('*')
+          .eq('applicant_id', applicant.id)
+          .single();
+        
+        if (error) throw error;
+        setVideoData(data);
+      } catch (err) {
+        console.error('Error fetching video assessment:', err);
+        setVideoData(null);
+      } finally {
+        setLoadingVideo(false);
       }
-    }
-  }, [applicant]);
+    };
 
-  const handleSaveNotes = () => {
-    if (applicant) {
-      localStorage.setItem(`needs_review_notes_${applicant.id}`, notes);
-      setSavedNotes(notes);
+    if (isOpen && applicant) {
+      fetchVideoData();
     }
-  };
+  }, [isOpen, applicant?.id]);
 
   if (!isOpen || !applicant) return null;
 
@@ -184,6 +192,49 @@ export function NeedsReviewDetailPanel({
               </div>
             </div>
 
+            {/* KPI Cards */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Resume Score</p>
+                    <p className={`text-2xl font-bold ${getScoreColor(applicant.screening_score || applicant.overall_score || 0)}`}>
+                      {applicant.screening_score || applicant.overall_score || 0}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                    <Video className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Video Score</p>
+                    <p className={`text-2xl font-bold ${getScoreColor(applicant.video_assessment_score || 0)}`}>
+                      {applicant.video_assessment_score || 0}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                    <ClipboardCheck className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Work Score</p>
+                    <p className={`text-2xl font-bold ${getScoreColor(applicant.work_style_score || 0)}`}>
+                      {applicant.work_style_score || 0}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Applicant Summary */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Applicant Summary</h3>
@@ -211,188 +262,287 @@ export function NeedsReviewDetailPanel({
               </div>
             </div>
 
-            {/* Score Breakdown */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Score Breakdown</h3>
-              <div className="space-y-4">
-                {scoreCategories.map((cat) => (
-                  <div key={cat.label} className="flex items-center gap-4">
-                    <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
-                      <cat.icon className="w-4 h-4 text-gray-600" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-700">{cat.label}</span>
-                        <span className={`text-sm font-semibold ${getScoreColor(cat.score)}`}>{cat.score}%</span>
-                      </div>
-                      <div className="bg-gray-100 rounded-full h-2 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${getScoreBgColor(cat.score)}`}
-                          style={{ width: `${cat.score}%` }}
-                        />
-                      </div>
-                    </div>
+            {/* AI Insights & Suggestions */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+                    <TrendingUp className="w-4 h-4 text-indigo-600" />
                   </div>
-                ))}
+                  <h3 className="text-lg font-semibold text-gray-900">AI Insights</h3>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-gray-700">Strong match in {applicant.matched_skills?.length || 0} required skills</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-gray-700">Missing {applicant.missing_skills?.length || 0} key qualifications</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <BarChart3 className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-gray-700">Score falls in borderline range (60-79%)</p>
+                  </div>
+                </div>
               </div>
-            </div>
-
-            {/* Reason for Review */}
-            <div className="bg-amber-50 rounded-2xl p-5 border border-amber-200">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
-                <h3 className="text-lg font-semibold text-amber-900">Reason for Review</h3>
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+                    <MessageSquare className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">AI Suggestion</h3>
+                </div>
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    Based on the assessment scores, this candidate shows potential but requires further evaluation. Consider reviewing their video assessment and work profiling results before making a final decision.
+                  </p>
+                  <div className="pt-2 border-t border-gray-100">
+                    <p className="text-xs text-gray-500 font-medium">Recommended Action</p>
+                    <p className="text-sm text-indigo-600 font-medium mt-1">Schedule interview to validate skills</p>
+                  </div>
+                </div>
               </div>
-              <p className="text-sm text-amber-800 leading-relaxed">
-                {applicant.reason_for_review || applicant.key_issue || 'Candidate has a borderline score that requires human evaluation to make a final decision.'}
-              </p>
             </div>
           </div>
         )}
 
-
-
-        {/* ===== ASSESSMENTS TAB ===== */}
-        {activeTab === 'assessments' && (
+        {/* ===== RESUME TAB ===== */}
+        {activeTab === 'resume' && (
           <div className="space-y-6">
-            {/* Assessment Summary */}
+            
+            {/* Overall Score KPI Card */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Assessment Summary</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={() => applicant.video_assessment_score && setActiveAssessmentTab('video')}
-                  disabled={!applicant.video_assessment_score}
-                  className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
-                    applicant.video_assessment_score
-                      ? 'bg-green-50 hover:bg-green-100 cursor-pointer border border-green-200'
-                      : 'bg-gray-50 cursor-not-allowed border border-gray-200'
-                  }`}
-                >
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${applicant.video_assessment_score ? 'bg-green-100' : 'bg-gray-200'}`}>
-                    <Video className={`w-5 h-5 ${applicant.video_assessment_score ? 'text-green-600' : 'text-gray-400'}`} />
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-xl bg-indigo-100 flex items-center justify-center">
+                  <BarChart3 className="w-7 h-7 text-indigo-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-gray-500">Overall Resume Score</p>
+                  <p className={`text-3xl font-bold ${getScoreColor(applicant.screening_score || applicant.overall_score || 0)}`}>
+                    {applicant.screening_score || applicant.overall_score || 0}%
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Resume File Card */}
+            <div className="bg-gradient-to-r from-indigo-50/50 to-violet-50/50 rounded-2xl border border-indigo-100 p-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
+                    <FileText className="w-6 h-6 text-indigo-600" />
                   </div>
-                  <div className="text-left">
-                    <p className="text-xs text-gray-500">Video Assessment</p>
-                    <p className={`text-sm font-medium ${applicant.video_assessment_score ? 'text-green-600' : 'text-gray-400'}`}>
-                      {applicant.video_assessment_score ? 'Completed - Click to view' : 'Not Submitted'}
-                    </p>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Original Resume</h3>
+                    <p className="text-sm text-gray-500">View or download the uploaded document</p>
                   </div>
-                </button>
-                <button
-                  onClick={() => applicant.work_style_score && setActiveAssessmentTab('work')}
-                  disabled={!applicant.work_style_score}
-                  className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
-                    applicant.work_style_score
-                      ? 'bg-green-50 hover:bg-green-100 cursor-pointer border border-green-200'
-                      : 'bg-gray-50 cursor-not-allowed border border-gray-200'
-                  }`}
-                >
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${applicant.work_style_score ? 'bg-green-100' : 'bg-gray-200'}`}>
-                    <ClipboardCheck className={`w-5 h-5 ${applicant.work_style_score ? 'text-green-600' : 'text-gray-400'}`} />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-xs text-gray-500">Work Profiling</p>
-                    <p className={`text-sm font-medium ${applicant.work_style_score ? 'text-green-600' : 'text-gray-400'}`}>
-                      {applicant.work_style_score ? 'Completed - Click to view' : 'Not Submitted'}
-                    </p>
-                  </div>
+                </div>
+                <button className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium shadow-sm">
+                  View Resume
                 </button>
               </div>
             </div>
 
-            {/* Assessment Tab Content */}
-            {activeAssessmentTab && (
-              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                {activeAssessmentTab === 'video' ? (
-                  <VideoAssessmentTab
-                    applicantId={applicant.id}
-                    videoScore={applicant.video_assessment_score}
-                    onClose={() => setActiveAssessmentTab(null)}
-                  />
+            {/* Education Card */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-emerald-50/50 to-white flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <GraduationCap className="w-4 h-4 text-emerald-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Education</h3>
+              </div>
+              <div className="p-5">
+                <p className="text-sm text-gray-500">Education details will be displayed here.</p>
+              </div>
+            </div>
+
+            {/* Skills Card */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50/50 to-white flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                  <Award className="w-4 h-4 text-blue-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Skills</h3>
+              </div>
+              <div className="p-5">
+                <p className="text-sm text-gray-500">Skills will be displayed here.</p>
+              </div>
+            </div>
+
+            {/* Experience Card */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-violet-50/50 to-white flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
+                  <Briefcase className="w-4 h-4 text-violet-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Work Experience</h3>
+              </div>
+              <div className="p-5">
+                <p className="text-sm text-gray-500">Work experience details will be displayed here.</p>
+              </div>
+            </div>
+
+            {/* Projects Card */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50/50 to-white flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-purple-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Projects</h3>
+              </div>
+              <div className="p-5">
+                <p className="text-sm text-gray-500">Project details will be displayed here.</p>
+              </div>
+            </div>
+
+            {/* Certifications Card */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50/50 to-white flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                  <Shield className="w-4 h-4 text-amber-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Certifications & Training</h3>
+              </div>
+              <div className="p-5">
+                <p className="text-sm text-gray-500">Certifications and training will be displayed here.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===== VIDEO TAB ===== */}
+        {activeTab === 'video' && (
+          <div className="space-y-6">
+            
+            {/* Overall Score KPI Card */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-xl bg-indigo-100 flex items-center justify-center">
+                  <BarChart3 className="w-7 h-7 text-indigo-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-gray-500">Overall Score</p>
+                  <p className={`text-3xl font-bold ${getScoreColor(applicant.overall_score || 0)}`}>
+                    {applicant.overall_score || 0}%
+                  </p>
+                </div>
+                <div className="text-right">
+                </div>
+              </div>
+            </div>
+
+            {/* Two Column Layout */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Identity Verification Column */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Identity Verification</h3>
+                <p className="text-sm text-gray-500 mb-4">Confirm that the applicant in the video matches the uploaded profile photo.</p>
+                
+                {/* Photo Comparison */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-2">Profile Photo</p>
+                    <div className="aspect-square rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+                      <span className="text-gray-400 text-sm">No photo</span>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-2">Video Snapshot</p>
+                    <div className="aspect-square rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+                      <span className="text-gray-400 text-sm">No snapshot</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Verification Status */}
+                <div className="flex gap-2 mb-4">
+                  <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium">
+                    <CheckCircle className="w-4 h-4" />
+                    Verified – Same person
+                  </button>
+                  <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium">
+                    <AlertTriangle className="w-4 h-4" />
+                    Mismatch – Possible issue
+                  </button>
+                </div>
+
+                {/* Verification Notes */}
+                <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-4 border border-gray-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center">
+                      <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800">Take Note:</p>
+                  </div>
+                  <div className="space-y-2 text-sm text-gray-600">
+                    <p>Ensure the applicant’s face is clearly visible in the video, with sufficient lighting and no obstructions such as masks, shadows, or blurring that could affect proper identification.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Video Column */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Video</h3>
+                {loadingVideo ? (
+                  <div className="flex flex-col items-center justify-center py-8">
+                    <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-2" />
+                    <p className="text-sm text-gray-500">Loading video...</p>
+                  </div>
+                ) : videoData?.video_url ? (
+                  <div className="space-y-4">
+                    <video
+                      src={videoData.video_url}
+                      controls
+                      className="w-full rounded-lg bg-black"
+                      preload="metadata"
+                    />
+                    <p className="text-xs text-gray-500 text-center">Submitted video assessment</p>
+                    
+                    {/* Transcription Section */}
+                    {videoData.transcription && (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-2">Transcribed Answer</h4>
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{videoData.transcription}</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Video Score */}
+                    {videoData.transcript_score !== null && videoData.transcript_score !== undefined && (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-gray-700">Video Assessment Score</span>
+                          <span className={`text-lg font-bold ${getScoreColor(Math.round(videoData.transcript_score * 10))}`}>
+                            {Math.round(videoData.transcript_score * 10)}%
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ) : (
-                  <WorkProfilingTab
-                    applicantId={applicant.id}
-                    workStyleScore={applicant.work_style_score}
-                    onClose={() => setActiveAssessmentTab(null)}
-                  />
+                  <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+                    <Video className="w-12 h-12 mb-2" />
+                    <p className="text-sm">No video submitted</p>
+                  </div>
                 )}
               </div>
-            )}
-
+            </div>
 
           </div>
         )}
 
-        {/* ===== NOTES & DECISION TAB ===== */}
-        {activeTab === 'notes' && (
+        {/* ===== WORK TAB ===== */}
+        {activeTab === 'work' && (
           <div className="space-y-6">
-            {/* Reason for Review */}
-            <div className="bg-amber-50 rounded-2xl p-5 border border-amber-200">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
-                <h3 className="text-lg font-semibold text-amber-900">Reason for Review</h3>
-              </div>
-              <p className="text-sm text-amber-800 leading-relaxed">
-                {applicant.reason_for_review || applicant.key_issue || 'Candidate has a borderline score that requires human evaluation to make a final decision.'}
-              </p>
-            </div>
-
-            {/* Notes Section */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">HR Notes</h3>
-                <button
-                  onClick={handleSaveNotes}
-                  disabled={notes === savedNotes}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    notes === savedNotes
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
-                  }`}
-                >
-                  <Save className="w-4 h-4" />
-                  Save
-                </button>
-              </div>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add your evaluation notes here..."
-                className="w-full h-32 p-3 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              {notes !== savedNotes && notes.length > 0 && (
-                <p className="text-xs text-amber-600 mt-2">You have unsaved changes</p>
-              )}
-            </div>
-
-            {/* Decision Actions */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Decision</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <button className="flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors font-medium">
-                  <Check className="w-4 h-4" />
-                  Approve
-                </button>
-                <button className="flex items-center justify-center gap-2 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-colors font-medium">
-                  <X className="w-4 h-4" />
-                  Reject
-                </button>
-              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Work Profiling</h3>
+              <p className="text-sm text-gray-500">Work profiling content will be displayed here.</p>
             </div>
           </div>
         )}
-      </div>
-
-      {/* Footer Actions */}
-      <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-end">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium transition-colors"
-        >
-          Close
-        </button>
       </div>
     </div>
   );
 }
-
