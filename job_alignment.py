@@ -1221,7 +1221,7 @@ def get_supabase_client():
 
 def fetch_jobs_from_database(
     limit: int = 100,
-    role_family: Optional[str] = None,
+    department: Optional[str] = None,
     active_only: bool = True
 ) -> List[Dict[str, Any]]:
     """
@@ -1229,7 +1229,7 @@ def fetch_jobs_from_database(
     
     Args:
         limit: Maximum number of jobs to fetch
-        role_family: Optional filter by role family
+        department: Optional filter by department
         active_only: Whether to fetch only active jobs
         
     Returns:
@@ -1240,15 +1240,15 @@ def fetch_jobs_from_database(
         
         # Build query
         query = client.table("job_postings").select(
-            "job_id, title, description, role_family, skills, keywords"
+            "job_id, title, description, department, skills, keywords"
         )
         
         # Apply filters
         if active_only:
             query = query.eq("is_active", True)
         
-        if role_family:
-            query = query.eq("role_family", role_family)
+        if department:
+            query = query.eq("department", department)
         
         # Execute query with limit
         response = query.limit(limit).execute()
@@ -1265,7 +1265,7 @@ def fetch_jobs_from_database(
 def recommend_jobs(
     resume_text: str,
     limit: int = 5,
-    role_family: Optional[str] = None,
+    department: Optional[str] = None,
     fetch_from_db: bool = True,
     jobs: Optional[List[Dict[str, Any]]] = None
 ) -> List[Dict[str, Any]]:
@@ -1275,7 +1275,7 @@ def recommend_jobs(
     Args:
         resume_text: Parsed resume text
         limit: Number of recommendations to return (default 5)
-        role_family: Optional filter by role family
+        department: Optional filter by department
         fetch_from_db: Whether to fetch jobs from database (default True)
         jobs: Optional list of job dictionaries (if not fetching from DB)
         
@@ -1286,7 +1286,7 @@ def recommend_jobs(
     if jobs:
         job_list = jobs
     elif fetch_from_db:
-        job_list = fetch_jobs_from_database(limit=100, role_family=role_family)
+        job_list = fetch_jobs_from_database(limit=100, department=department)
     else:
         print("Error: Either fetch_from_db=True or provide jobs list")
         return []
@@ -1313,7 +1313,7 @@ def recommend_jobs(
         scored_jobs.append({
             "job_id": job.get("job_id"),
             "title": job.get("title"),
-            "role_family": job.get("role_family"),
+            "department": job.get("department"),
             "skills": job.get("skills", []),
             "keywords": job.get("keywords", []),
             "semantic_score": result["semantic_score"],
@@ -1438,7 +1438,7 @@ def test_model():
             "job_id": "JOB_PYTHON_001",
             "title": "Senior Python Developer",
             "description": job1,
-            "role_family": "Engineering",
+            "department": "Engineering",
             "skills": ["Python", "Django", "AWS"],
             "keywords": ["backend", "api", "cloud"]
         },
@@ -1446,7 +1446,7 @@ def test_model():
             "job_id": "JOB_MARKETING_001",
             "title": "Marketing Manager",
             "description": job2,
-            "role_family": "Marketing",
+            "department": "Marketing",
             "skills": ["SEO", "Social Media"],
             "keywords": ["marketing", "content"]
         }

@@ -73,7 +73,7 @@ def transform_job_record(job: Dict[str, Any]) -> Dict[str, Any]:
     job_id = job.get('job_id') or job.get('JobID', '')
     title = job.get('title') or job.get('Title', '')
     description = job.get('description') or job.get('Responsibilities') or job.get('JobSummary') or None
-    role_family = job.get('role_family') or job.get('roleFamily') or job.get('RoleFamily') or 'General'
+    department = job.get('department') or job.get('Department') or job.get('role_family') or job.get('roleFamily') or job.get('RoleFamily') or 'General'
     
     # Handle skills - could be a string or list
     skills = job.get('skills') or job.get('Skills') or []
@@ -133,7 +133,7 @@ def transform_job_record(job: Dict[str, Any]) -> Dict[str, Any]:
         'job_id': str(job_id),
         'title': str(title),
         'description': description,
-        'role_family': role_family,
+        'department': department,
         'skills': json.dumps(skills) if skills else '[]',
         'keywords': json.dumps(keywords) if keywords else '[]',
         'required_education': json.dumps(required_education) if required_education else '[]',

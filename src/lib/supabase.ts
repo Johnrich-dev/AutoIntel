@@ -171,7 +171,7 @@ export interface PersonalityTest {
   // Semantic scoring fields
   semantic_score?: number;
   dimension_scores?: any;
-  role_family?: string;
+  department?: string;
   strong_areas?: string[];
   moderate_areas?: string[];
   development_areas?: string[];
@@ -196,7 +196,7 @@ export interface JobPosting {
   job_id: string;
   title: string;
   description: string | null;
-  role_family: string | null;
+  department: string | null;
   skills: string[];
   keywords: string[];
   required_education: string[];
@@ -245,7 +245,7 @@ export interface ScoringSettings {
 export interface JobPostingFormData {
   title: string;
   description: string;
-  role_family: string;
+  department: string;
   skills: string[];
   keywords: string[];
   required_education: string[];

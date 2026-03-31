@@ -17,7 +17,7 @@ const ROLE_FAMILIES = [
 const DEFAULT_FORM_DATA: JobPostingFormData = {
   title: '',
   description: '',
-  role_family: '',
+  department: '',
   skills: [],
   keywords: [],
   required_education: [],
@@ -96,7 +96,7 @@ export function AdminJobManagement() {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       const matchesTitle = job.title.toLowerCase().includes(query);
-      const matchesRoleFamily = job.role_family?.toLowerCase().includes(query) ?? false;
+        const matchesDepartment = job.department?.toLowerCase().includes(query) ?? false;
       
       // Safely check skills array (might be null or undefined)
       const matchesSkills = Array.isArray(job.skills) && 
@@ -106,7 +106,7 @@ export function AdminJobManagement() {
       const matchesKeywords = Array.isArray(job.keywords) && 
         job.keywords.some((k: string) => typeof k === 'string' && k.toLowerCase().includes(query));
       
-      if (!matchesTitle && !matchesRoleFamily && !matchesSkills && !matchesKeywords) {
+      if (!matchesTitle && !matchesDepartment && !matchesSkills && !matchesKeywords) {
         return false;
       }
     }
@@ -121,8 +121,8 @@ export function AdminJobManagement() {
       errors.title = 'Job title is required';
     }
 
-    if (!formData.role_family) {
-      errors.role_family = 'Role family is required';
+    if (!formData.department) {
+      errors.department = 'Department is required';
     }
 
     const minExp = formData.min_years_experience;
@@ -159,7 +159,7 @@ export function AdminJobManagement() {
         job_id: jobId,
         title: formData.title.trim(),
         description: formData.description.trim() || null,
-        role_family: formData.role_family || null,
+        department: formData.department || null,
         skills: formData.skills,
         keywords: formData.keywords,
         required_education: formData.required_education,
@@ -205,7 +205,7 @@ export function AdminJobManagement() {
       const updates = {
         title: formData.title.trim(),
         description: formData.description.trim() || null,
-        role_family: formData.role_family || null,
+        department: formData.department || null,
         skills: formData.skills,
         keywords: formData.keywords,
         required_education: formData.required_education,
@@ -281,7 +281,7 @@ export function AdminJobManagement() {
         job_id: newJobId,
         title: `${job.title} (Copy)`,
         description: job.description,
-        role_family: job.role_family,
+        department: job.department,
         skills: job.skills,
         keywords: job.keywords,
         required_education: job.required_education,
@@ -317,7 +317,7 @@ export function AdminJobManagement() {
     setFormData({
       title: job.title,
       description: job.description || '',
-      role_family: job.role_family || '',
+      department: job.department || '',
       skills: job.skills,
       keywords: job.keywords,
       required_education: job.required_education,
@@ -382,13 +382,13 @@ export function AdminJobManagement() {
       {/* Role Family */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Role Family <span className="text-red-500">*</span>
+          Department <span className="text-red-500">*</span>
         </label>
         <select
-          value={formData.role_family}
-          onChange={(e) => setFormData({ ...formData, role_family: e.target.value })}
+          value={formData.department}
+          onChange={(e) => setFormData({ ...formData, department: e.target.value })}
           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-            formErrors.role_family ? 'border-red-500' : 'border-gray-300'
+            formErrors.department ? 'border-red-500' : 'border-gray-300'
           }`}
         >
           <option value="">Select a role family...</option>
@@ -398,8 +398,8 @@ export function AdminJobManagement() {
             </option>
           ))}
         </select>
-        {formErrors.role_family && (
-          <p className="mt-1 text-sm text-red-600">{formErrors.role_family}</p>
+        {formErrors.department && (
+          <p className="mt-1 text-sm text-red-600">{formErrors.department}</p>
         )}
       </div>
 
@@ -639,7 +639,7 @@ export function AdminJobManagement() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">{job.role_family || '-'}</span>
+                          <span className="text-sm text-gray-900">{job.department || '-'}</span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm text-gray-900">
