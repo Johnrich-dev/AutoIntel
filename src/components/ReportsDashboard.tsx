@@ -47,6 +47,11 @@ function daysBetween(date1: string, date2: string): number {
 export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
   const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d' | 'all'>('30d');
   const [selectedReport, setSelectedReport] = useState<'overview' | 'pipeline' | 'scores' | 'time'>('overview');
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
+  const [showDepartmentDropdown, setShowDepartmentDropdown] = useState<boolean>(false);
+
+  // Mock departments (in production, fetch from job_postings table)
+  const departments = ['all', 'Engineering', 'MIS', 'Human Resources', 'Finance', 'Marketing', 'Operations'];
 
   // Filter applicants by date range
   const filteredApplicants = useMemo(() => {
@@ -534,10 +539,62 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
 
             {/* Top Performers */}
             <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Performers</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Top Performers</h3>
+                {/* Custom Department Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowDepartmentDropdown(!showDepartmentDropdown)}
+                    className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 py-2 px-4 rounded-xl text-sm font-medium hover:border-gray-300 transition-colors min-w-[160px] justify-between"
+                  >
+                    <span>{selectedDepartment === 'all' ? 'All Departments' : selectedDepartment}</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showDepartmentDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showDepartmentDropdown && (
+                    <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-lg overflow-y-auto z-10 min-w-[160px] max-h-60">
+                      {departments.map((dept) => (
+                        <button
+                          key={dept}
+                          onClick={() => {
+                            setSelectedDepartment(dept);
+                            setShowDepartmentDropdown(false);
+                          }}
+                          className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors ${
+                            selectedDepartment === dept
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {dept === 'all' ? 'All Departments' : dept}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="space-y-3">
                 {filteredApplicants
-                  .filter(a => a.test?.status === 'completed' || a.video?.status === 'completed' || a.screening_status === 'for_review')
+                  .filter(a => {
+                    // Filter by completion status
+                    const hasCompletedAssessment = a.test?.status === 'completed' || a.video?.status === 'completed' || a.screening_status === 'for_review';
+                    if (!hasCompletedAssessment) return false;
+                    
+                    // Filter by department (mock logic - in production, join with job_postings)
+                    if (selectedDepartment === 'all') return true;
+                    
+                    // Mock department assignment based on position keywords
+                    const positionLower = (a.position || '').toLowerCase();
+                    const dept = selectedDepartment.toLowerCase();
+                    
+                    if (dept === 'engineering') return positionLower.includes('engineer') || positionLower.includes('developer') || positionLower.includes('software');
+                    if (dept === 'mis') return positionLower.includes('it') || positionLower.includes('mis') || positionLower.includes('systems');
+                    if (dept === 'human resources') return positionLower.includes('hr') || positionLower.includes('human resources') || positionLower.includes('recruit');
+                    if (dept === 'finance') return positionLower.includes('finance') || positionLower.includes('accountant') || positionLower.includes('financial');
+                    if (dept === 'marketing') return positionLower.includes('marketing') || positionLower.includes('digital') || positionLower.includes('brand');
+                    if (dept === 'operations') return positionLower.includes('operations') || positionLower.includes('logistics') || positionLower.includes('coordinator');
+                    
+                    return true;
+                  })
                   .slice(0, 5)
                   .map((applicant, idx) => (
                     <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
