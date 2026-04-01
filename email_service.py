@@ -725,6 +725,7 @@ def send_interview_notification(
     interview_time: str,
     interview_type: str,
     meeting_link: Optional[str] = None,
+    meeting_passcode: Optional[str] = None,
     location: Optional[str] = None,
     interviewer_name: Optional[str] = None,
     notes: Optional[str] = None,
@@ -794,7 +795,20 @@ def send_interview_notification(
     
     # Build meeting section
     if interview_type == "online" and meeting_link:
-        meeting_section = f"""
+        if meeting_passcode:
+            meeting_section = f"""
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px; border-radius: 8px; margin: 24px 0;">
+            <p style="color: white; margin: 0 0 12px 0; font-size: 14px; opacity: 0.9;">Microsoft Teams</p>
+            <a href="{meeting_link}" style="display: inline-block; background: white; color: #667eea; padding: 14px 32px; text-decoration: none; font-weight: 600; border-radius: 6px; font-size: 15px; margin-bottom: 16px;">Join Microsoft Teams Meeting</a>
+            <div style="background: rgba(255,255,255,0.1); padding: 12px; border-radius: 6px; margin-top: 12px;">
+                <p style="color: white; margin: 0 0 8px 0; font-size: 13px; font-weight: 600;">Meeting Credentials</p>
+                <p style="color: white; margin: 0; font-size: 12px; opacity: 0.9;">Passcode: {meeting_passcode}</p>
+            </div>
+            <p style="color: white; margin: 16px 0 0 0; font-size: 11px; opacity: 0.7;">Or copy this link: {meeting_link}</p>
+        </div>
+        """
+        else:
+            meeting_section = f"""
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px; border-radius: 8px; margin: 24px 0;">
             <p style="color: white; margin: 0 0 12px 0; font-size: 14px; opacity: 0.9;">Join your interview via Microsoft Teams</p>
             <a href="{meeting_link}" style="display: inline-block; background: white; color: #667eea; padding: 14px 32px; text-decoration: none; font-weight: 600; border-radius: 6px; font-size: 15px;">Join Microsoft Teams Meeting</a>
@@ -915,6 +929,7 @@ def send_interviewer_notification(
     interview_time: str,
     interview_type: str,
     meeting_link: Optional[str] = None,
+    meeting_passcode: Optional[str] = None,
     location: Optional[str] = None,
     notes: Optional[str] = None
 ) -> bool:
@@ -947,7 +962,16 @@ def send_interviewer_notification(
     
     # Build meeting/location info HTML
     if interview_type == "online" and meeting_link:
-        meeting_info = f"""
+        if meeting_passcode:
+            meeting_info = f"""
+            <div class="meeting-info" style="background: #e0f2fe; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                <h3 style="margin: 0 0 10px 0;">📹 Microsoft Teams</h3>
+                <p style="margin: 0;"><a href="{meeting_link}" style="color: #0284c7; font-weight: bold;">Join Meeting</a></p>
+                <p style="margin: 10px 0 0 0; font-size: 13px;"><strong>Passcode:</strong> {meeting_passcode}</p>
+            </div>
+        """
+        else:
+            meeting_info = f"""
             <div class="meeting-info" style="background: #e0f2fe; padding: 15px; border-radius: 8px; margin: 15px 0;">
                 <h3 style="margin: 0 0 10px 0;">📹 Meeting Link</h3>
                 <p style="margin: 0;"><a href="{meeting_link}" style="color: #0284c7; font-weight: bold;">{meeting_link}</a></p>

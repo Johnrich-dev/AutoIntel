@@ -41,6 +41,7 @@ interface ScheduledInterview {
   interviewTime: string;
   interviewType: 'online' | 'in-person';
   meetingLink?: string;
+  meetingPasscode?: string;
   location?: string;
   interviewerId?: string;
   interviewerName?: string;
@@ -70,6 +71,7 @@ interface InterviewFormData {
   interviewTime: string;
   interviewType: '' | 'online' | 'in-person';
   meetingLink: string;
+  meetingPasscode: string;
   location: string;
   interviewerId: string;
   notes: string;
@@ -284,6 +286,7 @@ function InterviewModal({
     interviewTime: '',
     interviewType: '' as '' | 'online' | 'in-person',
     meetingLink: '',
+    meetingPasscode: '',
     location: '',
     interviewerId: '',
     notes: ''
@@ -298,6 +301,7 @@ function InterviewModal({
         interviewTime: interview.interviewTime,
         interviewType: interview.interviewType,
         meetingLink: interview.meetingLink || '',
+        meetingPasscode: '',
         location: interview.location || '',
         interviewerId: interview.interviewerId || '',
         notes: interview.notes || ''
@@ -310,6 +314,7 @@ function InterviewModal({
         interviewTime: '',
         interviewType: '' as '' | 'online' | 'in-person',
         meetingLink: '',
+        meetingPasscode: '',
         location: '',
         interviewerId: '',
         notes: ''
@@ -439,52 +444,14 @@ function InterviewModal({
               </label>
               <select
                 value={formData.interviewType}
-                onChange={async (e) => {
+                onChange={(e) => {
                   const newType = e.target.value as 'online' | 'in-person';
-                  
-                  let newMeetingLink = '';
-                  
-                  // If switching to online, generate Teams meeting via API
-                  if (newType === 'online' && formData.applicantId) {
-                    const selectedApp = applicants.find(a => a.id === formData.applicantId);
-                    if (selectedApp && formData.interviewDate && formData.interviewTime) {
-                      // Show loading state and call API
-                      setFormData(prev => ({ ...prev, meetingLink: 'Generating Teams meeting...', interviewType: newType }));
-                      
-                      try {
-                        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-                        const response = await fetch(`${apiUrl}/api/generate-teams-meeting`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            applicant_name: selectedApp.name,
-                            applicant_email: selectedApp.email,
-                            job_title: selectedApp.position || 'Interview',
-                            interview_date: formData.interviewDate,
-                            interview_time: formData.interviewTime,
-                            interviewer_email: hrManagers?.find(m => m.id === formData.interviewerId)?.email,
-                            interviewer_name: hrManagers?.find(m => m.id === formData.interviewerId)?.name,
-                            duration_minutes: 60
-                          })
-                        });
-                        const result = await response.json();
-                        if (result.success && result.meeting_link) {
-                          newMeetingLink = result.meeting_link;
-                        } else {
-                          console.error('Failed to generate Teams meeting:', result.error);
-                          newMeetingLink = 'Teams meeting generation failed';
-                        }
-                      } catch (err) {
-                        console.error('Error generating Teams meeting:', err);
-                        newMeetingLink = 'Error generating Teams meeting';
-                      }
-                    }
-                  }
-                  
                   setFormData({ 
                     ...formData, 
                     interviewType: newType,
-                    meetingLink: newMeetingLink || (newType === 'online' ? 'Select applicant first' : ''),
+                    // Clear meeting link when switching type
+                    meetingLink: '',
+                    meetingPasscode: '',
                     // Clear location when switching to online
                     location: newType === 'online' ? '' : formData.location
                   });
@@ -508,10 +475,21 @@ function InterviewModal({
                   type="url"
                   value={formData.meetingLink}
                   onChange={(e) => setFormData({ ...formData, meetingLink: e.target.value })}
-                  placeholder={formData.interviewType === 'online' ? "Select applicant to auto-generate Teams link" : "Select Online type first"}
+                  placeholder={formData.interviewType === 'online' ? "Paste Teams meeting link here" : "Select Online type first"}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  disabled={formData.interviewType === 'online' && formData.meetingLink.includes('Generating')}
                 />
+                <div className="mt-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Meeting Passcode
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.meetingPasscode}
+                    onChange={(e) => setFormData({ ...formData, meetingPasscode: e.target.value })}
+                    placeholder="e.g., rE9YH7Ca"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
               </div>
             ) : (
               <div>
@@ -1019,6 +997,7 @@ export function InterviewScheduling() {
           interview_time: data.interviewTime,
           interview_type: data.interviewType,
           meeting_link: data.meetingLink || '',
+          meeting_passcode: data.meetingPasscode || '',
           location: data.location || '',
           interviewer_name: selectedInterviewer?.name || '',
           interviewer_email: selectedInterviewer?.email || '',
@@ -1048,6 +1027,7 @@ export function InterviewScheduling() {
           interviewTime: data.interviewTime,
           interviewType: data.interviewType as 'online' | 'in-person',
           meetingLink: result.meet_link || data.meetingLink || undefined,
+          meetingPasscode: data.meetingPasscode || undefined,
           location: data.location || undefined,
           interviewerId: data.interviewerId || undefined,
           interviewerName: selectedInterviewer?.name,
