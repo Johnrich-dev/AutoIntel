@@ -127,7 +127,8 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
     filteredApplicants.forEach(a => {
       // Use actual scores from database, fall back to screening_status
       const testScore = a.test?.semantic_score;
-      const videoScore = a.video?.transcript_score;
+      // transcript_score is 0-10, convert to 0-100 for comparison
+      const videoScore = a.video?.transcript_score != null ? Math.round(a.video.transcript_score * 10) : null;
       const resumeScore = a.screening_score;
       
       // Calculate composite score: prioritize test > video > resume
@@ -607,7 +608,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold text-blue-600">
-                          {applicant.test?.semantic_score ?? applicant.video?.transcript_score ?? applicant.screening_score ?? (applicant.screening_status === 'for_review' ? 80 : applicant.screening_status === 'in_progress' ? 60 : 0)}
+                          {applicant.test?.semantic_score ?? (applicant.video?.transcript_score != null ? Math.round(applicant.video.transcript_score * 10) : null) ?? applicant.screening_score ?? (applicant.screening_status === 'for_review' ? 80 : applicant.screening_status === 'in_progress' ? 60 : 0)}
                         </p>
                         <p className="text-xs text-gray-400">score</p>
                       </div>
