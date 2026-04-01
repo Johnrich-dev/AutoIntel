@@ -1400,10 +1400,11 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
         if (externalApplicants) {
           setApplicants(externalApplicants);
         } else {
-          // Otherwise fetch from database
+          // Otherwise fetch from database - ONLY shortlisted/verified applicants
           const { data: applicantsData } = await supabase
             .from('applicants')
             .select('*')
+            .eq('status', 'shortlisted')
             .order('created_at', { ascending: false });
 
           if (applicantsData) {

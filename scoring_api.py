@@ -912,6 +912,204 @@ def reject_applicant():
         }), 500
 
 
+@app.route('/api/video-verification', methods=['POST', 'OPTIONS'])
+def video_verification():
+    """
+    Handle video verification decision (Verified or Mismatch).
+    
+    Request Body:
+    {
+        "applicant_id": "string (required)",
+        "applicant_email": "string (required)",
+        "applicant_name": "string (required)",
+        "position": "string (required)",
+        "verification_status": "verified" or "mismatch" (required)
+    }
+    
+    Response:
+    {
+        "success": true,
+        "message": "Applicant verified and moved to shortlisted" or "Rejection email sent",
+        "email_sent": true,
+        "status": "success"
+    }
+    """
+    # Handle OPTIONS request for CORS preflight
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    
+    try:
+        # Import required modules
+        import email_service
+        from datetime import datetime
+        from dotenv import load_dotenv
+        load_dotenv()
+        
+        # Get Supabase client
+        from supabase import create_client
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        
+        if not supabase_url or not supabase_key:
+            return jsonify({"error": "Supabase configuration missing. Set SUPABASE_URL and SUPABASE_SERVICE_KEY in .env"}), 500
+        
+        supabase = create_client(supabase_url, supabase_key)
+        
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        # Extract required fields
+        applicant_id = data.get('applicant_id')
+        applicant_email = data.get('applicant_email')
+        applicant_name = data.get('applicant_name')
+        position = data.get('position')
+        verification_status = data.get('verification_status')
+        
+        # Validate required fields
+        if not applicant_id:
+            return jsonify({"error": "applicant_id is required"}), 400
+        if not applicant_email:
+            return jsonify({"error": "applicant_email is required"}), 400
+        if not applicant_name:
+            return jsonify({"error": "applicant_name is required"}), 400
+        if not position:
+            return jsonify({"error": "position is required"}), 400
+        if not verification_status:
+            return jsonify({"error": "verification_status is required"}), 400
+        
+        if verification_status not in ['verified', 'mismatch']:
+            return jsonify({"error": "verification_status must be 'verified' or 'mismatch'"}), 400
+        
+        email_sent = False
+        
+        if verification_status == 'verified':
+            # Update database to shortlisted status
+            update_data = {
+                "status": "shortlisted",
+                "screening_status": "passed",
+                "screening_stage": "video_verified",
+                "updated_at": datetime.now().isoformat()
+            }
+            
+            print(f"Attempting to update applicant {applicant_id} to shortlisted with data: {update_data}")
+            
+            try:
+                result = supabase.table("applicants").update(update_data).eq("id", applicant_id).execute()
+                print(f"Database update result: {result}")
+                print(f"Result data: {result.data}")
+                print(f"Result count: {result.count}")
+                
+                if not result.data:
+                    print(f"WARNING: No rows were updated for applicant {applicant_id}")
+                    return jsonify({"error": "Database update failed - no rows affected"}), 500
+                    
+            except Exception as db_error:
+                print(f"Database update error: {db_error}")
+                import traceback
+                traceback.print_exc()
+                return jsonify({"error": f"Database update failed: {str(db_error)}"}), 500
+            
+            return jsonify({
+                "success": True,
+                "message": "Applicant verified and moved to shortlisted",
+                "email_sent": False,
+                "status": "success"
+            }), 200
+            
+        else:  # verification_status == 'mismatch'
+            # Update database to rejected status
+            update_data = {
+                "status": "rejected",
+                "screening_status": "failed",
+                "screening_stage": "video_mismatch",
+                "updated_at": datetime.now().isoformat()
+            }
+            
+            print(f"Attempting to update applicant {applicant_id} to rejected with data: {update_data}")
+            
+            try:
+                result = supabase.table("applicants").update(update_data).eq("id", applicant_id).execute()
+                print(f"Database update result: {result}")
+                print(f"Result data: {result.data}")
+                print(f"Result count: {result.count}")
+                
+                if not result.data:
+                    print(f"WARNING: No rows were updated for applicant {applicant_id}")
+                    return jsonify({"error": "Database update failed - no rows affected"}), 500
+                    
+            except Exception as db_error:
+                print(f"Database update error: {db_error}")
+                import traceback
+                traceback.print_exc()
+                return jsonify({"error": f"Database update failed: {str(db_error)}"}), 500
+            
+            # Send formal rejection email for video mismatch
+            rejection_subject = f"Update on Your Application for {position}"
+            rejection_body = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); padding: 32px 40px; text-align: center;">
+            <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">AutoIntel Recruitment</h1>
+        </div>
+        
+        <!-- Content -->
+        <div style="padding: 40px;">
+            <h2 style="margin: 0 0 24px 0; color: #111827; font-size: 20px; font-weight: 600;">Application Status Update</h2>
+            
+            <p style="margin: 0 0 16px 0; color: #374151; font-size: 15px; line-height: 1.6;">Dear {applicant_name},</p>
+            
+            <p style="margin: 0 0 16px 0; color: #374151; font-size: 15px; line-height: 1.6;">Thank you for your interest in the <strong>{position}</strong> position and for taking the time to complete our video assessment.</p>
+            
+            <p style="margin: 0 0 16px 0; color: #374151; font-size: 15px; line-height: 1.6;">After careful review, we identified a discrepancy between your uploaded profile photo and the video you submitted. As part of our commitment to maintaining the integrity of our recruitment process, we require all applicants to complete identity verification.</p>
+            
+            <p style="margin: 0 0 16px 0; color: #374151; font-size: 15px; line-height: 1.6;">Unfortunately, due to this discrepancy, we are unable to advance your application to the next stage of our selection process.</p>
+            
+            <p style="margin: 0 0 16px 0; color: #374151; font-size: 15px; line-height: 1.6;">We encourage you to apply for future opportunities that match your qualifications and experience.</p>
+            
+            <p style="margin: 0 0 16px 0; color: #374151; font-size: 15px; line-height: 1.6;">We wish you the best in your career endeavors.</p>
+            
+            <p style="margin: 0 0 24px 0; color: #374151; font-size: 15px; line-height: 1.6;">Best regards,</p>
+            
+            <p style="margin: 0; color: #111827; font-size: 15px; font-weight: 600;">The AutoIntel Recruitment Team</p>
+        </div>
+        
+        <!-- Footer -->
+        <div style="background-color: #f9fafb; padding: 24px 40px; border-top: 1px solid #e5e7eb;">
+            <p style="margin: 0; color: #6b7280; font-size: 12px; text-align: center;">This is an automated message. Please do not reply to this email.</p>
+            <p style="margin: 8px 0 0 0; color: #6b7280; font-size: 12px; text-align: center;">© {datetime.now().year} AutoIntel. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>"""
+            
+            email_sent = email_service.send_email(
+                to_email=applicant_email,
+                subject=rejection_subject,
+                body=rejection_body
+            )
+            
+            return jsonify({
+                "success": True,
+                "message": "Rejection email sent successfully",
+                "email_sent": email_sent,
+                "status": "success"
+            }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
+
+
 # Import work style scorer
 try:
     import work_style_scorer
@@ -1153,6 +1351,256 @@ def not_found(error):
 def internal_error(error):
     """Handle 500 errors."""
     return jsonify({"error": "Internal server error", "status": "error"}), 500
+
+
+@app.route('/api/generate-ai-insights', methods=['POST'])
+def generate_ai_insights():
+    """
+    Generate AI insights and suggestions for an applicant based on their assessment data.
+    
+    Request Body:
+    {
+        "applicant_id": "string (required)",
+        "overall_score": 85.5,
+        "skills_score": 90.0,
+        "experience_score": 80.0,
+        "education_score": 85.0,
+        "projects_score": 75.0,
+        "video_score": 88.0,
+        "work_style_score": 82.0,
+        "matched_skills": ["Python", "SQL", "React"],
+        "missing_skills": ["AWS", "Docker"],
+        "position": "Software Developer"
+    }
+    
+    Response:
+    {
+        "insights": [
+            {
+                "type": "strength|weakness|opportunity",
+                "title": "Strong Technical Skills",
+                "description": "Candidate demonstrates excellent proficiency in required skills",
+                "icon": "check|alert|trending"
+            }
+        ],
+        "suggestions": [
+            {
+                "action": "Schedule technical interview",
+                "reason": "Strong skill match but needs validation of practical experience",
+                "priority": "high|medium|low"
+            }
+        ],
+        "summary": "Candidate shows strong potential with excellent technical skills...",
+        "status": "success"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        # Extract applicant data
+        applicant_id = data.get('applicant_id')
+        overall_score = data.get('overall_score', 0)
+        skills_score = data.get('skills_score', 0)
+        experience_score = data.get('experience_score', 0)
+        education_score = data.get('education_score', 0)
+        projects_score = data.get('projects_score', 0)
+        video_score = data.get('video_score', 0)
+        work_style_score = data.get('work_style_score', 0)
+        matched_skills = data.get('matched_skills', [])
+        missing_skills = data.get('missing_skills', [])
+        position = data.get('position', 'the position')
+        
+        # Validate required fields
+        if not applicant_id:
+            return jsonify({"error": "applicant_id is required"}), 400
+        
+        # Initialize lists
+        insights = []
+        suggestions = []
+        
+        # Generate personalized insights based on scores
+        # Skills insight
+        if skills_score >= 85:
+            insights.append({
+                "type": "strength",
+                "title": "Exceptional Technical Skills",
+                "description": f"Candidate demonstrates outstanding proficiency with {len(matched_skills)} matched skills including {', '.join(matched_skills[:3])}",
+                "icon": "check"
+            })
+        elif skills_score >= 70:
+            insights.append({
+                "type": "strength",
+                "title": "Strong Technical Foundation",
+                "description": f"Candidate shows solid technical capabilities with {len(matched_skills)} matched skills",
+                "icon": "check"
+            })
+        elif skills_score >= 50:
+            insights.append({
+                "type": "opportunity",
+                "title": "Moderate Technical Skills",
+                "description": f"Candidate has {len(matched_skills)} matched skills but may need development in {len(missing_skills)} areas",
+                "icon": "trending"
+            })
+        else:
+            insights.append({
+                "type": "weakness",
+                "title": "Technical Skills Gap",
+                "description": f"Candidate lacks {len(missing_skills)} key skills required for this role",
+                "icon": "alert"
+            })
+        
+        # Experience insight
+        if experience_score >= 80:
+            insights.append({
+                "type": "strength",
+                "title": "Relevant Experience",
+                "description": "Candidate's experience aligns well with the role requirements",
+                "icon": "check"
+            })
+        elif experience_score >= 60:
+            insights.append({
+                "type": "opportunity",
+                "title": "Growing Experience",
+                "description": "Candidate shows potential but may benefit from mentorship",
+                "icon": "trending"
+            })
+        else:
+            insights.append({
+                "type": "weakness",
+                "title": "Experience Development Needed",
+                "description": "Candidate may require additional training or supervision",
+                "icon": "alert"
+            })
+        
+        # Video assessment insight
+        if video_score >= 85:
+            insights.append({
+                "type": "strength",
+                "title": "Excellent Communication",
+                "description": "Candidate demonstrates strong communication and presentation skills",
+                "icon": "check"
+            })
+        elif video_score >= 70:
+            insights.append({
+                "type": "strength",
+                "title": "Good Communication",
+                "description": "Candidate communicates effectively in video assessment",
+                "icon": "check"
+            })
+        elif video_score >= 50:
+            insights.append({
+                "type": "opportunity",
+                "title": "Communication Skills",
+                "description": "Candidate's communication could be further developed",
+                "icon": "trending"
+            })
+        elif video_score > 0:
+            insights.append({
+                "type": "weakness",
+                "title": "Communication Concerns",
+                "description": "Video assessment indicates areas for improvement",
+                "icon": "alert"
+            })
+        
+        # Work style insight
+        if work_style_score >= 80:
+            insights.append({
+                "type": "strength",
+                "title": "Strong Work Style Fit",
+                "description": "Candidate's work style aligns well with the role",
+                "icon": "check"
+            })
+        elif work_style_score >= 60:
+            insights.append({
+                "type": "opportunity",
+                "title": "Work Style Alignment",
+                "description": "Candidate shows good potential for role adaptation",
+                "icon": "trending"
+            })
+        
+        # Education insight
+        if education_score >= 80:
+            insights.append({
+                "type": "strength",
+                "title": "Strong Educational Background",
+                "description": "Candidate's education supports the role requirements",
+                "icon": "check"
+            })
+        
+        # Projects insight
+        if projects_score >= 75:
+            insights.append({
+                "type": "strength",
+                "title": "Relevant Project Experience",
+                "description": "Candidate has demonstrated practical application of skills",
+                "icon": "check"
+            })
+        elif projects_score >= 50:
+            insights.append({
+                "type": "opportunity",
+                "title": "Project Development",
+                "description": "Candidate could benefit from more hands-on project work",
+                "icon": "trending"
+            })
+        
+        # Generate personalized suggestions
+        if overall_score >= 78:
+            suggestions.append({
+                "action": "Schedule final interview",
+                "reason": "Candidate meets all qualification thresholds",
+                "priority": "high"
+            })
+        elif overall_score >= 65:
+            suggestions.append({
+                "action": "Schedule technical interview",
+                "reason": "Strong potential but needs validation of practical skills",
+                "priority": "high"
+            })
+            
+            if len(missing_skills) > 0:
+                suggestions.append({
+                    "action": f"Assess {', '.join(missing_skills[:2])} skills",
+                    "reason": f"Candidate lacks {len(missing_skills)} key qualifications",
+                    "priority": "medium"
+                })
+        else:
+            suggestions.append({
+                "action": "Request additional documentation",
+                "reason": "Score below threshold - need more information to evaluate",
+                "priority": "medium"
+            })
+        
+        # Add video review suggestion if video score exists
+        if video_score > 0:
+            suggestions.append({
+                "action": "Review video assessment",
+                "reason": "Evaluate communication and presentation skills",
+                "priority": "medium"
+            })
+        
+        # Generate personalized summary
+        if overall_score >= 78:
+            summary = f"Candidate shows strong potential with an overall score of {overall_score}%. They demonstrate excellent qualifications and are recommended for the next stage."
+        elif overall_score >= 65:
+            summary = f"Candidate shows promise with an overall score of {overall_score}%. They have solid foundations but may benefit from additional evaluation in specific areas."
+        else:
+            summary = f"Candidate has an overall score of {overall_score}%. While they show some potential, significant gaps exist that require further assessment."
+        
+        return jsonify({
+            "insights": insights,
+            "suggestions": suggestions,
+            "summary": summary,
+            "status": "success"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "error"
+        }), 500
 
 
 @app.route('/api/hr/decision', methods=['POST'])

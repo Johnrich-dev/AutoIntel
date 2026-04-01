@@ -302,9 +302,9 @@ export function NeedsReview() {
                 assessment.status === 'submitted' || 
                 assessment.status === 'completed' || 
                 !!assessment.submitted_at;
-              // Store the score
+              // Store the score (transcript_score is 0-10, convert to 0-100 for percentage display)
               if (assessment.transcript_score !== null && assessment.transcript_score !== undefined) {
-                videoScoresMap[assessment.applicant_id] = assessment.transcript_score;
+                videoScoresMap[assessment.applicant_id] = Math.round(assessment.transcript_score * 10);
               }
             });
           }
@@ -497,9 +497,9 @@ export function NeedsReview() {
                 assessment.status === 'submitted' || 
                 assessment.status === 'completed' || 
                 !!assessment.submitted_at;
-              // Store the score
+              // Store the score (transcript_score is 0-10, convert to 0-100 for percentage display)
               if (assessment.transcript_score !== null && assessment.transcript_score !== undefined) {
-                videoScoresMap[assessment.applicant_id] = assessment.transcript_score;
+                videoScoresMap[assessment.applicant_id] = Math.round(assessment.transcript_score * 10);
               }
             });
           }

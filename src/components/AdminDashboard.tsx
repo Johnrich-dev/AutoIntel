@@ -457,8 +457,8 @@ export function AdminDashboard() {
             <ApplicantsList />}
           {activeMenu === 'interview-scheduling' && <InterviewScheduling />}
           
-          {/* Shortlisted and Final Decisions use ShortlistedCandidates */}
-          {(activeMenu === 'shortlisted' || activeMenu === 'final-decisions') && <ShortlistedCandidates applicants={applicants} />}
+          {/* Shortlisted and Final Decisions use ShortlistedCandidates - filter to only shortlisted/verified */}
+          {(activeMenu === 'shortlisted' || activeMenu === 'final-decisions') && <ShortlistedCandidates applicants={applicants.filter(a => a.status === 'shortlisted')} />}
           
           {/* Analytics & Reports */}
           {activeMenu === 'analytics-reports' && <ReportsDashboard applicants={applicants} />}
