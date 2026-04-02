@@ -90,6 +90,8 @@ export function NeedsReviewDetailPanel({
   const [aiInsights, setAiInsights] = useState<any>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [verifyingVideo, setVerifyingVideo] = useState(false);
+  const [workStyleData, setWorkStyleData] = useState<any>(null);
+  const [loadingWorkStyle, setLoadingWorkStyle] = useState(false);
 
   // Handle video verification (Verified or Mismatch)
   const handleVideoVerification = async (verificationStatus: 'verified' | 'mismatch') => {
@@ -290,6 +292,35 @@ export function NeedsReviewDetailPanel({
       fetchAiInsights();
     }
   }, [isOpen, applicant?.id]);
+
+  // Fetch work style assessment data when work tab is active
+  useEffect(() => {
+    const fetchWorkStyleData = async () => {
+      if (!applicant?.id) return;
+      
+      setLoadingWorkStyle(true);
+      try {
+        const adminClient = getSupabaseAdminClient();
+        const { data, error } = await adminClient
+          .from('work_style_assessments')
+          .select('*')
+          .eq('applicant_id', applicant.id)
+          .single();
+        
+        if (error) throw error;
+        setWorkStyleData(data);
+      } catch (err) {
+        console.error('Error fetching work style assessment:', err);
+        setWorkStyleData(null);
+      } finally {
+        setLoadingWorkStyle(false);
+      }
+    };
+
+    if (isOpen && applicant && activeTab === 'work') {
+      fetchWorkStyleData();
+    }
+  }, [isOpen, applicant?.id, activeTab]);
 
   // Mark video as reviewed
   const handleMarkVideoReviewed = async () => {
@@ -1089,10 +1120,249 @@ export function NeedsReviewDetailPanel({
         {/* ===== WORK TAB ===== */}
         {activeTab === 'work' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Work Profiling</h3>
-              <p className="text-sm text-gray-500">Work profiling content will be displayed here.</p>
-            </div>
+            {loadingWorkStyle ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-2" />
+                <p className="text-sm text-gray-500">Loading work profiling data...</p>
+              </div>
+            ) : workStyleData ? (
+              <>
+                {/* Overall Score KPI Card */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-xl bg-green-100 flex items-center justify-center">
+                      <ClipboardCheck className="w-7 h-7 text-green-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-500">Overall Work Style Score</p>
+                      <p className={`text-3xl font-bold ${getScoreColor(workStyleData.semantic_score || 0)}`}>
+                        {workStyleData.semantic_score || 0}%
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      {workStyleData.role_family && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">Role Family:</span>
+                          <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium capitalize">
+                            {workStyleData.role_family}
+                          </span>
+                        </div>
+                      )}
+                      {workStyleData.scoring_method && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">Scoring Method:</span>
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                            workStyleData.scoring_method === 'hybrid' 
+                              ? 'bg-purple-100 text-purple-700' 
+                              : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {workStyleData.scoring_method === 'hybrid' ? 'Hybrid (AI + Embeddings)' : 'Semantic (Embeddings)'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dimension Scores */}
+                {workStyleData.dimension_scores && workStyleData.dimension_scores.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                    <div className="flex items-center gap-3 mb-5">
+                      <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+                        <BarChart3 className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Dimension Scores</h3>
+                        <p className="text-sm text-gray-500">Detailed breakdown of work style dimensions</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {workStyleData.dimension_scores.map((dimension: any, index: number) => {
+                        const dimensionKey = dimension.dimension?.toLowerCase().replace(/ /g, '_') || '';
+                        const dimensionDescriptions: Record<string, { high: string; low: string }> = {
+                          collaboration: {
+                            high: "Works exceptionally well with others, fosters teamwork, actively contributes to group goals, supports colleagues, values diverse perspectives, enjoys collaborative environments",
+                            low: "Prefers working alone, struggles in team settings, has difficulty cooperating with others, tends to work independently"
+                          },
+                          independence: {
+                            high: "Self-directed, works well without supervision, takes ownership of tasks, manages own time effectively, requires minimal guidance",
+                            low: "Needs constant direction, struggles to work autonomously, relies heavily on supervision, prefers structured guidance"
+                          },
+                          leadership_readiness: {
+                            high: "Ready to take charge, comfortable leading projects, willing to mentor others, takes responsibility for outcomes, motivates team members",
+                            low: "Uncomfortable leading, prefers following directions, avoids leadership responsibilities, hesitant to take charge"
+                          },
+                          adaptability: {
+                            high: "Embraces change, quickly adjusts to new situations, flexible in approach, thrives in dynamic environments, learns new skills readily",
+                            low: "Resistant to change, struggles with new environments, prefers stability and routine, slow to adapt"
+                          },
+                          attention_to_detail: {
+                            high: "Meticulous, thorough, catches errors,注重细节, ensures accuracy, comprehensive in review",
+                            low: "Overlooks details, makes careless errors, rushed work, misses important information"
+                          },
+                          problem_solving: {
+                            high: "Excellent analytical skills, enjoys complex challenges, finds creative solutions, thinks critically, approaches problems systematically",
+                            low: "Struggles with complex problems, avoids challenging situations, lacks analytical approach"
+                          },
+                          communication: {
+                            high: "Clearly expresses ideas, excellent verbal and written communication, articulates thoughts well, listens actively, presents effectively",
+                            low: "Difficult to understand, struggles to convey ideas, poor written communication, has difficulty explaining thoughts"
+                          },
+                          stress_tolerance: {
+                            high: "Remains calm under pressure, handles tight deadlines well, performs well in high-stress situations, stays composed",
+                            low: "Becomes overwhelmed, struggles with deadlines, anxious under pressure, difficulty functioning in stressful situations"
+                          },
+                          feedback_receptiveness: {
+                            high: "Actively seeks feedback, embraces constructive criticism, uses feedback to improve, open to learning from others",
+                            low: "Defensive about feedback, avoids criticism, resistant to input from others, dismisses constructive advice"
+                          },
+                          ambiguity_tolerance: {
+                            high: "Comfortable with uncertainty, makes decisions with incomplete information, handles ambiguous situations well, flexible thinking",
+                            low: "Needs clear instructions, uncomfortable with uncertainty, struggles when information is incomplete, prefers explicit guidance"
+                          },
+                          initiative: {
+                            high: "Takes initiative, proactive, starts projects without being asked, identifies and addresses problems, self-motivated",
+                            low: "Waits to be told what to do, reactive rather than proactive, lacks self-initiative, needs prompting"
+                          },
+                          relationship_building: {
+                            high: "Builds strong relationships, maintains professional networks, connects with others easily, fosters positive connections",
+                            low: "Struggles to build rapport, distant professionally, has difficulty maintaining relationships"
+                          },
+                          learning_orientation: {
+                            high: "Passionate about learning, continuously develops skills, seeks new knowledge, embraces professional development",
+                            low: "Satisfied with current knowledge, resists learning new things, no interest in self-improvement"
+                          },
+                          conflict_management: {
+                            high: "Addresses conflicts directly, resolves disagreements professionally, handles difficult conversations well, seeks win-win solutions",
+                            low: "Avoids conflict, struggles to address issues, allows problems to fester, uncomfortable with confrontation"
+                          },
+                          work_preference_balance: {
+                            high: "Values work-life balance, sets boundaries, manages time effectively, maintains well-being",
+                            low: "Neglects personal life for work, unable to set boundaries, overworked, poor time management"
+                          }
+                        };
+                        const description = dimensionDescriptions[dimensionKey];
+                        const tooltipText = description 
+                          ? `High: ${description.high}\n\nLow: ${description.low}`
+                          : 'No description available';
+                        
+                        return (
+                          <div key={index} className="p-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl border border-gray-200" title={tooltipText}>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Target className="w-4 h-4 text-indigo-600" />
+                                <span className="text-sm font-semibold text-gray-800 capitalize">
+                                  {dimension.dimension?.replace(/_/g, ' ') || 'Unknown'}
+                                </span>
+                              </div>
+                              <span className={`text-lg font-bold ${getScoreColor(dimension.hybrid_score || 0)}`}>
+                                {Math.round(dimension.hybrid_score || 0)}%
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                              <div 
+                                className={`h-2 rounded-full ${getScoreBgColor(dimension.hybrid_score || 0)}`}
+                                style={{ width: `${Math.round(dimension.hybrid_score || 0)}%` }}
+                              />
+                            </div>
+                            {dimension.reasoning && (
+                              <p className="text-xs text-gray-600 mt-2">{dimension.reasoning}</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Strong Areas and Essay Insights */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Strong Areas */}
+                  {workStyleData.strong_areas?.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                        </div>
+                        <h3 className="text-sm font-semibold text-gray-900">Strong Areas</h3>
+                      </div>
+                      <div className="space-y-2">
+                        {workStyleData.strong_areas.map((area: string, index: number) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                            <span className="text-sm text-gray-700 capitalize">{area.replace(/_/g, ' ')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Essay Insights */}
+                  {workStyleData.essay_insights && (
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+                          <MessageSquare className="w-4 h-4 text-indigo-600" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900">Essay Insights</h3>
+                      </div>
+                      <p className="text-sm text-gray-700 leading-relaxed">{workStyleData.essay_insights}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Moderate and Development Areas */}
+                {(workStyleData.moderate_areas?.length > 0 || workStyleData.development_areas?.length > 0) && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Moderate Areas */}
+                    {workStyleData.moderate_areas?.length > 0 && (
+                      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                        <div className="flex items-center gap-2 mb-4">
+                          <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                            <AlertTriangle className="w-4 h-4 text-amber-600" />
+                          </div>
+                          <h3 className="text-sm font-semibold text-gray-900">Moderate Areas</h3>
+                        </div>
+                        <div className="space-y-2">
+                          {workStyleData.moderate_areas.map((area: string, index: number) => (
+                            <div key={index} className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+                              <span className="text-sm text-gray-700 capitalize">{area.replace(/_/g, ' ')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Development Areas */}
+                    {workStyleData.development_areas?.length > 0 && (
+                      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                        <div className="flex items-center gap-2 mb-4">
+                          <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
+                            <AlertCircle className="w-4 h-4 text-red-600" />
+                          </div>
+                          <h3 className="text-sm font-semibold text-gray-900">Development Areas</h3>
+                        </div>
+                        <div className="space-y-2">
+                          {workStyleData.development_areas.map((area: string, index: number) => (
+                            <div key={index} className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
+                              <span className="text-sm text-gray-700 capitalize">{area.replace(/_/g, ' ')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                <ClipboardCheck className="w-12 h-12 mb-2" />
+                <p className="text-sm">No work profiling data available</p>
+              </div>
+            )}
           </div>
         )}
       </div>
