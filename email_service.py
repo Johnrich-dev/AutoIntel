@@ -797,22 +797,20 @@ def send_interview_notification(
     if interview_type == "online" and meeting_link:
         if meeting_passcode:
             meeting_section = f"""
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px; border-radius: 8px; margin: 24px 0;">
-            <p style="color: white; margin: 0 0 12px 0; font-size: 14px; opacity: 0.9;">Microsoft Teams</p>
-            <a href="{meeting_link}" style="display: inline-block; background: white; color: #667eea; padding: 14px 32px; text-decoration: none; font-weight: 600; border-radius: 6px; font-size: 15px; margin-bottom: 16px;">Join Microsoft Teams Meeting</a>
-            <div style="background: rgba(255,255,255,0.1); padding: 12px; border-radius: 6px; margin-top: 12px;">
+        <div style="background: #1e3a8a; padding: 24px; border-radius: 8px; margin: 24px 0;">
+            <p style="color: white; margin: 0 0 16px 0; font-size: 14px; font-weight: 600;">Microsoft Teams Meeting</p>
+            <a href="{meeting_link}" style="display: inline-block; background: #ffffff; color: #1e3a8a; padding: 14px 32px; text-decoration: none; font-weight: 600; border-radius: 6px; font-size: 15px; margin-bottom: 16px;">Join Meeting</a>
+            <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 6px; margin-top: 16px;">
                 <p style="color: white; margin: 0 0 8px 0; font-size: 13px; font-weight: 600;">Meeting Credentials</p>
-                <p style="color: white; margin: 0; font-size: 12px; opacity: 0.9;">Passcode: {meeting_passcode}</p>
+                <p style="color: white; margin: 0; font-size: 12px;">Passcode: {meeting_passcode}</p>
             </div>
-            <p style="color: white; margin: 16px 0 0 0; font-size: 11px; opacity: 0.7;">Or copy this link: {meeting_link}</p>
         </div>
         """
         else:
             meeting_section = f"""
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px; border-radius: 8px; margin: 24px 0;">
-            <p style="color: white; margin: 0 0 12px 0; font-size: 14px; opacity: 0.9;">Join your interview via Microsoft Teams</p>
-            <a href="{meeting_link}" style="display: inline-block; background: white; color: #667eea; padding: 14px 32px; text-decoration: none; font-weight: 600; border-radius: 6px; font-size: 15px;">Join Microsoft Teams Meeting</a>
-            <p style="color: white; margin: 16px 0 0 0; font-size: 11px; opacity: 0.7;">Or copy this link: {meeting_link}</p>
+        <div style="background: #1e3a8a; padding: 24px; border-radius: 8px; margin: 24px 0;">
+            <p style="color: white; margin: 0 0 16px 0; font-size: 14px; font-weight: 600;">Microsoft Teams Meeting</p>
+            <a href="{meeting_link}" style="display: inline-block; background: #ffffff; color: #1e3a8a; padding: 14px 32px; text-decoration: none; font-weight: 600; border-radius: 6px; font-size: 15px;">Join Meeting</a>
         </div>
         """
     elif interview_type == "in-person" and location:
@@ -849,9 +847,9 @@ def send_interview_notification(
                 <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
                     <!-- Header -->
                     <tr>
-                        <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 32px 40px; text-align: center;">
+                        <td style="background: #1e3a8a; padding: 32px 40px; text-align: center;">
                             <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">Interview Invitation</h1>
-                            <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">{job_title}</p>
+                            <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 14px;">{job_title}</p>
                         </td>
                     </tr>
                     
@@ -956,111 +954,148 @@ def send_interviewer_notification(
     
     # Format date and time for display
     try:
-        formatted_date = datetime.strptime(interview_date, "%Y-%m-%d").strftime("%B %d, %Y")
+        formatted_date = datetime.strptime(interview_date, "%Y-%m-%d").strftime("%A, %B %d, %Y")
     except:
         formatted_date = interview_date
     
-    # Build meeting/location info HTML
+    # Format time for display
+    try:
+        time_obj = datetime.strptime(interview_time, "%H:%M")
+        formatted_time = time_obj.strftime("%I:%M %p")
+    except:
+        formatted_time = interview_time
+    
+    # Build details rows
+    details_rows = f"""
+    <tr>
+        <td style="padding: 8px 0; color: #6b7280; width: 120px;">Applicant:</td>
+        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{applicant_name}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px 0; color: #6b7280;">Email:</td>
+        <td style="padding: 8px 0; color: #111827;">{applicant_email}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px 0; color: #6b7280;">Position:</td>
+        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{job_title}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px 0; color: #6b7280;">Date:</td>
+        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{formatted_date}</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px 0; color: #6b7280;">Time:</td>
+        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{formatted_time} (Asia/Manila Time)</td>
+    </tr>
+    <tr>
+        <td style="padding: 8px 0; color: #6b7280;">Format:</td>
+        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{'Video Conference' if interview_type == 'online' else 'In-Person'}</td>
+    </tr>
+    """
+    
+    # Build meeting/location section
     if interview_type == "online" and meeting_link:
         if meeting_passcode:
-            meeting_info = f"""
-            <div class="meeting-info" style="background: #e0f2fe; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                <h3 style="margin: 0 0 10px 0;">📹 Microsoft Teams</h3>
-                <p style="margin: 0;"><a href="{meeting_link}" style="color: #0284c7; font-weight: bold;">Join Meeting</a></p>
-                <p style="margin: 10px 0 0 0; font-size: 13px;"><strong>Passcode:</strong> {meeting_passcode}</p>
+            meeting_section = f"""
+        <div style="background: #1e3a8a; padding: 24px; border-radius: 8px; margin: 24px 0;">
+            <p style="color: white; margin: 0 0 16px 0; font-size: 14px; font-weight: 600;">Microsoft Teams Meeting</p>
+            <a href="{meeting_link}" style="display: inline-block; background: #ffffff; color: #1e3a8a; padding: 14px 32px; text-decoration: none; font-weight: 600; border-radius: 6px; font-size: 15px; margin-bottom: 16px;">Join Meeting</a>
+            <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 6px; margin-top: 16px;">
+                <p style="color: white; margin: 0 0 8px 0; font-size: 13px; font-weight: 600;">Meeting Credentials</p>
+                <p style="color: white; margin: 0; font-size: 12px;">Passcode: {meeting_passcode}</p>
             </div>
+        </div>
         """
         else:
-            meeting_info = f"""
-            <div class="meeting-info" style="background: #e0f2fe; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                <h3 style="margin: 0 0 10px 0;">📹 Meeting Link</h3>
-                <p style="margin: 0;"><a href="{meeting_link}" style="color: #0284c7; font-weight: bold;">{meeting_link}</a></p>
-            </div>
+            meeting_section = f"""
+        <div style="background: #1e3a8a; padding: 24px; border-radius: 8px; margin: 24px 0;">
+            <p style="color: white; margin: 0 0 16px 0; font-size: 14px; font-weight: 600;">Microsoft Teams Meeting</p>
+            <a href="{meeting_link}" style="display: inline-block; background: #ffffff; color: #1e3a8a; padding: 14px 32px; text-decoration: none; font-weight: 600; border-radius: 6px; font-size: 15px;">Join Meeting</a>
+        </div>
         """
     elif interview_type == "in-person" and location:
-        meeting_info = f"""
-            <div class="location-info" style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                <h3 style="margin: 0 0 10px 0;">📍 Location</h3>
-                <p style="margin: 0;">{location}</p>
-            </div>
+        meeting_section = f"""
+        <div style="background: #fffbeb; border: 1px solid #fcd34d; padding: 20px; border-radius: 8px; margin: 24px 0;">
+            <p style="margin: 0 0 8px 0; color: #92400e; font-weight: 600;">Interview Location</p>
+            <p style="margin: 0; color: #78350f;">{location}</p>
+        </div>
         """
     else:
-        meeting_info = ""
+        meeting_section = ""
     
-    # Build notes HTML
-    notes_html = ""
+    # Build notes section
+    notes_section = ""
     if notes:
-        notes_html = f"""
-            <div class="notes" style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                <h3 style="margin: 0 0 10px 0;">📝 Notes</h3>
-                <p style="margin: 0;">{notes}</p>
-            </div>
+        notes_section = f"""
+        <div style="background: #f9fafb; border-left: 4px solid #1e3a8a; padding: 16px 20px; margin: 24px 0;">
+            <p style="margin: 0 0 8px 0; color: #4b5563; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Interviewer Notes</p>
+            <p style="margin: 0; color: #374151; line-height: 1.6;">{notes}</p>
+        </div>
         """
     
     body_html = f"""
 <!DOCTYPE html>
 <html>
 <head>
-    <style>
-        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background: #059669; color: white; padding: 20px; text-align: center; }}
-        .content {{ padding: 20px; background: #f9f9f9; }}
-        .details-box {{ background: white; padding: 20px; border-radius: 8px; margin: 15px 0; }}
-        .detail-row {{ display: flex; margin: 12px 0; border-bottom: 1px solid #e5e7eb; padding-bottom: 12px; }}
-        .detail-row:last-child {{ border-bottom: none; }}
-        .detail-label {{ font-weight: bold; width: 120px; flex-shrink: 0; }}
-        .detail-value {{ flex: 1; }}
-        .footer {{ text-align: center; padding: 20px; color: #666; font-size: 12px; }}
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>📅 Interview Assigned</h1>
-        </div>
-        <div class="content">
-            <p>Dear <strong>{interviewer_name}</strong>,</p>
-            
-            <p>You have been assigned to conduct an interview for the position of <strong>{job_title}</strong>.</p>
-            
-            <div class="details-box">
-                <div class="detail-row">
-                    <span class="detail-label">👤 Applicant:</span>
-                    <span class="detail-value">{applicant_name}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">📧 Email:</span>
-                    <span class="detail-value">{applicant_email}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">📅 Date:</span>
-                    <span class="detail-value">{formatted_date}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">🕐 Time:</span>
-                    <span class="detail-value">{interview_time}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">💻 Type:</span>
-                    <span class="detail-value">{interview_type.title()}</span>
-                </div>
-            </div>
-            
-            {meeting_info}
-            
-            {notes_html}
-            
-            <p>Please ensure you are available at the scheduled time and prepare accordingly.</p>
-            
-            <p>Best regards,<br>
-            <strong>AutoIntel Recruitment Team</strong></p>
-        </div>
-        <div class="footer">
-            <p>This is an automated message. Please do not reply to this email.</p>
-            <p>© {datetime.now().year} AutoIntel. All rights reserved.</p>
-        </div>
-    </div>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: #1e3a8a; padding: 32px 40px; text-align: center;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">Interview Assigned</h1>
+                            <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 14px;">{job_title}</p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px;">
+                            <p style="margin: 0 0 24px 0; color: #374151; font-size: 15px; line-height: 1.6;">
+                                Dear <strong style="color: #111827;">{interviewer_name}</strong>,
+                            </p>
+                            <p style="margin: 0 0 32px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
+                                You have been assigned to conduct an interview. Please find the details below.
+                            </p>
+                            
+                            <!-- Interview Details Card -->
+                            <div style="background: #f9fafb; border-radius: 8px; padding: 24px; margin: 0 0 24px 0;">
+                                <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Interview Details</p>
+                                <table width="100%" cellspacing="0" cellpadding="0" border="0">
+                                    {details_rows}
+                                </table>
+                            </div>
+                            
+                            <!-- Meeting / Location -->
+                            {meeting_section}
+                            
+                            <!-- Notes -->
+                            {notes_section}
+                            
+                            <!-- Footer Info -->
+                            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
+                            <p style="margin: 0; color: #374151; font-size: 15px; line-height: 1.6;">
+                                Please ensure you are available at the scheduled time and prepare accordingly.
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background: #f9fafb; padding: 24px 40px; text-align: center; border-top: 1px solid #e5e7eb;">
+                            <p style="margin: 0 0 4px 0; color: #111827; font-weight: 600;">AutoIntel Recruitment</p>
+                            <p style="margin: 0; color: #6b7280; font-size: 12px;">This is an automated message. Please do not reply directly to this email.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>
 """

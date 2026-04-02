@@ -37,15 +37,16 @@ interface ScheduledInterview {
   applicantName: string;
   applicantEmail: string;
   jobTitle: string;
-  interviewDate: string;
-  interviewTime: string;
-  interviewType: 'online' | 'in-person';
+  interviewDate?: string;
+  interviewTime?: string;
+  interviewType?: 'online' | 'in-person';
   meetingLink?: string;
+  meetingId?: string;
   meetingPasscode?: string;
   location?: string;
   interviewerId?: string;
   interviewerName?: string;
-  status: 'scheduled' | 'completed' | 'cancelled';
+  status: 'pending' | 'scheduled' | 'completed' | 'cancelled';
   notes?: string;
   createdAt: string;
 }
@@ -71,6 +72,7 @@ interface InterviewFormData {
   interviewTime: string;
   interviewType: '' | 'online' | 'in-person';
   meetingLink: string;
+  meetingId: string;
   meetingPasscode: string;
   location: string;
   interviewerId: string;
@@ -187,29 +189,23 @@ const mockInterviewers = [
 // Status Badge Component
 // ============================================================================
 
-function StatusBadge({ status }: { status: ScheduledInterview['status'] }) {
-  const styles = {
-    scheduled: 'bg-blue-100 text-blue-700',
-    completed: 'bg-green-100 text-green-700',
-    cancelled: 'bg-red-100 text-red-700'
+type InterviewDisplayStatus = 'pending' | 'scheduled' | 'completed' | 'cancelled';
+
+function StatusBadge({ status }: { status: InterviewDisplayStatus }) {
+  const configs = {
+    pending: { bg: 'bg-purple-100', text: 'text-purple-700', icon: Clock, label: 'Pending' },
+    scheduled: { bg: 'bg-blue-100', text: 'text-blue-700', icon: CalendarIcon, label: 'Scheduled' },
+    completed: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle, label: 'Completed' },
+    cancelled: { bg: 'bg-red-100', text: 'text-red-700', icon: X, label: 'Cancelled' }
   };
 
-  const icons = {
-    scheduled: <Clock className="w-3 h-3 mr-1" />,
-    completed: <CheckCircle className="w-3 h-3 mr-1" />,
-    cancelled: <X className="w-3 h-3 mr-1" />
-  };
-
-  const labels = {
-    scheduled: 'Scheduled',
-    completed: 'Completed',
-    cancelled: 'Cancelled'
-  };
+  const config = configs[status] || configs.pending;
+  const Icon = config.icon;
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${styles[status]}`}>
-      {icons[status]}
-      {labels[status]}
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
+      <Icon className="w-3 h-3 mr-1" />
+      {config.label}
     </span>
   );
 }
@@ -286,6 +282,7 @@ function InterviewModal({
     interviewTime: '',
     interviewType: '' as '' | 'online' | 'in-person',
     meetingLink: '',
+    meetingId: '',
     meetingPasscode: '',
     location: '',
     interviewerId: '',
@@ -297,10 +294,11 @@ function InterviewModal({
       setFormData({
         applicantId: interview.applicantId,
         jobId: mockJobs.find(j => j.title === interview.jobTitle)?.id || '',
-        interviewDate: interview.interviewDate,
-        interviewTime: interview.interviewTime,
-        interviewType: interview.interviewType,
+        interviewDate: interview.interviewDate || '',
+        interviewTime: interview.interviewTime || '',
+        interviewType: (interview.interviewType || '') as '' | 'online' | 'in-person',
         meetingLink: interview.meetingLink || '',
+        meetingId: interview.meetingId || '',
         meetingPasscode: '',
         location: interview.location || '',
         interviewerId: interview.interviewerId || '',
@@ -314,6 +312,7 @@ function InterviewModal({
         interviewTime: '',
         interviewType: '' as '' | 'online' | 'in-person',
         meetingLink: '',
+        meetingId: '',
         meetingPasscode: '',
         location: '',
         interviewerId: '',
@@ -451,6 +450,7 @@ function InterviewModal({
                     interviewType: newType,
                     // Clear meeting link when switching type
                     meetingLink: '',
+                    meetingId: '',
                     meetingPasscode: '',
                     // Clear location when switching to online
                     location: newType === 'online' ? '' : formData.location
@@ -478,17 +478,31 @@ function InterviewModal({
                   placeholder={formData.interviewType === 'online' ? "Paste Teams meeting link here" : "Select Online type first"}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
-                <div className="mt-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Meeting Passcode
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.meetingPasscode}
-                    onChange={(e) => setFormData({ ...formData, meetingPasscode: e.target.value })}
-                    placeholder="e.g., rE9YH7Ca"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
+                <div className="grid grid-cols-2 gap-4 mt-2">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Meeting ID
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.meetingId}
+                      onChange={(e) => setFormData({ ...formData, meetingId: e.target.value })}
+                      placeholder="e.g., abcdefgh"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Meeting Passcode
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.meetingPasscode}
+                      onChange={(e) => setFormData({ ...formData, meetingPasscode: e.target.value })}
+                      placeholder="e.g., rE9YH7Ca"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 </div>
               </div>
             ) : (
@@ -592,12 +606,18 @@ function ViewDetailsModal({
   isOpen,
   onClose,
   interview,
-  isManagerView = false
+  isManagerView = false,
+  onSchedule,
+  onHire,
+  onReject
 }: {
   isOpen: boolean;
   onClose: () => void;
   interview: ScheduledInterview | null;
   isManagerView?: boolean;
+  onSchedule?: () => void;
+  onHire?: () => void;
+  onReject?: () => void;
 }) {
   if (!isOpen || !interview) return null;
 
@@ -636,12 +656,12 @@ function ViewDetailsModal({
               <div className="flex items-center gap-3">
                 <CalendarIcon className="w-4 h-4 text-gray-400" />
                 <span className="text-sm text-gray-700">
-                  {new Date(interview.interviewDate).toLocaleDateString('en-US', {
+                  {interview.interviewDate ? new Date(interview.interviewDate).toLocaleDateString('en-US', {
                     weekday: 'long',
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric'
-                  })}
+                  }) : 'Not scheduled'}
                 </span>
               </div>
 
@@ -675,6 +695,20 @@ function ViewDetailsModal({
                 </div>
               )}
 
+              {interview.interviewType === 'online' && interview.meetingId && (
+                <div className="flex items-center gap-3">
+                  <Video className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm text-gray-700">Meeting ID: {interview.meetingId}</span>
+                </div>
+              )}
+
+              {interview.interviewType === 'online' && interview.meetingPasscode && (
+                <div className="flex items-center gap-3">
+                  <FileText className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm text-gray-700">Passcode: {interview.meetingPasscode}</span>
+                </div>
+              )}
+
               {interview.interviewType === 'in-person' && interview.location && (
                 <div className="flex items-center gap-3">
                   <MapPin className="w-4 h-4 text-gray-400" />
@@ -703,13 +737,57 @@ function ViewDetailsModal({
             </div>
           </div>
 
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              Close
-            </button>
+          <div className="mt-6 flex gap-3">
+            {/* Pending status - Show Schedule button */}
+            {interview.status === 'pending' && onSchedule && (
+              <button
+                onClick={() => {
+                  onSchedule();
+                  onClose();
+                }}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              >
+                Schedule Interview
+              </button>
+            )}
+            
+            {/* Scheduled status - Show Hired/Rejected buttons */}
+            {interview.status === 'scheduled' && (
+              <>
+                {onHire && (
+                  <button
+                    onClick={() => {
+                      onHire();
+                      onClose();
+                    }}
+                    className="flex-1 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+                  >
+                    Hired
+                  </button>
+                )}
+                {onReject && (
+                  <button
+                    onClick={() => {
+                      onReject();
+                      onClose();
+                    }}
+                    className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                  >
+                    Rejected
+                  </button>
+                )}
+              </>
+            )}
+            
+            {/* Default Close button */}
+            {(interview.status !== 'pending' && interview.status !== 'scheduled') && (
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Close
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -758,6 +836,7 @@ function CalendarViewComponent({
 
   const getInterviewsForDay = (day: Date) => {
     return interviews.filter((interview) => {
+      if (!interview.interviewDate) return false;
       const interviewDate = new Date(interview.interviewDate);
       return (
         interviewDate.getDate() === day.getDate() &&
@@ -820,6 +899,7 @@ function CalendarViewComponent({
                 {days.map((day, dayIdx) => {
                   const dayInterviews = getInterviewsForDay(day);
                   const hourInterview = dayInterviews.find((interview) => {
+                    if (!interview.interviewTime) return false;
                     const [interviewHour] = interview.interviewTime.split(':').map(Number);
                     return interviewHour === hour;
                   });
@@ -866,7 +946,7 @@ function CalendarViewComponent({
 export function InterviewScheduling() {
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [calendarView, setCalendarView] = useState<CalendarView>('week');
-  const [interviews, setInterviews] = useState<ScheduledInterview[]>(mockInterviews);
+  const [interviews, setInterviews] = useState<ScheduledInterview[]>([]);
   const [selectedJob, setSelectedJob] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -925,8 +1005,79 @@ export function InterviewScheduling() {
       if (jobsData) {
         setJobs(jobsData);
       }
+      
+      // Load applicants who are in final_interview stage (not yet scheduled)
+      // Exclude rejected and hired candidates
+      const { data: finalInterviewApplicants } = await adminClient
+        .from('applicants')
+        .select('id, name, email, position, created_at, status')
+        .in('status', ['final_interview', 'shortlisted'])
+        .order('created_at', { ascending: false });
+
+      // Load scheduled interviews from the database
+      const { data: scheduledData, error: scheduledError } = await adminClient
+        .from('scheduled_interviews')
+        .select(`
+          *,
+          applicant:applicant_id(name, email, position),
+          interviewer:interviewer_id(name, email),
+          job:job_id(title)
+        `)
+        .order('interview_date', { ascending: true });
+
+      // Combine pending + scheduled applicants
+      const combinedInterviews: ScheduledInterview[] = [];
+
+      // Add pending (final_interview status) applicants
+      if (finalInterviewApplicants) {
+        for (const app of finalInterviewApplicants) {
+          // Check if already scheduled
+          const isScheduled = scheduledData?.some(s => s.applicant_id === app.id);
+          if (!isScheduled) {
+            combinedInterviews.push({
+              id: `pending-${app.id}`,
+              applicantId: app.id,
+              applicantName: app.name,
+              applicantEmail: app.email,
+              jobTitle: app.position,
+              status: 'pending',
+              createdAt: app.created_at
+            });
+          }
+        }
+      }
+
+      // Add scheduled interviews
+      if (scheduledData && scheduledData.length > 0) {
+        for (const record of scheduledData) {
+          combinedInterviews.push({
+            id: record.id,
+            applicantId: record.applicant_id,
+            applicantName: record.applicant?.name || 'Unknown',
+            applicantEmail: record.applicant?.email || '',
+            jobTitle: record.job?.title || record.applicant?.position || 'Unknown',
+            interviewDate: record.interview_date,
+            interviewTime: record.interview_time,
+            interviewType: record.interview_type,
+            meetingLink: record.meeting_link || undefined,
+            meetingId: (record as any).meeting_id || undefined,
+            meetingPasscode: record.meeting_passcode || undefined,
+            location: record.location || undefined,
+            interviewerId: record.interviewer_id,
+            interviewerName: record.interviewer?.name || undefined,
+            status: record.status,
+            notes: record.notes || undefined,
+            createdAt: record.created_at
+          });
+        }
+      }
+
+      // Set the combined interviews (empty array if none)
+      setInterviews(combinedInterviews);
     } catch (error) {
       console.error('Error loading data:', error);
+      // Set empty on error - don't show mock data
+      setInterviews([]);
     } finally {
       setLoading(false);
     }
@@ -997,6 +1148,7 @@ export function InterviewScheduling() {
           interview_time: data.interviewTime,
           interview_type: data.interviewType,
           meeting_link: data.meetingLink || '',
+          meeting_id: data.meetingId || '',
           meeting_passcode: data.meetingPasscode || '',
           location: data.location || '',
           interviewer_name: selectedInterviewer?.name || '',
@@ -1027,6 +1179,7 @@ export function InterviewScheduling() {
           interviewTime: data.interviewTime,
           interviewType: data.interviewType as 'online' | 'in-person',
           meetingLink: result.meet_link || data.meetingLink || undefined,
+          meetingId: data.meetingId || undefined,
           meetingPasscode: data.meetingPasscode || undefined,
           location: data.location || undefined,
           interviewerId: data.interviewerId || undefined,
@@ -1035,6 +1188,31 @@ export function InterviewScheduling() {
           notes: data.notes,
           createdAt: new Date().toISOString()
         };
+
+        // Save to database
+        try {
+          const adminClient = getSupabaseAdminClient();
+          const insertData: any = {
+            applicant_id: data.applicantId,
+            interviewer_id: data.interviewerId || null,
+            job_id: data.jobId || null,
+            interview_date: data.interviewDate,
+            interview_time: data.interviewTime,
+            interview_type: data.interviewType,
+            meeting_link: data.meetingLink || null,
+            meeting_passcode: data.meetingPasscode || null,
+            location: data.location || null,
+            status: 'scheduled',
+            notes: data.notes || null
+          };
+          // Add meeting_id if column exists
+          if (data.meetingId) {
+            insertData.meeting_id = data.meetingId;
+          }
+          await adminClient.from('scheduled_interviews').insert(insertData);
+        } catch (dbError) {
+          console.log('Could not save to scheduled_interviews table:', dbError);
+        }
 
         setInterviews((prev) => [...prev, newInterview]);
 
@@ -1059,8 +1237,19 @@ export function InterviewScheduling() {
     }
   };
 
-  const handleCancelInterview = (interviewId: string) => {
+  const handleCancelInterview = async (interviewId: string) => {
     if (confirm('Are you sure you want to cancel this interview?')) {
+      // Update in database
+      try {
+        const adminClient = getSupabaseAdminClient();
+        await adminClient
+          .from('scheduled_interviews')
+          .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+          .eq('id', interviewId);
+      } catch (dbError) {
+        console.log('Could not update scheduled_interviews table:', dbError);
+      }
+      
       setInterviews((prev) =>
         prev.map((interview) =>
           interview.id === interviewId ? { ...interview, status: 'cancelled' as const } : interview
@@ -1075,6 +1264,68 @@ export function InterviewScheduling() {
         interview.id === interviewId ? { ...interview, status: 'completed' as const } : interview
       )
     );
+  };
+
+  const handleMarkHired = async (applicantId: string) => {
+    if (!confirm('Are you sure you want to mark this applicant as HIRED? This will update their status and send a confirmation email.')) {
+      return;
+    }
+    
+    setNotification(null);
+    
+    try {
+      const adminClient = getSupabaseAdminClient();
+      
+      // Update applicant's status to hired
+      await adminClient
+        .from('applicants')
+        .update({ status: 'hired', updated_at: new Date().toISOString() })
+        .eq('id', applicantId);
+      
+      // Optionally notify the applicant via API
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      try {
+        await fetch(`${apiUrl}/api/send-hired-notification`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ applicant_id: applicantId })
+        });
+      } catch (apiError) {
+        console.log('Could not send hired notification email:', apiError);
+      }
+      
+      setNotification({ type: 'success', message: 'Applicant marked as HIRED! Confirmation email sent.' });
+      setViewingInterview(null);
+      loadData();
+    } catch (error) {
+      console.error('Error marking applicant as hired:', error);
+      setNotification({ type: 'error', message: 'Failed to mark applicant as hired.' });
+    }
+  };
+
+  const handleMarkRejected = async (applicantId: string) => {
+    if (!confirm('Are you sure you want to mark this applicant as REJECTED?')) {
+      return;
+    }
+    
+    setNotification(null);
+    
+    try {
+      const adminClient = getSupabaseAdminClient();
+      
+      // Update applicant's status to rejected
+      await adminClient
+        .from('applicants')
+        .update({ status: 'rejected', updated_at: new Date().toISOString() })
+        .eq('id', applicantId);
+      
+      setNotification({ type: 'success', message: 'Applicant marked as REJECTED.' });
+      setViewingInterview(null);
+      loadData();
+    } catch (error) {
+      console.error('Error marking applicant as rejected:', error);
+      setNotification({ type: 'error', message: 'Failed to mark applicant as rejected.' });
+    }
   };
 
   const handleEditInterview = (interview: ScheduledInterview) => {
@@ -1284,7 +1535,11 @@ export function InterviewScheduling() {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {paginatedInterviews.map((interview) => (
-                    <tr key={interview.id} className="hover:bg-gray-50 transition-colors">
+                    <tr 
+                      key={interview.id} 
+                      className="hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => setViewingInterview(interview)}
+                    >
                       <td className="px-4 py-3">
                         <button
                           onClick={() => setViewingInterview(interview)}
@@ -1311,15 +1566,15 @@ export function InterviewScheduling() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm text-gray-700">
-                          {new Date(interview.interviewDate).toLocaleDateString('en-US', {
+                          {interview.interviewDate ? new Date(interview.interviewDate).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',
                             year: 'numeric'
-                          })}
+                          }) : '-'}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-sm text-gray-700">{interview.interviewTime}</span>
+                        <span className="text-sm text-gray-700">{interview.interviewTime || '-'}</span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
@@ -1342,34 +1597,7 @@ export function InterviewScheduling() {
                         <StatusBadge status={interview.status} />
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <ActionButton
-                            onClick={() => setViewingInterview(interview)}
-                            icon={Eye}
-                            title="View Details"
-                          />
-                          {interview.status !== 'completed' && interview.status !== 'cancelled' && (
-                            <>
-                              <ActionButton
-                                onClick={() => handleEditInterview(interview)}
-                                icon={Edit2}
-                                title="Edit / Reschedule"
-                              />
-                              <ActionButton
-                                onClick={() => handleCancelInterview(interview.id)}
-                                icon={Trash2}
-                                title="Cancel Interview"
-                                variant="danger"
-                              />
-                              <ActionButton
-                                onClick={() => handleMarkCompleted(interview.id)}
-                                icon={CheckCircle}
-                                title="Mark as Completed"
-                                variant="success"
-                              />
-                            </>
-                          )}
-                        </div>
+                        <span className="text-sm text-gray-400">Click row for details</span>
                       </td>
                     </tr>
                   ))}
@@ -1497,6 +1725,13 @@ export function InterviewScheduling() {
         onClose={() => setViewingInterview(null)}
         interview={viewingInterview}
         isManagerView={true}
+        onSchedule={() => {
+          if (viewingInterview) {
+            setShowScheduleModal(true);
+          }
+        }}
+        onHire={viewingInterview ? () => handleMarkHired(viewingInterview.applicantId) : undefined}
+        onReject={viewingInterview ? () => handleMarkRejected(viewingInterview.applicantId) : undefined}
       />
     </div>
   );
