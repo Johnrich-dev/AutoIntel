@@ -141,28 +141,37 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
           if (scoringResponse.ok) {
             const scoringResult = await scoringResponse.json();
             
-            // Update the assessment with scoring results
-            await client
-              .from('work_style_assessments')
-              .update({
-                semantic_score: scoringResult.overall_alignment_score,
-                dimension_scores: scoringResult.dimension_scores,
-                department: scoringResult.matched_role_family,
-                strong_areas: scoringResult.strong_areas,
-                moderate_areas: scoringResult.moderate_areas,
-                development_areas: scoringResult.development_areas,
-                essay_insights: scoringResult.essay_insights,
-                scoring_method: scoringResult.scoring_method,
-                scored_at: new Date().toISOString(),
-              })
-              .eq('id', assessmentId);
+            if (scoringResult.status === 'success') {
+              // Update the assessment with scoring results
+              await client
+                .from('work_style_assessments')
+                .update({
+                  semantic_score: scoringResult.overall_alignment_score,
+                  dimension_scores: scoringResult.dimension_scores,
+                  role_family: scoringResult.matched_role_family,
+                  strong_areas: scoringResult.strong_areas,
+                  moderate_areas: scoringResult.moderate_areas,
+                  development_areas: scoringResult.development_areas,
+                  essay_insights: scoringResult.essay_insights,
+                  scoring_method: scoringResult.scoring_method,
+                  scored_at: new Date().toISOString(),
+                  status: 'completed',
+                })
+                .eq('id', assessmentId);
 
-            console.log('Scoring completed:', scoringResult);
+              console.log('Scoring completed:', scoringResult);
+            } else {
+              console.error('Scoring API returned error:', scoringResult.error);
+              alert('Your assessment was submitted, but scoring failed. Please contact support.');
+            }
           } else {
-            console.error('Scoring API error:', await scoringResponse.text());
+            const errorText = await scoringResponse.text();
+            console.error('Scoring API error:', errorText);
+            alert('Your assessment was submitted, but scoring failed. Please contact support.');
           }
         } catch (scoringError) {
           console.error('Error calling scoring API:', scoringError);
+          alert('Your assessment was submitted, but scoring failed. Please contact support.');
           // Continue even if scoring fails - the raw answers are saved
         }
       }
