@@ -658,7 +658,7 @@ export function NeedsReviewDetailPanel({
                   <h3 className="font-semibold text-gray-900">Education</h3>
                 </div>
                 <div className="p-5 space-y-4">
-                  {parsedResume.education.map((edu, idx) => (
+                  {parsedResume.education.map((edu: any, idx: number) => (
                     <div key={idx} className="flex items-start gap-4">
                       <div className="w-2 h-2 rounded-full bg-emerald-400 mt-2 flex-shrink-0" />
                       <div>
@@ -729,7 +729,7 @@ export function NeedsReviewDetailPanel({
                   <h3 className="font-semibold text-gray-900">Work Experience</h3>
                 </div>
                 <div className="p-5 space-y-5">
-                  {parsedResume.experience.map((exp, idx) => (
+                  {parsedResume.experience.map((exp: any, idx: number) => (
                     <div key={idx} className="flex items-start gap-4">
                       <div className="w-2 h-2 rounded-full bg-violet-400 mt-2 flex-shrink-0" />
                       <div className="flex-1">
@@ -758,11 +758,11 @@ export function NeedsReviewDetailPanel({
                   <h3 className="font-semibold text-gray-900">Projects</h3>
                 </div>
                 <div className="p-5 space-y-4">
-                  {parsedResume.projects.map((project, idx) => (
-                    <div key={idx} className="flex items-start gap-4">
-                      <div className="w-2 h-2 rounded-full bg-purple-400 mt-2 flex-shrink-0" />
-                      <div>
-                        <p className="font-medium text-gray-900">{(project as any).name || (project as any).title || 'Untitled Project'}</p>
+                  {parsedResume.projects.map((project: any, idx: number) => (
+                      <div key={idx} className="flex items-start gap-4">
+                        <div className="w-2 h-2 rounded-full bg-purple-400 mt-2 flex-shrink-0" />
+                        <div>
+                          <p className="font-medium text-gray-900">{(project as any).name || (project as any).title || 'Untitled Project'}</p>
                         {(project as any).details && (
                           <p className="text-sm text-gray-600 mt-1 leading-relaxed">
                             {typeof (project as any).details === 'string' 
@@ -789,7 +789,7 @@ export function NeedsReviewDetailPanel({
                   <h3 className="font-semibold text-gray-900">Certifications & Training</h3>
                 </div>
                 <div className="p-5 space-y-3">
-                  {parsedResume.trainings.map((training, idx) => (
+                  {parsedResume.trainings.map((training: string | any, idx: number) => (
                     <div key={idx} className="flex items-center gap-3">
                       <Check className="w-4 h-4 text-amber-500 flex-shrink-0" />
                       <p className="text-sm text-gray-700 font-medium">

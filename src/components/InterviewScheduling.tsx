@@ -264,7 +264,9 @@ function InterviewModal({
   applicants,
   jobs,
   hrManagers,
-  isScheduling = false
+  isScheduling = false,
+  formData,
+  setFormData
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -274,20 +276,9 @@ function InterviewModal({
   jobs: JobPosting[];
   hrManagers?: HRManager[];
   isScheduling?: boolean;
+  formData: InterviewFormData;
+  setFormData: (data: InterviewFormData) => void;
 }) {
-  const [formData, setFormData] = useState<InterviewFormData>({
-    applicantId: '',
-    jobId: '',
-    interviewDate: '',
-    interviewTime: '',
-    interviewType: '' as '' | 'online' | 'in-person',
-    meetingLink: '',
-    meetingId: '',
-    meetingPasscode: '',
-    location: '',
-    interviewerId: '',
-    notes: ''
-  });
 
   useEffect(() => {
     if (interview) {
@@ -304,22 +295,8 @@ function InterviewModal({
         interviewerId: interview.interviewerId || '',
         notes: interview.notes || ''
       });
-    } else {
-      setFormData({
-        applicantId: '',
-        jobId: '',
-        interviewDate: '',
-        interviewTime: '',
-        interviewType: '' as '' | 'online' | 'in-person',
-        meetingLink: '',
-        meetingId: '',
-        meetingPasscode: '',
-        location: '',
-        interviewerId: '',
-        notes: ''
-      });
     }
-  }, [interview, isOpen]);
+  }, [interview]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -962,6 +939,19 @@ export function InterviewScheduling() {
   const [loading, setLoading] = useState(true);
   const [isScheduling, setIsScheduling] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [formData, setFormData] = useState<InterviewFormData>({
+    applicantId: '',
+    jobId: '',
+    interviewDate: '',
+    interviewTime: '',
+    interviewType: '' as '' | 'online' | 'in-person',
+    meetingLink: '',
+    meetingId: '',
+    meetingPasscode: '',
+    location: '',
+    interviewerId: '',
+    notes: ''
+  });
 
   const itemsPerPage = 5;
 
@@ -969,52 +959,73 @@ export function InterviewScheduling() {
     loadData();
   }, []);
 
+  // Pre-fill modal when applicants are loaded and URL has param
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const applicantId = urlParams.get('applicant');
+    if (applicantId && applicants.length > 0 && jobs.length > 0) {
+      const applicant = applicants.find(a => a.id === applicantId);
+      if (applicant) {
+        // Pre-fill form data
+        const selectedJob = jobs.find(j => j.title === applicant.position);
+        setFormData({
+          applicantId: applicant.id,
+          jobId: selectedJob?.id || '',
+          interviewDate: '',
+          interviewTime: '',
+          interviewType: '' as '' | 'online' | 'in-person',
+          meetingLink: '',
+          meetingId: '',
+          meetingPasscode: '',
+          location: '',
+          interviewerId: '',
+          notes: ''
+        });
+        setShowScheduleModal(true);
+        // Clean up URL
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }
+  }, [applicants, jobs]);
+
   const loadData = async () => {
     try {
       setLoading(true);
       const adminClient = getSupabaseAdminClient();
-      
+
       // Load applicants for the dropdown
       const { data: applicantsData } = await adminClient
         .from('applicants')
         .select('*')
         .order('created_at', { ascending: false });
-      
+
       if (applicantsData) {
         setApplicants(applicantsData);
       }
-      
+
       // Load HR managers for the interviewer dropdown
       const { data: hrManagersData } = await adminClient
         .from('hr_managers')
         .select('*')
         .eq('is_active', true)
         .order('name', { ascending: true });
-      
+
       if (hrManagersData) {
         setHRManagers(hrManagersData);
       }
-      
+
       // Load job postings for the filter dropdown
       const { data: jobsData } = await adminClient
         .from('job_postings')
         .select('*')
         .eq('is_active', true)
         .order('title', { ascending: true });
-      
+
       if (jobsData) {
         setJobs(jobsData);
       }
-      
-      // Load applicants who are in final_interview stage (not yet scheduled)
-      // Exclude rejected and hired candidates
-      const { data: finalInterviewApplicants } = await adminClient
-        .from('applicants')
-        .select('id, name, email, position, created_at, status')
-        .in('status', ['final_interview', 'shortlisted'])
-        .order('created_at', { ascending: false });
 
-      // Load scheduled interviews from the database
+      // Load scheduled interviews from the database only
       const { data: scheduledData, error: scheduledError } = await adminClient
         .from('scheduled_interviews')
         .select(`
@@ -1025,29 +1036,9 @@ export function InterviewScheduling() {
         `)
         .order('interview_date', { ascending: true });
 
-      // Combine pending + scheduled applicants
+      // Only add scheduled interviews
       const combinedInterviews: ScheduledInterview[] = [];
 
-      // Add pending (final_interview status) applicants
-      if (finalInterviewApplicants) {
-        for (const app of finalInterviewApplicants) {
-          // Check if already scheduled
-          const isScheduled = scheduledData?.some(s => s.applicant_id === app.id);
-          if (!isScheduled) {
-            combinedInterviews.push({
-              id: `pending-${app.id}`,
-              applicantId: app.id,
-              applicantName: app.name,
-              applicantEmail: app.email,
-              jobTitle: app.position,
-              status: 'pending',
-              createdAt: app.created_at
-            });
-          }
-        }
-      }
-
-      // Add scheduled interviews
       if (scheduledData && scheduledData.length > 0) {
         for (const record of scheduledData) {
           combinedInterviews.push({
@@ -1072,7 +1063,7 @@ export function InterviewScheduling() {
         }
       }
 
-      // Set the combined interviews (empty array if none)
+      // Set the interviews
       setInterviews(combinedInterviews);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -1484,7 +1475,17 @@ export function InterviewScheduling() {
       {viewMode === 'table' ? (
         /* Table View */
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          {filteredInterviews.length === 0 ? (
+          {loading ? (
+            /* Loading State */
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              <svg className="animate-spin h-12 w-12 text-blue-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <h3 className="text-lg font-medium text-gray-900 mb-1">Loading interviews...</h3>
+              <p className="text-sm text-gray-500">Fetching scheduled interviews and candidates</p>
+            </div>
+          ) : filteredInterviews.length === 0 ? (
             /* Empty State */
             <div className="flex flex-col items-center justify-center py-16 px-4">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
@@ -1710,6 +1711,19 @@ export function InterviewScheduling() {
         onClose={() => {
           setShowScheduleModal(false);
           setEditingInterview(null);
+          setFormData({
+            applicantId: '',
+            jobId: '',
+            interviewDate: '',
+            interviewTime: '',
+            interviewType: '' as '' | 'online' | 'in-person',
+            meetingLink: '',
+            meetingId: '',
+            meetingPasscode: '',
+            location: '',
+            interviewerId: '',
+            notes: ''
+          });
         }}
         onSave={handleScheduleInterview}
         interview={editingInterview}
@@ -1717,6 +1731,8 @@ export function InterviewScheduling() {
         jobs={mockJobs}
         hrManagers={hrManagers}
         isScheduling={isScheduling}
+        formData={formData}
+        setFormData={setFormData}
       />
 
       {/* View Details Modal */}

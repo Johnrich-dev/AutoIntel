@@ -1565,29 +1565,53 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
     }
   };
 
-  const handleStatusChange = useCallback((id: string, newStatus: string) => {
-    setApplicants((prev) =>
-      prev.map((a) => {
-        if (a.id !== id) return a;
-        
-        // When moving to Final Interview, set recommendation to 'pending' if not already explicitly set
-        if (newStatus === 'final_interview' && !a.explicitRecommendation) {
-          return { ...a, status: newStatus, explicitRecommendation: 'pending' as const };
-        }
-        
-        return { ...a, status: newStatus };
-      })
-    );
-    
-    // Update selected candidate as well if it's the same one
-    if (selectedCandidate?.id === id) {
-      setSelectedCandidate((prev) => {
-        if (!prev) return null;
-        if (newStatus === 'final_interview' && !prev.explicitRecommendation) {
-          return { ...prev, status: newStatus, explicitRecommendation: 'pending' as const };
-        }
-        return { ...prev, status: newStatus };
-      });
+  const handleStatusChange = useCallback(async (id: string, newStatus: string) => {
+    try {
+      // Update backend first
+      const { error } = await supabase
+        .from('applicants')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error updating applicant status:', error);
+        return;
+      }
+
+      // Update local state
+      setApplicants((prev) =>
+        prev.map((a) => {
+          if (a.id !== id) return a;
+
+          // When moving to Final Interview, set recommendation to 'pending' if not already explicitly set
+          if (newStatus === 'final_interview' && !a.explicitRecommendation) {
+            return { ...a, status: newStatus, explicitRecommendation: 'pending' as const };
+          }
+
+          return { ...a, status: newStatus };
+        })
+      );
+
+      // Update selected candidate as well if it's the same one
+      if (selectedCandidate?.id === id) {
+        setSelectedCandidate((prev) => {
+          if (!prev) return null;
+          if (newStatus === 'final_interview' && !prev.explicitRecommendation) {
+            return { ...prev, status: newStatus, explicitRecommendation: 'pending' as const };
+          }
+          return { ...prev, status: newStatus };
+        });
+      }
+
+      // If moving to final interview, redirect to scheduling page
+      if (newStatus === 'final_interview') {
+        // Import navigate here or use a different approach
+        // For now, we'll use window.location as a simple redirect
+        // In a real app, you'd use React Router's useNavigate
+        window.location.href = '/interview-scheduling?applicant=' + id;
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
     }
   }, [selectedCandidate]);
 
