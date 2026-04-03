@@ -1352,9 +1352,10 @@ function ExportModal({ isOpen, onClose, onExport, candidateCount }: ExportModalP
 
 interface ShortlistedCandidatesProps {
   applicants?: ApplicantWithDetails[];
+  onNavigateToInterview?: (applicantId: string) => void;
 }
 
-export function ShortlistedCandidates({ applicants: externalApplicants }: ShortlistedCandidatesProps) {
+export function ShortlistedCandidates({ applicants: externalApplicants, onNavigateToInterview }: ShortlistedCandidatesProps) {
   // State
   const [applicants, setApplicants] = useState<ApplicantWithDetails[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1603,17 +1604,14 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
         });
       }
 
-      // If moving to final interview, redirect to scheduling page
-      if (newStatus === 'final_interview') {
-        // Import navigate here or use a different approach
-        // For now, we'll use window.location as a simple redirect
-        // In a real app, you'd use React Router's useNavigate
-        window.location.href = '/interview-scheduling?applicant=' + id;
+      // If moving to final interview, navigate via callback (no page reload)
+      if (newStatus === 'final_interview' && onNavigateToInterview) {
+        onNavigateToInterview(id);
       }
     } catch (error) {
       console.error('Error updating status:', error);
     }
-  }, [selectedCandidate]);
+  }, [selectedCandidate, onNavigateToInterview]);
 
   const handleRecommendationChange = useCallback((id: string, recommendation: 'highly_recommended' | 'recommended' | 'needs_review' | 'pending') => {
     setApplicants((prev) =>

@@ -52,7 +52,7 @@ interface ScheduledInterview {
 }
 
 interface JobPosting {
-  id: string;
+  job_id: string;
   title: string;
   department?: string;
 }
@@ -284,7 +284,7 @@ function InterviewModal({
     if (interview) {
       setFormData({
         applicantId: interview.applicantId,
-        jobId: mockJobs.find(j => j.title === interview.jobTitle)?.id || '',
+        jobId: mockJobs.find(j => j.title === interview.jobTitle)?.job_id || '',
         interviewDate: interview.interviewDate || '',
         interviewTime: interview.interviewTime || '',
         interviewType: (interview.interviewType || '') as '' | 'online' | 'in-person',
@@ -342,7 +342,7 @@ function InterviewModal({
                     if (selectedApp?.position) {
                       // Try to find matching job in the jobs list
                       const matchingJob = jobs.find(j => j.title === selectedApp.position);
-                      jobIdValue = matchingJob?.id || selectedApp.position;
+                      jobIdValue = matchingJob?.job_id || selectedApp.position;
                     }
                     
                     return { 
@@ -920,7 +920,7 @@ function CalendarViewComponent({
 // Main Interview Scheduling Component
 // ============================================================================
 
-export function InterviewScheduling() {
+export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsumed }: { preSelectedApplicantId?: string | null; onPreSelectedConsumed?: () => void }) {
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [calendarView, setCalendarView] = useState<CalendarView>('week');
   const [interviews, setInterviews] = useState<ScheduledInterview[]>([]);
@@ -959,18 +959,15 @@ export function InterviewScheduling() {
     loadData();
   }, []);
 
-  // Pre-fill modal when applicants are loaded and URL has param
+  // Pre-fill modal when applicants are loaded and a preSelectedApplicantId prop is provided
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const applicantId = urlParams.get('applicant');
-    if (applicantId && applicants.length > 0 && jobs.length > 0) {
-      const applicant = applicants.find(a => a.id === applicantId);
+    if (preSelectedApplicantId && applicants.length > 0) {
+      const applicant = applicants.find(a => a.id === preSelectedApplicantId);
       if (applicant) {
-        // Pre-fill form data
-        const selectedJob = jobs.find(j => j.title === applicant.position);
+        const matchedJob = jobs.find(j => j.title === applicant.position);
         setFormData({
           applicantId: applicant.id,
-          jobId: selectedJob?.id || '',
+          jobId: matchedJob?.job_id || '',
           interviewDate: '',
           interviewTime: '',
           interviewType: '' as '' | 'online' | 'in-person',
@@ -982,11 +979,10 @@ export function InterviewScheduling() {
           notes: ''
         });
         setShowScheduleModal(true);
-        // Clean up URL
-        window.history.replaceState(null, '', window.location.pathname);
+        onPreSelectedConsumed?.();
       }
     }
-  }, [applicants, jobs]);
+  }, [preSelectedApplicantId, applicants, jobs]);
 
   const loadData = async () => {
     try {
@@ -1113,7 +1109,7 @@ export function InterviewScheduling() {
 
   const handleScheduleInterview = async (data: InterviewFormData) => {
     const selectedApplicant = applicants.find((a) => a.id === data.applicantId);
-    const selectedJobPosting = jobs.find((j) => j.id === data.jobId);
+    const selectedJobPosting = jobs.find((j) => j.job_id === data.jobId);
     const selectedInterviewer = hrManagers.find((i) => i.id === data.interviewerId);
 
     // Get job title from applicant position directly (more reliable)
@@ -1384,7 +1380,7 @@ export function InterviewScheduling() {
               >
                 <option value="all">All Jobs</option>
                 {jobs.map((job) => (
-                  <option key={job.id} value={job.title}>
+                  <option key={job.job_id} value={job.title}>
                     {job.title}
                   </option>
                 ))}
