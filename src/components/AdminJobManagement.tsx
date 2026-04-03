@@ -40,6 +40,7 @@ export function AdminJobManagement() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSource, setFilterSource] = useState<'all' | 'admin' | 'dataset'>('all');
+  const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('active');
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   
@@ -87,7 +88,12 @@ export function AdminJobManagement() {
   const filteredJobs = jobs.filter((job) => {
     // Source filter
     if (filterSource !== 'all' && job.source !== filterSource) return false;
-    
+
+    // Department filter
+    if (filterDepartment !== 'all') {
+      if ((job.department ?? '') !== filterDepartment) return false;
+    }
+
     // Active filter
     if (filterActive === 'active' && !job.is_active) return false;
     if (filterActive === 'inactive' && job.is_active) return false;
@@ -541,6 +547,18 @@ export function AdminJobManagement() {
                 <option value="all">All Sources</option>
                 <option value="admin">Admin Created</option>
                 <option value="dataset">Dataset Imported</option>
+              </select>
+
+              {/* Department Filter */}
+              <select
+                value={filterDepartment}
+                onChange={(e) => setFilterDepartment(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Departments</option>
+                {Array.from(new Set(jobs.map(j => j.department).filter(Boolean))).sort().map(dept => (
+                  <option key={dept} value={dept!}>{dept}</option>
+                ))}
               </select>
 
               {/* Active Filter */}
