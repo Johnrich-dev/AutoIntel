@@ -193,7 +193,7 @@ export function NeedsReviewDetailPanel({
           .from('applicants')
           .select('hr_notes')
           .eq('id', applicant.id)
-          .single();
+          .maybeSingle();
         if (data?.hr_notes) setHrNotes(data.hr_notes);
       } catch {
         // silently ignore — notes are optional
@@ -210,7 +210,7 @@ export function NeedsReviewDetailPanel({
           .eq('applicant_id', applicant.id)
           .order('score_id', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
         if (data) {
           // If sub-scores are zero, try to recover from match_explain JSON
           let scores = {
@@ -313,7 +313,7 @@ export function NeedsReviewDetailPanel({
     }
 
     const video = document.createElement('video');
-    video.src = videoData.video_url;
+    video.src = `${videoData.video_url}#t=0.001`;
     video.muted = true;
     video.preload = 'metadata';
     video.crossOrigin = 'anonymous';
@@ -1136,7 +1136,7 @@ export function NeedsReviewDetailPanel({
                 ) : videoData?.video_url ? (
                   <div className="space-y-4">
                     <video
-                      src={videoData.video_url}
+                      src={`${videoData.video_url}#t=0.001`}
                       controls
                       className="w-full rounded-lg bg-black"
                       preload="metadata"
