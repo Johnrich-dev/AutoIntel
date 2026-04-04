@@ -1353,9 +1353,10 @@ function ExportModal({ isOpen, onClose, onExport, candidateCount }: ExportModalP
 interface ShortlistedCandidatesProps {
   applicants?: ApplicantWithDetails[];
   onNavigateToInterview?: (applicantId: string) => void;
+  onApplicantStatusChanged?: () => void;
 }
 
-export function ShortlistedCandidates({ applicants: externalApplicants, onNavigateToInterview }: ShortlistedCandidatesProps) {
+export function ShortlistedCandidates({ applicants: externalApplicants, onNavigateToInterview, onApplicantStatusChanged }: ShortlistedCandidatesProps) {
   // State
   const [applicants, setApplicants] = useState<ApplicantWithDetails[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1604,6 +1605,9 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
         });
       }
 
+      // Notify parent so it can reload its applicants list (prevents stale prop reset)
+      onApplicantStatusChanged?.();
+
       // If moving to final interview, navigate via callback (no page reload)
       if (newStatus === 'final_interview' && onNavigateToInterview) {
         onNavigateToInterview(id);
@@ -1611,7 +1615,7 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
     } catch (error) {
       console.error('Error updating status:', error);
     }
-  }, [selectedCandidate, onNavigateToInterview]);
+  }, [selectedCandidate, onNavigateToInterview, onApplicantStatusChanged]);
 
   const handleRecommendationChange = useCallback((id: string, recommendation: 'highly_recommended' | 'recommended' | 'needs_review' | 'pending') => {
     setApplicants((prev) =>

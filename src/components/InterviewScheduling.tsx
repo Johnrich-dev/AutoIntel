@@ -39,13 +39,19 @@ interface ScheduledInterview {
   jobTitle: string;
   interviewDate?: string;
   interviewTime?: string;
-  interviewType?: 'online' | 'in-person';
+  interviewType?: 'online' | 'in-person' | 'hybrid';
   meetingLink?: string;
   meetingId?: string;
   meetingPasscode?: string;
   location?: string;
   interviewerId?: string;
   interviewerName?: string;
+  interviewerEmail?: string;
+  additionalAttendees?: string[];
+  durationMinutes?: number;
+  timeZone?: string;
+  applicantInstructions?: string;
+  internalNotes?: string;
   status: 'pending' | 'scheduled' | 'completed' | 'cancelled';
   notes?: string;
   createdAt: string;
@@ -70,120 +76,23 @@ interface InterviewFormData {
   jobId: string;
   interviewDate: string;
   interviewTime: string;
-  interviewType: '' | 'online' | 'in-person';
+  interviewType: '' | 'online' | 'in-person' | 'hybrid';
+  durationMinutes: number;
+  timeZone: string;
   meetingLink: string;
   meetingId: string;
   meetingPasscode: string;
   location: string;
   interviewerId: string;
+  additionalAttendees: string; // comma-separated emails
+  applicantInstructions: string;
+  internalNotes: string;
   notes: string;
 }
 
 type ViewMode = 'table' | 'calendar';
 type CalendarView = 'day' | 'week';
 type StatusFilter = 'all' | 'scheduled' | 'completed' | 'cancelled';
-
-// ============================================================================
-// Mock Data for Demo
-// ============================================================================
-
-const mockInterviews: ScheduledInterview[] = [
-  {
-    id: '1',
-    applicantId: 'app1',
-    applicantName: 'Sarah Johnson',
-    applicantEmail: 'sarah.johnson@email.com',
-    jobTitle: 'Senior Frontend Developer',
-    interviewDate: '2026-03-25',
-    interviewTime: '10:00',
-    interviewType: 'online',
-    meetingLink: 'https://meet.google.com/abc-defg-hij',
-    interviewerId: 'int1',
-    interviewerName: 'Michael Chen',
-    status: 'scheduled',
-    notes: 'Technical interview for React position',
-    createdAt: '2026-03-20T10:00:00Z'
-  },
-  {
-    id: '2',
-    applicantId: 'app2',
-    applicantName: 'James Wilson',
-    applicantEmail: 'james.wilson@email.com',
-    jobTitle: 'Product Manager',
-    interviewDate: '2026-03-26',
-    interviewTime: '14:00',
-    interviewType: 'in-person',
-    location: 'Conference Room A, Floor 3',
-    interviewerId: 'int2',
-    interviewerName: 'Emily Rodriguez',
-    status: 'scheduled',
-    notes: 'First round interview',
-    createdAt: '2026-03-21T09:00:00Z'
-  },
-  {
-    id: '3',
-    applicantId: 'app3',
-    applicantName: 'Lisa Anderson',
-    applicantEmail: 'lisa.anderson@email.com',
-    jobTitle: 'UX Designer',
-    interviewDate: '2026-03-22',
-    interviewTime: '11:00',
-    interviewType: 'online',
-    meetingLink: 'https://meet.google.com/xyz-uvwx-rst',
-    interviewerId: 'int1',
-    interviewerName: 'Michael Chen',
-    status: 'completed',
-    notes: 'Portfolio review completed',
-    createdAt: '2026-03-18T14:00:00Z'
-  },
-  {
-    id: '4',
-    applicantId: 'app4',
-    applicantName: 'Robert Martinez',
-    applicantEmail: 'robert.martinez@email.com',
-    jobTitle: 'Backend Developer',
-    interviewDate: '2026-03-24',
-    interviewTime: '09:00',
-    interviewType: 'online',
-    meetingLink: 'https://zoom.us/j/123456789',
-    interviewerId: 'int3',
-    interviewerName: 'David Kim',
-    status: 'cancelled',
-    notes: 'Candidate requested reschedule',
-    createdAt: '2026-03-19T11:00:00Z'
-  },
-  {
-    id: '5',
-    applicantId: 'app5',
-    applicantName: 'Jennifer Lee',
-    applicantEmail: 'jennifer.lee@email.com',
-    jobTitle: 'Senior Frontend Developer',
-    interviewDate: '2026-03-27',
-    interviewTime: '15:00',
-    interviewType: 'in-person',
-    location: 'Meeting Room B, Floor 2',
-    interviewerId: 'int2',
-    interviewerName: 'Emily Rodriguez',
-    status: 'scheduled',
-    notes: 'Final round interview',
-    createdAt: '2026-03-22T16:00:00Z'
-  }
-];
-
-const mockJobs: JobPosting[] = [
-  { id: 'job1', title: 'Senior Frontend Developer', department: 'Engineering' },
-  { id: 'job2', title: 'Product Manager', department: 'Product' },
-  { id: 'job3', title: 'UX Designer', department: 'Design' },
-  { id: 'job4', title: 'Backend Developer', department: 'Engineering' },
-  { id: 'job5', title: 'Data Analyst', department: 'Analytics' }
-];
-
-const mockInterviewers = [
-  { id: 'int1', name: 'Michael Chen', email: 'michael.chen@company.com' },
-  { id: 'int2', name: 'Emily Rodriguez', email: 'emily.rodriguez@company.com' },
-  { id: 'int3', name: 'David Kim', email: 'david.kim@company.com' },
-  { id: 'int4', name: 'Jessica Taylor', email: 'jessica.taylor@company.com' }
-];
 
 // ============================================================================
 // Status Badge Component
@@ -253,7 +162,7 @@ function ActionButton({
 }
 
 // ============================================================================
-// Interview Modal Component
+// Interview Modal Component — Full scheduling form
 // ============================================================================
 
 function InterviewModal({
@@ -279,113 +188,114 @@ function InterviewModal({
   formData: InterviewFormData;
   setFormData: (data: InterviewFormData) => void;
 }) {
+  const [attendeesError, setAttendeesError] = useState('');
 
   useEffect(() => {
     if (interview) {
       setFormData({
         applicantId: interview.applicantId,
-        jobId: mockJobs.find(j => j.title === interview.jobTitle)?.job_id || '',
+        jobId: jobs.find(j => j.title === interview.jobTitle)?.job_id || '',
         interviewDate: interview.interviewDate || '',
         interviewTime: interview.interviewTime || '',
-        interviewType: (interview.interviewType || '') as '' | 'online' | 'in-person',
+        interviewType: (interview.interviewType || '') as '' | 'online' | 'in-person' | 'hybrid',
+        durationMinutes: interview.durationMinutes || 60,
+        timeZone: interview.timeZone || 'Asia/Manila',
         meetingLink: interview.meetingLink || '',
         meetingId: interview.meetingId || '',
-        meetingPasscode: '',
+        meetingPasscode: interview.meetingPasscode || '',
         location: interview.location || '',
         interviewerId: interview.interviewerId || '',
+        additionalAttendees: (interview.additionalAttendees || []).join(', '),
+        applicantInstructions: interview.applicantInstructions || '',
+        internalNotes: interview.internalNotes || '',
         notes: interview.notes || ''
       });
     }
   }, [interview]);
 
+  const validateEmails = (raw: string): string[] | null => {
+    if (!raw.trim()) return [];
+    const emails = raw.split(',').map(e => e.trim()).filter(Boolean);
+    const invalid = emails.filter(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+    if (invalid.length > 0) return null;
+    return emails;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setAttendeesError('');
+    if (formData.additionalAttendees.trim()) {
+      const parsed = validateEmails(formData.additionalAttendees);
+      if (parsed === null) {
+        setAttendeesError('One or more email addresses are invalid. Use comma-separated emails.');
+        return;
+      }
+    }
     onSave(formData);
     onClose();
   };
+
+  const needsMeetingLink = formData.interviewType === 'online' || formData.interviewType === 'hybrid';
+  const needsLocation = formData.interviewType === 'in-person' || formData.interviewType === 'hybrid';
+  const selectedApp = applicants.find(a => a.id === formData.applicantId);
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-full items-center justify-center p-4">
+      <div className="flex min-h-full items-start justify-center p-4 pt-8">
         <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={onClose} />
-        <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+        <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">
-              {interview ? 'Reschedule Interview' : 'Schedule Interview'}
-            </h2>
-            <button
-              onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-            >
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                {interview ? 'Reschedule Interview' : 'Schedule Interview'}
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">A calendar invite will be sent to all participants.</p>
+            </div>
+            <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Applicant Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Applicant Name <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.applicantId}
-                onChange={(e) => {
-                  const selectedId = e.target.value;
-                  setFormData(prev => {
-                    // Find the selected applicant
-                    const selectedApp = applicants.find(a => a.id === selectedId);
-                    
-                    // Auto-fill job based on selected applicant's position
-                    let jobIdValue = prev.jobId;
-                    if (selectedApp?.position) {
-                      // Try to find matching job in the jobs list
-                      const matchingJob = jobs.find(j => j.title === selectedApp.position);
-                      jobIdValue = matchingJob?.job_id || selectedApp.position;
-                    }
-                    
-                    return { 
-                      ...prev, 
-                      applicantId: selectedId,
-                      jobId: jobIdValue
-                    };
-                  });
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                <option value="">Select Applicant</option>
-                {applicants.length > 0 ? (
-                  applicants.map((app) => (
-                    <option key={app.id} value={app.id}>
-                      {app.name} - {app.position}
-                    </option>
-                  ))
-                ) : (
-                  <option value="app1">Sarah Johnson - Senior Frontend Developer</option>
-                )}
-              </select>
+          <form onSubmit={handleSubmit} className="space-y-5">
+
+            {/* Applicant & Job */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Applicant Name <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.applicantId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const app = applicants.find(a => a.id === id);
+                    const matchedJob = jobs.find(j => j.title === app?.position);
+                    setFormData({ ...formData, applicantId: id, jobId: matchedJob?.job_id || '' });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  required
+                >
+                  <option value="">Select Applicant</option>
+                  {applicants.map(app => (
+                    <option key={app.id} value={app.id}>{app.name} — {app.position}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Job Applied</label>
+                <input
+                  type="text"
+                  value={selectedApp?.position || ''}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 text-sm"
+                  placeholder="Auto-filled from applicant"
+                />
+              </div>
             </div>
 
-            {/* Job Selection - Auto-filled based on applicant */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Job Applied <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={(() => {
-                  const selectedApp = applicants.find(a => a.id === formData.applicantId);
-                  return selectedApp?.position || '';
-                })()}
-                readOnly
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-                placeholder="Select an applicant to auto-fill"
-              />
-            </div>
-
-            {/* Date and Time */}
+            {/* Date / Time / Duration / Timezone */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -394,95 +304,131 @@ function InterviewModal({
                 <input
                   type="date"
                   value={formData.interviewDate}
-                  onChange={(e) => setFormData({ ...formData, interviewDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  onChange={e => setFormData({ ...formData, interviewDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                   required
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Time <span className="text-red-500">*</span>
+                  Interview Time <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="time"
                   value={formData.interviewTime}
-                  onChange={(e) => setFormData({ ...formData, interviewTime: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  onChange={e => setFormData({ ...formData, interviewTime: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                   required
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Duration <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.durationMinutes}
+                  onChange={e => setFormData({ ...formData, durationMinutes: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  required
+                >
+                  <option value={30}>30 minutes</option>
+                  <option value={45}>45 minutes</option>
+                  <option value={60}>60 minutes</option>
+                  <option value={90}>90 minutes</option>
+                  <option value={120}>120 minutes</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Time Zone <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.timeZone}
+                  onChange={e => setFormData({ ...formData, timeZone: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  required
+                >
+                  <option value="Asia/Manila">Asia/Manila (PHT, UTC+8)</option>
+                  <option value="Asia/Singapore">Asia/Singapore (SGT, UTC+8)</option>
+                  <option value="Asia/Tokyo">Asia/Tokyo (JST, UTC+9)</option>
+                  <option value="UTC">UTC</option>
+                  <option value="America/New_York">America/New_York (EST/EDT)</option>
+                  <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
+                  <option value="Europe/London">Europe/London (GMT/BST)</option>
+                </select>
               </div>
             </div>
 
             {/* Interview Type */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Interview Type <span className="text-red-500">*</span>
               </label>
-              <select
-                value={formData.interviewType}
-                onChange={(e) => {
-                  const newType = e.target.value as 'online' | 'in-person';
-                  setFormData({ 
-                    ...formData, 
-                    interviewType: newType,
-                    // Clear meeting link when switching type
-                    meetingLink: '',
-                    meetingId: '',
-                    meetingPasscode: '',
-                    // Clear location when switching to online
-                    location: newType === 'online' ? '' : formData.location
-                  });
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                <option value="">Select Type</option>
-                <option value="online">Online</option>
-                <option value="in-person">In-person</option>
-              </select>
+              <div className="grid grid-cols-3 gap-2">
+                {(['online', 'in-person', 'hybrid'] as const).map(type => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, interviewType: type })}
+                    className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      formData.interviewType === type
+                        ? 'bg-blue-600 border-blue-600 text-white'
+                        : 'border-gray-300 text-gray-700 hover:border-blue-400'
+                    }`}
+                  >
+                    {type === 'online' ? '🎥 Online' : type === 'in-person' ? '📍 In-Person' : '🔀 Hybrid'}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Meeting Link or Location */}
-            {formData.interviewType === 'online' || formData.interviewType === '' ? (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Meeting Link
-                </label>
-                <input
-                  type="url"
-                  value={formData.meetingLink}
-                  onChange={(e) => setFormData({ ...formData, meetingLink: e.target.value })}
-                  placeholder={formData.interviewType === 'online' ? "Paste Teams meeting link here" : "Select Online type first"}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <div className="grid grid-cols-2 gap-4 mt-2">
+            {/* Meeting Details */}
+            {needsMeetingLink && (
+              <div className="space-y-3 p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Meeting Details</p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Meeting Link <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={formData.meetingLink}
+                    onChange={e => setFormData({ ...formData, meetingLink: e.target.value })}
+                    placeholder="https://teams.microsoft.com/l/meetup-join/..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    required={needsMeetingLink}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Meeting ID
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Meeting ID <span className="text-gray-400 font-normal">(optional)</span></label>
                     <input
                       type="text"
                       value={formData.meetingId}
-                      onChange={(e) => setFormData({ ...formData, meetingId: e.target.value })}
-                      placeholder="e.g., abcdefgh"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      onChange={e => setFormData({ ...formData, meetingId: e.target.value })}
+                      placeholder="e.g. 123 456 789"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Meeting Passcode
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Passcode <span className="text-gray-400 font-normal">(optional)</span></label>
                     <input
                       type="text"
                       value={formData.meetingPasscode}
-                      onChange={(e) => setFormData({ ...formData, meetingPasscode: e.target.value })}
-                      placeholder="e.g., rE9YH7Ca"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      onChange={e => setFormData({ ...formData, meetingPasscode: e.target.value })}
+                      placeholder="e.g. rE9YH7Ca"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     />
                   </div>
                 </div>
               </div>
-            ) : (
+            )}
+
+            {/* Location */}
+            {needsLocation && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Location <span className="text-red-500">*</span>
@@ -490,59 +436,88 @@ function InterviewModal({
                 <input
                   type="text"
                   value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="Conference Room, Floor, Building..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
+                  onChange={e => setFormData({ ...formData, location: e.target.value })}
+                  placeholder="e.g. Conference Room A, 3rd Floor, Main Building"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  required={needsLocation}
                 />
               </div>
             )}
 
-            {/* Interviewer */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Assign Hiring Manager / Interviewer <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.interviewerId}
-                onChange={(e) => setFormData({ ...formData, interviewerId: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                <option value="">Select Interviewer</option>
-                {(hrManagers && hrManagers.length > 0) ? (
-                  hrManagers.map((interviewer) => (
-                    <option key={interviewer.id} value={interviewer.id}>
-                      {interviewer.name}
-                    </option>
-                  ))
+            {/* Interview Panel */}
+            <div className="space-y-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Interview Panel</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Primary Interviewer <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.interviewerId}
+                  onChange={e => setFormData({ ...formData, interviewerId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  required
+                >
+                  <option value="">Select Primary Interviewer</option>
+                  {(hrManagers && hrManagers.length > 0) ? (
+                    hrManagers.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}{m.email ? ` (${m.email})` : ''}</option>
+                    ))
+                  ) : (
+                    <option value="" disabled>No interviewers available</option>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Additional Attendees <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.additionalAttendees}
+                  onChange={e => { setFormData({ ...formData, additionalAttendees: e.target.value }); setAttendeesError(''); }}
+                  placeholder="hr@company.com, panel@company.com"
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${attendeesError ? 'border-red-400' : 'border-gray-300'}`}
+                />
+                {attendeesError ? (
+                  <p className="text-xs text-red-500 mt-1">{attendeesError}</p>
                 ) : (
-                  // Fallback to mock data if hrManagers not available
-                  mockInterviewers.map((interviewer) => (
-                    <option key={interviewer.id} value={interviewer.id}>
-                      {interviewer.name}
-                    </option>
-                  ))
+                  <p className="text-xs text-gray-400 mt-1">Comma-separated emails. All attendees receive a calendar invite.</p>
                 )}
-              </select>
+              </div>
             </div>
 
-            {/* Notes */}
+            {/* Applicant Instructions */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Notes (Optional)
+                Applicant Instructions <span className="text-gray-400 font-normal">(optional)</span>
               </label>
               <textarea
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Add any additional notes..."
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                value={formData.applicantInstructions}
+                onChange={e => setFormData({ ...formData, applicantInstructions: e.target.value })}
+                placeholder="e.g. Please bring a copy of your portfolio. Join 5 minutes early to test your connection."
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm"
               />
+              <p className="text-xs text-gray-400 mt-1">Included in the applicant email and calendar invite description.</p>
+            </div>
+
+            {/* Internal Notes */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Internal Notes <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <textarea
+                value={formData.internalNotes}
+                onChange={e => setFormData({ ...formData, internalNotes: e.target.value })}
+                placeholder="e.g. Focus on system design. Candidate has 5 YOE in backend."
+                rows={2}
+                className="w-full px-3 py-2 border border-amber-200 bg-amber-50 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-amber-400 resize-none text-sm"
+              />
+              <p className="text-xs text-amber-600 mt-1">Only visible to interviewers. Never sent to the applicant.</p>
             </div>
 
             {/* Buttons */}
-            <div className="flex justify-end gap-3 pt-4">
+            <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
               <button
                 type="button"
                 onClick={onClose}
@@ -553,7 +528,7 @@ function InterviewModal({
               <button
                 type="submit"
                 disabled={isScheduling}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isScheduling ? (
                   <>
@@ -564,7 +539,7 @@ function InterviewModal({
                     Scheduling...
                   </>
                 ) : (
-                  interview ? 'Update Interview' : 'Schedule Interview'
+                  interview ? 'Update Interview' : 'Schedule & Send Invites'
                 )}
               </button>
             </div>
@@ -944,12 +919,17 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
     jobId: '',
     interviewDate: '',
     interviewTime: '',
-    interviewType: '' as '' | 'online' | 'in-person',
+    interviewType: '' as '' | 'online' | 'in-person' | 'hybrid',
+    durationMinutes: 60,
+    timeZone: 'Asia/Manila',
     meetingLink: '',
     meetingId: '',
     meetingPasscode: '',
     location: '',
     interviewerId: '',
+    additionalAttendees: '',
+    applicantInstructions: '',
+    internalNotes: '',
     notes: ''
   });
 
@@ -970,12 +950,17 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
           jobId: matchedJob?.job_id || '',
           interviewDate: '',
           interviewTime: '',
-          interviewType: '' as '' | 'online' | 'in-person',
+          interviewType: '' as '' | 'online' | 'in-person' | 'hybrid',
+          durationMinutes: 60,
+          timeZone: 'Asia/Manila',
           meetingLink: '',
           meetingId: '',
           meetingPasscode: '',
           location: '',
           interviewerId: '',
+          additionalAttendees: '',
+          applicantInstructions: '',
+          internalNotes: '',
           notes: ''
         });
         setShowScheduleModal(true);
@@ -1111,22 +1096,21 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
     const selectedApplicant = applicants.find((a) => a.id === data.applicantId);
     const selectedJobPosting = jobs.find((j) => j.job_id === data.jobId);
     const selectedInterviewer = hrManagers.find((i) => i.id === data.interviewerId);
-
-    // Get job title from applicant position directly (more reliable)
     const jobTitle = selectedApplicant?.position || selectedJobPosting?.title || 'Unknown Position';
 
-    // Show loading state
     setIsScheduling(true);
     setNotification(null);
 
+    // Parse additional attendees from comma-separated string
+    const additionalAttendeesArray = data.additionalAttendees
+      ? data.additionalAttendees.split(',').map(e => e.trim()).filter(Boolean)
+      : [];
+
     try {
-      // Call the Flask API to schedule the interview
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
       const response = await fetch(`${apiUrl}/api/schedule-interview`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           applicant_email: selectedApplicant?.email || '',
           applicant_name: selectedApplicant?.name || data.applicantId,
@@ -1134,52 +1118,60 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
           interview_date: data.interviewDate,
           interview_time: data.interviewTime,
           interview_type: data.interviewType,
+          duration_minutes: data.durationMinutes,
+          time_zone: data.timeZone,
           meeting_link: data.meetingLink || '',
           meeting_id: data.meetingId || '',
           meeting_passcode: data.meetingPasscode || '',
           location: data.location || '',
-          interviewer_name: selectedInterviewer?.name || '',
-          interviewer_email: selectedInterviewer?.email || '',
-          interview_notes: data.notes || '',
-          duration_minutes: 60
+          primary_interviewer_name: selectedInterviewer?.name || '',
+          primary_interviewer_email: selectedInterviewer?.email || '',
+          additional_attendees: additionalAttendeesArray,
+          applicant_instructions: data.applicantInstructions || '',
+          internal_notes: data.internalNotes || '',
+          interview_notes: data.notes || ''
         })
       });
 
       const result = await response.json();
 
       if (result.success || result.email_sent) {
-        // Validate interview type
         if (!data.interviewType) {
           setNotification({ type: 'error', message: 'Please select an interview type' });
           setIsScheduling(false);
           return;
         }
 
-        // Build the interview object
         const newInterview: ScheduledInterview = {
           id: result.calendar_event_id || `interview-${Date.now()}`,
           applicantId: data.applicantId,
           applicantName: selectedApplicant?.name || 'Unknown Applicant',
           applicantEmail: selectedApplicant?.email || '',
-          jobTitle: selectedJobPosting?.title || 'Unknown Position',
+          jobTitle,
           interviewDate: data.interviewDate,
           interviewTime: data.interviewTime,
-          interviewType: data.interviewType as 'online' | 'in-person',
+          interviewType: data.interviewType as 'online' | 'in-person' | 'hybrid',
           meetingLink: result.meet_link || data.meetingLink || undefined,
           meetingId: data.meetingId || undefined,
           meetingPasscode: data.meetingPasscode || undefined,
           location: data.location || undefined,
           interviewerId: data.interviewerId || undefined,
           interviewerName: selectedInterviewer?.name,
+          interviewerEmail: selectedInterviewer?.email,
+          additionalAttendees: additionalAttendeesArray,
+          durationMinutes: data.durationMinutes,
+          timeZone: data.timeZone,
+          applicantInstructions: data.applicantInstructions || undefined,
+          internalNotes: data.internalNotes || undefined,
           status: 'scheduled',
           notes: data.notes,
           createdAt: new Date().toISOString()
         };
 
-        // Save to database
+        // Save to database — backward-compatible insert
         try {
           const adminClient = getSupabaseAdminClient();
-          const insertData: any = {
+          const insertData: Record<string, unknown> = {
             applicant_id: data.applicantId,
             interviewer_id: data.interviewerId || null,
             job_id: data.jobId || null,
@@ -1187,15 +1179,21 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
             interview_time: data.interviewTime,
             interview_type: data.interviewType,
             meeting_link: data.meetingLink || null,
+            meeting_id: data.meetingId || null,
             meeting_passcode: data.meetingPasscode || null,
             location: data.location || null,
             status: 'scheduled',
-            notes: data.notes || null
+            notes: data.notes || null,
+            // New columns — safe to include; migration adds them as nullable
+            duration_minutes: data.durationMinutes,
+            time_zone: data.timeZone,
+            primary_interviewer_email: selectedInterviewer?.email || null,
+            // additional_attendees stored as JSONB array
+            additional_attendees: additionalAttendeesArray.length > 0 ? additionalAttendeesArray : null,
+            applicant_instructions: data.applicantInstructions || null,
+            internal_notes: data.internalNotes || null,
+            calendar_event_id: result.calendar_event_id || null
           };
-          // Add meeting_id if column exists
-          if (data.meetingId) {
-            insertData.meeting_id = data.meetingId;
-          }
           await adminClient.from('scheduled_interviews').insert(insertData);
         } catch (dbError) {
           console.log('Could not save to scheduled_interviews table:', dbError);
@@ -1203,14 +1201,13 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
 
         setInterviews((prev) => [...prev, newInterview]);
 
-        // Show success notification
         let message = 'Interview scheduled successfully!';
         if (result.calendar_created && result.email_sent) {
-          message = 'Interview scheduled! Calendar event created and email sent to applicant.';
-        } else if (result.calendar_created) {
-          message = 'Interview scheduled! Calendar event created but email failed.';
+          message = 'Interview scheduled! Calendar event created and invites sent to all participants.';
         } else if (result.email_sent) {
-          message = 'Interview scheduled! Email sent but calendar event creation failed.';
+          message = 'Interview scheduled! Calendar invites sent to all participants.';
+        } else if (result.calendar_created) {
+          message = 'Interview scheduled! Calendar event created but email delivery failed.';
         }
         setNotification({ type: 'success', message });
       } else {
@@ -1712,19 +1709,24 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
             jobId: '',
             interviewDate: '',
             interviewTime: '',
-            interviewType: '' as '' | 'online' | 'in-person',
+            interviewType: '' as '' | 'online' | 'in-person' | 'hybrid',
+            durationMinutes: 60,
+            timeZone: 'Asia/Manila',
             meetingLink: '',
             meetingId: '',
             meetingPasscode: '',
             location: '',
             interviewerId: '',
+            additionalAttendees: '',
+            applicantInstructions: '',
+            internalNotes: '',
             notes: ''
           });
         }}
         onSave={handleScheduleInterview}
         interview={editingInterview}
         applicants={applicants}
-        jobs={mockJobs}
+        jobs={jobs}
         hrManagers={hrManagers}
         isScheduling={isScheduling}
         formData={formData}

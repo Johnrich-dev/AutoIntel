@@ -446,100 +446,120 @@ def get_job_level_presets():
 @app.route('/api/schedule-interview', methods=['POST'])
 def schedule_interview():
     """
-    Schedule an interview, create Google Calendar event, and send email notification to applicant.
-    Schedule an interview, create Google Calendar event, and send email notification to applicant.
-    
-    Request Body:
-    {
-        "applicant_email": "string (required)",
-        "applicant_name": "string (required)",
-        "position": "string (required)",
-        "interview_date": "string - ISO date format (required)",
-        "interview_time": "string - HH:MM format (required)",
-        "interview_type": "string - 'online' or 'in-person' (required)",
-        "meeting_link": "string (optional)",
-        "location": "string (optional for in-person)",
-        "interviewer_name": "string (optional)",
-        "interviewer_email": "string (optional)",
-        "interview_notes": "string (optional)",
-        "duration_minutes": "int (optional, default: 60)"
-    }
-    
-    Response:
-    {
-        "success": true,
-        "message": "Interview scheduled successfully",
-        "calendar_event_id": "string",
-        "calendar_event_link": "string",
-        "meet_link": "string (if online)",
-        "email_sent": true,
-        "status": "success"
-    }
+    Schedule an interview and send calendar-invite emails to all participants.
+
+    Accepts the extended payload with:
+      - primary_interviewer_name / primary_interviewer_email
+      - additional_attendees (array of email strings)
+      - duration_minutes, time_zone
+      - applicant_instructions (shown to applicant)
+      - internal_notes (shown only to interviewers, never to applicant)
+      - meeting_id, meeting_passcode
+      - interview_type: 'online' | 'in-person' | 'hybrid'
+
+    ICS invites are generated via ics_calendar_service and attached to
+    both the applicant email and each interviewer/attendee email.
     """
     try:
-        # Import services
+        import email_service
+        import ics_calendar_service
+    except ImportError as e:
+        return jsonify({"error": f"Could not import required service: {e}"}), 500
+
+    try:
+        import calendar_service
+    except ImportError:
+        calendar_service = None
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON data provided"}), 400
+
+    # --- Extract fields ---
+    applicant_email = data.get('applicant_email', '').strip()
+    applicant_name = data.get('applicant_name', '').strip()
+    position = data.get('position', '').strip()
+    interview_date = data.get('interview_date', '').strip()
+    interview_time = data.get('interview_time', '').strip()
+    interview_type = data.get('interview_type', 'online').strip()
+    meeting_link = data.get('meeting_link', '').strip()
+    meeting_id = data.get('meeting_id', '').strip()
+    meeting_passcode = data.get('meeting_passcode', '').strip()
+    location = data.get('location', '').strip()
+    duration_minutes = int(data.get('duration_minutes', 60))
+    time_zone = data.get('time_zone', 'Asia/Manila').strip()
+
+    # Primary interviewer
+    primary_interviewer_name = data.get('primary_interviewer_name') or data.get('interviewer_name', '')
+    primary_interviewer_email = data.get('primary_interviewer_email') or data.get('interviewer_email', '')
+
+    # Additional attendees — array of email strings
+    additional_attendees = data.get('additional_attendees', [])
+    if isinstance(additional_attendees, str):
+        # Fallback: comma-separated string
+        additional_attendees = [e.strip() for e in additional_attendees.split(',') if e.strip()]
+
+    # Applicant-safe instructions (included in applicant email + ICS description)
+    applicant_instructions = data.get('applicant_instructions', '').strip() or None
+
+    # Internal notes — NEVER sent to applicant
+    internal_notes = data.get('internal_notes', '').strip() or None
+
+    # Legacy field fallback
+    interview_notes = data.get('interview_notes', '').strip() or None
+
+    # --- Validate required fields ---
+    if not applicant_email:
+        return jsonify({"error": "applicant_email is required"}), 400
+    if not applicant_name:
+        return jsonify({"error": "applicant_name is required"}), 400
+    if not position:
+        return jsonify({"error": "position is required"}), 400
+    if not interview_date:
+        return jsonify({"error": "interview_date is required"}), 400
+    if not interview_time:
+        return jsonify({"error": "interview_time is required"}), 400
+    if not interview_type:
+        return jsonify({"error": "interview_type is required (online, in-person, hybrid)"}), 400
+
+    # --- Conditional validation ---
+    if interview_type in ("online", "hybrid") and not meeting_link:
+        return jsonify({"success": False, "error": "meeting_link is required for online and hybrid interviews"}), 400
+    if interview_type in ("in-person", "hybrid") and not location:
+        return jsonify({"success": False, "error": "location is required for in-person and hybrid interviews"}), 400
+    if not primary_interviewer_name:
+        return jsonify({"success": False, "error": "primary_interviewer_name is required"}), 400
+
+    # --- Generate ICS invite (shared by all recipients) ---
+    # NOTE: ICS is generated once with all attendees so everyone gets the same event UID.
+    # This ensures Accept/Decline in one client updates the same event.
+    ics_content = ics_calendar_service.create_interview_ics(
+        applicant_name=applicant_name,
+        applicant_email=applicant_email,
+        job_title=position,
+        interview_date=interview_date,
+        interview_time=interview_time,
+        interview_type=interview_type,
+        meeting_link=meeting_link or None,
+        meeting_id=meeting_id or None,
+        meeting_passcode=meeting_passcode or None,
+        location=location or None,
+        interviewer_name=primary_interviewer_name or None,
+        interviewer_email=primary_interviewer_email or None,
+        additional_attendees=additional_attendees if additional_attendees else None,
+        applicant_instructions=applicant_instructions,
+        # internal_notes intentionally NOT passed — ICS is applicant-safe
+        duration_minutes=duration_minutes,
+        time_zone=time_zone
+    )
+
+    calendar_event_id = None
+    calendar_event_link = None
+    calendar_created = False
+
+    # --- Optional: Google Calendar event ---
+    if calendar_service:
         try:
-            import email_service
-        except ImportError as e:
-            return jsonify({"error": f"Could not import email_service: {e}"}), 500
-        
-        try:
-            import calendar_service
-        except ImportError as e:
-            print(f"Warning: Could not import calendar_service: {e}")
-            calendar_service = None
-        
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-        
-        # Extract parameters
-        applicant_email = data.get('applicant_email')
-        applicant_name = data.get('applicant_name')
-        position = data.get('position')
-        interview_date = data.get('interview_date')
-        interview_time = data.get('interview_time')
-        interview_type = data.get('interview_type', 'online')
-        meeting_link = data.get('meeting_link', '')
-        meeting_passcode = data.get('meeting_passcode', '')
-        location = data.get('location', '')
-        interviewer_name = data.get('interviewer_name', '')
-        interviewer_email = data.get('interviewer_email', '')
-        interview_notes = data.get('interview_notes', '')
-        duration_minutes = data.get('duration_minutes', 60)
-        
-        # Validate required fields
-        if not applicant_email:
-            return jsonify({"error": "applicant_email is required"}), 400
-        if not applicant_name:
-            return jsonify({"error": "applicant_name is required"}), 400
-        if not position:
-            return jsonify({"error": "position is required"}), 400
-        if not interview_date:
-            return jsonify({"error": "interview_date is required"}), 400
-        if not interview_time:
-            return jsonify({"error": "interview_time is required"}), 400
-        if not interview_type:
-            return jsonify({"error": "interview_type is required (online or in-person)"}), 400
-        
-        # Track results
-        calendar_event_id = None
-        calendar_event_link = None
-        meet_link = None
-        email_sent = False
-        calendar_created = False
-        
-        # For online interviews, meeting link must be provided manually
-        teams_meeting_link = meeting_link
-        if interview_type == "online" and not meeting_link:
-            return jsonify({
-                "success": False,
-                "error": "Meeting link is required for online interviews. Please paste the Teams meeting link."
-            }), 400
-        
-        # Step 1: Create Google Calendar event with Teams meeting link
-        if calendar_service:
             calendar_result = calendar_service.create_interview_event(
                 applicant_name=applicant_name,
                 applicant_email=applicant_email,
@@ -547,95 +567,116 @@ def schedule_interview():
                 interview_date=interview_date,
                 interview_time=interview_time,
                 interview_type=interview_type,
-                meeting_link=teams_meeting_link if teams_meeting_link else None,
-                location=location if location else None,
-                interviewer_name=interviewer_name if interviewer_name else None,
-                interviewer_email=interviewer_email if interviewer_email else None,
-                notes=interview_notes if interview_notes else None,
-                duration_minutes=duration_minutes
+                meeting_link=meeting_link or None,
+                location=location or None,
+                interviewer_name=primary_interviewer_name or None,
+                interviewer_email=primary_interviewer_email or None,
+                notes=applicant_instructions or None,
+                duration_minutes=duration_minutes,
+                time_zone=time_zone
             )
-            
             if calendar_result.get("success"):
                 calendar_created = True
                 calendar_event_id = calendar_result.get("event_id")
                 calendar_event_link = calendar_result.get("event_link")
-                meet_link = calendar_result.get("meet_link") or teams_meeting_link
-                print(f"Calendar event created: {calendar_event_id}")
-            else:
-                print(f"Calendar creation failed: {calendar_result.get('error')}")
-        else:
-            print("Calendar service not available - skipping calendar event creation")
-        
-        # Step 2: Send email notification to applicant with Teams meeting link
-        email_result = email_service.send_interview_notification(
+        except Exception as cal_err:
+            print(f"Calendar creation failed (non-fatal): {cal_err}")
+
+    # --- Send applicant email with ICS ---
+    # APPLICANT-SAFE: applicant_instructions only, no internal_notes
+    applicant_email_sent = email_service.send_interview_notification(
+        applicant_name=applicant_name,
+        applicant_email=applicant_email,
+        job_title=position,
+        interview_date=interview_date,
+        interview_time=interview_time,
+        interview_type=interview_type,
+        duration_minutes=duration_minutes,
+        time_zone=time_zone,
+        meeting_link=meeting_link or None,
+        meeting_id=meeting_id or None,
+        meeting_passcode=meeting_passcode or None,
+        location=location or None,
+        interviewer_name=primary_interviewer_name or None,
+        applicant_instructions=applicant_instructions,
+        ics_content=ics_content
+    )
+
+    # --- Send primary interviewer email with ICS (includes internal_notes) ---
+    interviewer_email_sent = False
+    if primary_interviewer_email:
+        interviewer_email_sent = email_service.send_interviewer_notification(
+            interviewer_name=primary_interviewer_name or 'Interviewer',
+            interviewer_email=primary_interviewer_email,
             applicant_name=applicant_name,
             applicant_email=applicant_email,
             job_title=position,
             interview_date=interview_date,
             interview_time=interview_time,
             interview_type=interview_type,
-            meeting_link=teams_meeting_link if teams_meeting_link else None,
-            meeting_passcode=meeting_passcode if meeting_passcode else None,
-            location=location if location else None,
-            interviewer_name=interviewer_name if interviewer_name else None,
-            notes=interview_notes if interview_notes else None
+            duration_minutes=duration_minutes,
+            time_zone=time_zone,
+            meeting_link=meeting_link or None,
+            meeting_id=meeting_id or None,
+            meeting_passcode=meeting_passcode or None,
+            location=location or None,
+            internal_notes=internal_notes or interview_notes,
+            ics_content=ics_content
         )
-        
-        email_sent = email_result
-        
-        # Step 3: Send email notification to interviewer/manager (if provided)
-        interviewer_email_sent = False
-        if interviewer_email:
-            interviewer_result = email_service.send_interviewer_notification(
-                interviewer_name=interviewer_name if interviewer_name else 'Interviewer',
-                interviewer_email=interviewer_email,
+
+    # --- Send additional attendees email with ICS (includes internal_notes) ---
+    attendee_results = []
+    for attendee_email in additional_attendees:
+        if attendee_email and attendee_email != applicant_email:
+            sent = email_service.send_interviewer_notification(
+                interviewer_name=attendee_email,  # use email as name if no name available
+                interviewer_email=attendee_email,
                 applicant_name=applicant_name,
                 applicant_email=applicant_email,
                 job_title=position,
                 interview_date=interview_date,
                 interview_time=interview_time,
                 interview_type=interview_type,
-                meeting_link=teams_meeting_link if teams_meeting_link else None,
-                meeting_passcode=meeting_passcode if meeting_passcode else None,
-                location=location if location else None,
-                notes=interview_notes if interview_notes else None
+                duration_minutes=duration_minutes,
+                time_zone=time_zone,
+                meeting_link=meeting_link or None,
+                meeting_id=meeting_id or None,
+                meeting_passcode=meeting_passcode or None,
+                location=location or None,
+                internal_notes=internal_notes or interview_notes,
+                ics_content=ics_content
             )
-            interviewer_email_sent = interviewer_result
-            print(f"Interviewer email sent: {interviewer_email_sent}")
-        else:
-            print("No interviewer email provided - skipping interviewer notification")
-        
-        # Determine success message
-        if calendar_created and email_sent:
-            message = "Interview scheduled, calendar event created, and email sent successfully"
-            status_code = 200
-        elif calendar_created and not email_sent:
-            message = "Calendar event created but email failed to send"
-            status_code = 200
-        elif not calendar_created and email_sent:
-            message = "Email sent but calendar event creation failed"
-            status_code = 200
-        else:
-            message = "Failed to schedule interview - both calendar and email failed"
-            status_code = 500
-        
-        return jsonify({
-            "success": calendar_created or email_sent,
-            "message": message,
-            "calendar_event_id": calendar_event_id,
-            "calendar_event_link": calendar_event_link,
-            "meet_link": meet_link,
-            "email_sent": email_sent,
-            "interviewer_email_sent": interviewer_email_sent,
-            "calendar_created": calendar_created,
-            "status": "success" if (calendar_created or email_sent) else "error"
-        }), status_code
-        
-    except Exception as e:
-        return jsonify({
-            "error": str(e),
-            "status": "error"
-        }), 500
+            attendee_results.append({"email": attendee_email, "sent": sent})
+
+    email_sent = applicant_email_sent
+
+    if calendar_created and email_sent:
+        message = "Interview scheduled, calendar event created, and emails sent"
+    elif email_sent:
+        message = "Interview scheduled and emails sent (calendar event skipped)"
+    elif calendar_created:
+        message = "Calendar event created but email delivery failed"
+    else:
+        message = "Interview scheduling attempted but both calendar and email failed"
+
+    return jsonify({
+        "success": calendar_created or email_sent,
+        "message": message,
+        "calendar_event_id": calendar_event_id,
+        "calendar_event_link": calendar_event_link,
+        "meet_link": meeting_link or None,
+        "email_sent": email_sent,
+        "interviewer_email_sent": interviewer_email_sent,
+        "attendee_results": attendee_results,
+        "calendar_created": calendar_created,
+        "ics_generated": ics_content is not None,
+        "status": "success" if (calendar_created or email_sent) else "error"
+    }), 200 if (calendar_created or email_sent) else 500
+
+
+
+
+
 
 
 @app.route('/api/grant-access', methods=['POST'])

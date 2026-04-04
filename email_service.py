@@ -77,6 +77,71 @@ def send_email(to_email: str, subject: str, body: str) -> bool:
         return False
 
 
+def send_email_with_ics(
+    to_email: str,
+    subject: str,
+    body_text: str,
+    body_html: str,
+    ics_content: str
+) -> bool:
+    """
+    Send an email with an ICS calendar attachment.
+
+    CRITICAL: The MIME structure must be multipart/mixed containing:
+      1. multipart/alternative (text + html)
+      2. text/calendar with METHOD:REQUEST (the ICS invite)
+
+    This structure causes Gmail to show the "Accept / Decline / Maybe" card
+    and Outlook to show the meeting invitation banner.
+
+    Args:
+        to_email: Recipient email address
+        subject: Email subject
+        body_text: Plain text body
+        body_html: HTML body
+        ics_content: ICS file content string (must contain METHOD:REQUEST)
+
+    Returns:
+        True if sent successfully
+    """
+    if not SMTP_HOST or not SMTP_USER:
+        print("Email configuration missing. Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD in .env")
+        return False
+
+    try:
+        # Outer container: multipart/mixed so we can attach the ICS
+        msg = MIMEMultipart('mixed')
+        msg['From'] = f"{FROM_NAME} <{FROM_EMAIL}>"
+        msg['To'] = to_email
+        msg['Subject'] = subject
+
+        # Inner alternative part: text + html
+        alt_part = MIMEMultipart('alternative')
+        alt_part.attach(MIMEText(body_text, 'plain', 'utf-8'))
+        alt_part.attach(MIMEText(body_html, 'html', 'utf-8'))
+        msg.attach(alt_part)
+
+        # ICS calendar part — METHOD:REQUEST triggers invite UI in Gmail/Outlook
+        # Content-Type must be text/calendar with method=REQUEST
+        ics_part = MIMEText(ics_content, 'calendar', 'utf-8')
+        ics_part.add_header('Content-Disposition', 'attachment', filename='interview_invite.ics')
+        ics_part.set_param('method', 'REQUEST')
+        msg.attach(ics_part)
+
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+
+        print(f"Email with ICS sent successfully to {to_email}")
+        return True
+
+    except Exception as e:
+        print(f"Failed to send email with ICS to {to_email}: {str(e)}")
+        return False
+
+
 def send_pass_notification(
     applicant_name: str,
     applicant_email: str,
@@ -724,196 +789,206 @@ def send_interview_notification(
     interview_date: str,
     interview_time: str,
     interview_type: str,
+    duration_minutes: int = 60,
+    time_zone: str = "Asia/Manila",
     meeting_link: Optional[str] = None,
+    meeting_id: Optional[str] = None,
     meeting_passcode: Optional[str] = None,
     location: Optional[str] = None,
     interviewer_name: Optional[str] = None,
-    notes: Optional[str] = None,
+    applicant_instructions: Optional[str] = None,
     ics_content: Optional[str] = None
 ) -> bool:
     """
-    Send interview scheduling notification to the applicant.
-    
+    Send interview invitation to the applicant with an ICS calendar attachment.
+
+    APPLICANT-SAFE: This function must NEVER include internal_notes.
+    Only applicant_instructions are shown to the applicant.
+
+    The ICS attachment (METHOD:REQUEST) causes Gmail/Outlook to render
+    an Accept/Decline card so the applicant can confirm attendance.
+
     Args:
         applicant_name: Full name of the applicant
-        applicant_email: Email address of the applicant
+        applicant_email: Applicant's email address
         job_title: Position being interviewed for
-        interview_date: Interview date (YYYY-MM-DD)
-        interview_time: Interview time (HH:MM)
-        interview_type: 'online' or 'in-person'
-        meeting_link: URL for online meeting (optional)
-        location: Physical location for in-person interview (optional)
-        interviewer_name: Name of the interviewer (optional)
-        notes: Additional notes about the interview (optional)
-        ics_content: ICS calendar file content (optional, for calendar invite)
-    
+        interview_date: YYYY-MM-DD
+        interview_time: HH:MM (24h)
+        interview_type: 'online', 'in-person', or 'hybrid'
+        duration_minutes: Duration in minutes (default 60)
+        time_zone: Time zone label for display (default Asia/Manila)
+        meeting_link: Teams/Zoom/Meet URL (required for online/hybrid)
+        meeting_id: Meeting ID (optional)
+        meeting_passcode: Meeting passcode (optional)
+        location: Physical address (required for in-person/hybrid)
+        interviewer_name: Primary interviewer name (optional)
+        applicant_instructions: Shown to applicant in email and ICS (optional)
+        ics_content: Pre-generated ICS string; if None, no ICS is attached
+
     Returns:
-        True if sent successfully
+        True if email sent successfully
     """
-    subject = f"Interview Invitation: {job_title}"
-    
-    # Format date and time for display
+    subject = f"Interview Invitation – {job_title}"
+
     try:
         formatted_date = datetime.strptime(interview_date, "%Y-%m-%d").strftime("%A, %B %d, %Y")
-    except:
+    except Exception:
         formatted_date = interview_date
-    
-    # Format time for display
+
     try:
-        time_obj = datetime.strptime(interview_time, "%H:%M")
-        formatted_time = time_obj.strftime("%I:%M %p")
-    except:
+        formatted_time = datetime.strptime(interview_time, "%H:%M").strftime("%I:%M %p")
+    except Exception:
         formatted_time = interview_time
-    
-    # Build interview details section
-    details_rows = f"""
-    <tr>
-        <td style="padding: 8px 0; color: #6b7280; width: 120px;">Position:</td>
-        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{job_title}</td>
-    </tr>
-    <tr>
-        <td style="padding: 8px 0; color: #6b7280;">Date:</td>
-        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{formatted_date}</td>
-    </tr>
-    <tr>
-        <td style="padding: 8px 0; color: #6b7280;">Time:</td>
-        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{formatted_time} (Asia/Manila Time)</td>
-    </tr>
-    <tr>
-        <td style="padding: 8px 0; color: #6b7280;">Format:</td>
-        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{'Video Conference' if interview_type == 'online' else 'In-Person'}</td>
-    </tr>
-    """
-    
+
+    type_label = {"online": "Online / Video Conference", "in-person": "In-Person", "hybrid": "Hybrid"}.get(interview_type, interview_type.title())
+
+    # --- Plain text body ---
+    plain_lines = [
+        f"Dear {applicant_name},",
+        "",
+        f"Your interview for the {job_title} position has been scheduled.",
+        "",
+        "INTERVIEW DETAILS",
+        f"  Position   : {job_title}",
+        f"  Date       : {formatted_date}",
+        f"  Time       : {formatted_time} ({time_zone})",
+        f"  Duration   : {duration_minutes} minutes",
+        f"  Format     : {type_label}",
+    ]
     if interviewer_name:
-        details_rows += f"""
-    <tr>
-        <td style="padding: 8px 0; color: #6b7280;">Interviewer:</td>
-        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{interviewer_name}</td>
-    </tr>
-    """
-    
-    # Build meeting section
-    if interview_type == "online" and meeting_link:
+        plain_lines.append(f"  Interviewer: {interviewer_name}")
+    if meeting_link and interview_type in ("online", "hybrid"):
+        plain_lines += ["", "MEETING DETAILS", f"  Join Link  : {meeting_link}"]
+        if meeting_id:
+            plain_lines.append(f"  Meeting ID : {meeting_id}")
         if meeting_passcode:
-            meeting_section = f"""
-        <div style="background: #1e3a8a; padding: 24px; border-radius: 8px; margin: 24px 0;">
-            <p style="color: white; margin: 0 0 16px 0; font-size: 14px; font-weight: 600;">Microsoft Teams Meeting</p>
-            <a href="{meeting_link}" style="display: inline-block; background: #ffffff; color: #1e3a8a; padding: 14px 32px; text-decoration: none; font-weight: 600; border-radius: 6px; font-size: 15px; margin-bottom: 16px;">Join Meeting</a>
-            <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 6px; margin-top: 16px;">
-                <p style="color: white; margin: 0 0 8px 0; font-size: 13px; font-weight: 600;">Meeting Credentials</p>
-                <p style="color: white; margin: 0; font-size: 12px;">Passcode: {meeting_passcode}</p>
-            </div>
-        </div>
-        """
-        else:
-            meeting_section = f"""
-        <div style="background: #1e3a8a; padding: 24px; border-radius: 8px; margin: 24px 0;">
-            <p style="color: white; margin: 0 0 16px 0; font-size: 14px; font-weight: 600;">Microsoft Teams Meeting</p>
-            <a href="{meeting_link}" style="display: inline-block; background: #ffffff; color: #1e3a8a; padding: 14px 32px; text-decoration: none; font-weight: 600; border-radius: 6px; font-size: 15px;">Join Meeting</a>
-        </div>
-        """
-    elif interview_type == "in-person" and location:
-        meeting_section = f"""
-        <div style="background: #fffbeb; border: 1px solid #fcd34d; padding: 20px; border-radius: 8px; margin: 24px 0;">
-            <p style="margin: 0 0 8px 0; color: #92400e; font-weight: 600;">📍 Interview Location</p>
-            <p style="margin: 0; color: #78350f;">{location}</p>
-        </div>
-        """
-    else:
-        meeting_section = ""
-    
-    # Build notes section (optional)
-    notes_section = ""
-    if notes:
-        notes_section = f"""
-        <div style="background: #f9fafb; border-left: 4px solid #6366f1; padding: 16px 20px; margin: 24px 0;">
-            <p style="margin: 0 0 8px 0; color: #4b5563; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Interviewer Notes</p>
-            <p style="margin: 0; color: #374151; line-height: 1.6;">{notes}</p>
-        </div>
-        """
-    
-    body_html = f"""
-<!DOCTYPE html>
+            plain_lines.append(f"  Passcode   : {meeting_passcode}")
+    if location and interview_type in ("in-person", "hybrid"):
+        plain_lines += ["", f"  Location   : {location}"]
+    if applicant_instructions:
+        plain_lines += ["", "INSTRUCTIONS", applicant_instructions]
+    plain_lines += [
+        "",
+        "A calendar invite is attached to this email. Please accept or decline to confirm your attendance.",
+        "",
+        "Best regards,",
+        "AutoIntel Recruitment Team"
+    ]
+    body_text = "\n".join(plain_lines)
+
+    # --- Meeting section for HTML ---
+    meeting_html = ""
+    if interview_type in ("online", "hybrid") and meeting_link:
+        creds_html = ""
+        if meeting_id or meeting_passcode:
+            rows = ""
+            if meeting_id:
+                rows += f'<tr><td style="padding:4px 0;color:#6b7280;width:110px;">Meeting ID</td><td style="padding:4px 0;color:#111827;">{meeting_id}</td></tr>'
+            if meeting_passcode:
+                rows += f'<tr><td style="padding:4px 0;color:#6b7280;">Passcode</td><td style="padding:4px 0;color:#111827;">{meeting_passcode}</td></tr>'
+            creds_html = f'<table style="width:100%;margin-top:12px;border-top:1px solid #e5e7eb;padding-top:12px;">{rows}</table>'
+        meeting_html = f"""
+        <div style="border:1px solid #e5e7eb;border-radius:6px;padding:20px;margin:20px 0;">
+          <p style="margin:0 0 12px 0;font-size:13px;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:.5px;">Meeting Details</p>
+          <a href="{meeting_link}" style="display:inline-block;background:#1d4ed8;color:#fff;padding:10px 24px;text-decoration:none;font-weight:600;border-radius:5px;font-size:14px;">Join Meeting</a>
+          <p style="margin:10px 0 0 0;font-size:12px;color:#6b7280;word-break:break-all;">{meeting_link}</p>
+          {creds_html}
+        </div>"""
+    if interview_type in ("in-person", "hybrid") and location:
+        meeting_html += f"""
+        <div style="border:1px solid #e5e7eb;border-radius:6px;padding:16px;margin:12px 0;">
+          <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:.5px;">Location</p>
+          <p style="margin:0;color:#374151;">{location}</p>
+        </div>"""
+
+    # --- Instructions section ---
+    instructions_html = ""
+    if applicant_instructions:
+        instructions_html = f"""
+        <div style="border-left:3px solid #2563eb;padding:12px 16px;margin:20px 0;background:#f0f7ff;">
+          <p style="margin:0 0 6px 0;font-size:12px;font-weight:600;color:#1d4ed8;text-transform:uppercase;letter-spacing:.5px;">Instructions</p>
+          <p style="margin:0;color:#374151;font-size:14px;line-height:1.6;">{applicant_instructions}</p>
+        </div>"""
+
+    # --- HTML body ---
+    body_html = f"""<!DOCTYPE html>
 <html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-        <tr>
-            <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
-                    <!-- Header -->
-                    <tr>
-                        <td style="background: #1e3a8a; padding: 32px 40px; text-align: center;">
-                            <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">Interview Invitation</h1>
-                            <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 14px;">{job_title}</p>
-                        </td>
-                    </tr>
-                    
-                    <!-- Content -->
-                    <tr>
-                        <td style="padding: 40px;">
-                            <p style="margin: 0 0 24px 0; color: #374151; font-size: 15px; line-height: 1.6;">
-                                Dear <strong style="color: #111827;">{applicant_name}</strong>,
-                            </p>
-                            <p style="margin: 0 0 32px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
-                                We are pleased to inform you that your interview has been scheduled. Please find the details below and add this event to your calendar.
-                            </p>
-                            
-                            <!-- Interview Details Card -->
-                            <div style="background: #f9fafb; border-radius: 8px; padding: 24px; margin: 0 0 24px 0;">
-                                <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Interview Details</p>
-                                <table width="100%" cellspacing="0" cellpadding="0" border="0">
-                                    {details_rows}
-                                </table>
-                            </div>
-                            
-                            <!-- Meeting / Location -->
-                            {meeting_section}
-                            
-                            <!-- Notes -->
-                            {notes_section}
-                            
-                            <!-- CTA -->
-                            <div style="text-align: center; margin: 32px 0;">
-                                <p style="margin: 0 0 16px 0; color: #6b7280; font-size: 13px;">Please confirm your attendance by replying to this email.</p>
-                            </div>
-                            
-                            <!-- Footer Info -->
-                            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
-                            <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 13px;">
-                                <strong>What to prepare:</strong>
-                            </p>
-                            <ul style="margin: 0 0 24px 0; padding-left: 20px; color: #4b5563; font-size: 14px; line-height: 1.8;">
-                                <li>Bring a copy of your updated resume</li>
-                                <li>Prepare to discuss your relevant experience</li>
-                                <li>Have your questions ready for the interviewer</li>
-                            </ul>
-                            
-                            <p style="margin: 0; color: #374151; font-size: 15px; line-height: 1.6;">
-                                If you need to reschedule or have any questions, please contact us at your earliest convenience.
-                            </p>
-                        </td>
-                    </tr>
-                    
-                    <!-- Footer -->
-                    <tr>
-                        <td style="background: #f9fafb; padding: 24px 40px; text-align: center; border-top: 1px solid #e5e7eb;">
-                            <p style="margin: 0 0 4px 0; color: #111827; font-weight: 600;">AutoIntel Recruitment</p>
-                            <p style="margin: 0; color: #6b7280; font-size: 12px;">This is an automated message. Please do not reply directly to this email.</p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellspacing="0" cellpadding="0" border="0">
+  <tr><td align="center" style="padding:32px 16px;">
+    <table width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+
+      <!-- Header -->
+      <tr><td style="background:#1e3a8a;padding:28px 36px;">
+        <p style="margin:0;color:#fff;font-size:20px;font-weight:600;">Interview Invitation</p>
+        <p style="margin:6px 0 0 0;color:#93c5fd;font-size:13px;">{job_title}</p>
+      </td></tr>
+
+      <!-- Body -->
+      <tr><td style="padding:32px 36px;">
+        <p style="margin:0 0 20px 0;color:#374151;font-size:15px;">Dear <strong>{applicant_name}</strong>,</p>
+        <p style="margin:0 0 24px 0;color:#4b5563;font-size:14px;line-height:1.7;">
+          We are pleased to confirm your interview for the <strong>{job_title}</strong> position. Please review the details below.
+        </p>
+
+        <!-- Details table -->
+        <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:20px;margin-bottom:20px;">
+          <p style="margin:0 0 14px 0;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Interview Details</p>
+          <table width="100%" cellspacing="0" cellpadding="0" border="0">
+            <tr><td style="padding:5px 0;color:#6b7280;width:110px;font-size:14px;">Position</td><td style="padding:5px 0;font-weight:600;color:#111827;font-size:14px;">{job_title}</td></tr>
+            <tr><td style="padding:5px 0;color:#6b7280;font-size:14px;">Date</td><td style="padding:5px 0;font-weight:600;color:#111827;font-size:14px;">{formatted_date}</td></tr>
+            <tr><td style="padding:5px 0;color:#6b7280;font-size:14px;">Time</td><td style="padding:5px 0;font-weight:600;color:#111827;font-size:14px;">{formatted_time} ({time_zone})</td></tr>
+            <tr><td style="padding:5px 0;color:#6b7280;font-size:14px;">Duration</td><td style="padding:5px 0;color:#111827;font-size:14px;">{duration_minutes} minutes</td></tr>
+            <tr><td style="padding:5px 0;color:#6b7280;font-size:14px;">Format</td><td style="padding:5px 0;color:#111827;font-size:14px;">{type_label}</td></tr>
+            {"<tr><td style='padding:5px 0;color:#6b7280;font-size:14px;'>Interviewer</td><td style='padding:5px 0;color:#111827;font-size:14px;'>" + interviewer_name + "</td></tr>" if interviewer_name else ""}
+          </table>
+        </div>
+
+        {meeting_html}
+        {instructions_html}
+
+        <!-- Calendar invite note -->
+        <div style="border:1px solid #e5e7eb;border-radius:6px;padding:14px 16px;margin:20px 0;background:#f9fafb;">
+          <p style="margin:0;font-size:13px;color:#374151;">
+            📅 A calendar invite is attached to this email. Please <strong>accept or decline</strong> the invite to confirm your attendance.
+          </p>
+        </div>
+
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
+        <p style="margin:0 0 8px 0;font-size:13px;font-weight:600;color:#374151;">What to prepare:</p>
+        <ul style="margin:0 0 20px 0;padding-left:18px;color:#4b5563;font-size:14px;line-height:1.8;">
+          <li>Updated copy of your resume</li>
+          <li>Be ready to discuss your relevant experience and projects</li>
+          <li>Prepare questions for the interviewer</li>
+          <li>Join the meeting a few minutes early to test your connection</li>
+        </ul>
+        <p style="margin:0;color:#4b5563;font-size:14px;line-height:1.6;">
+          If you need to reschedule or have any questions, please reply to this email at your earliest convenience.
+        </p>
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td style="background:#f9fafb;padding:20px 36px;border-top:1px solid #e5e7eb;text-align:center;">
+        <p style="margin:0 0 4px 0;font-size:13px;font-weight:600;color:#111827;">AutoIntel Recruitment</p>
+        <p style="margin:0;font-size:12px;color:#9ca3af;">This is an automated message. Please do not reply directly to this email.</p>
+      </td></tr>
+
     </table>
+  </td></tr>
+</table>
 </body>
-</html>
-"""
-    
+</html>"""
+
+    # Send with ICS if available, otherwise plain HTML email
+    if ics_content:
+        return send_email_with_ics(
+            to_email=applicant_email,
+            subject=subject,
+            body_text=body_text,
+            body_html=body_html,
+            ics_content=ics_content
+        )
     return send_email(to_email=applicant_email, subject=subject, body=body_html)
 
 
@@ -926,180 +1001,194 @@ def send_interviewer_notification(
     interview_date: str,
     interview_time: str,
     interview_type: str,
+    duration_minutes: int = 60,
+    time_zone: str = "Asia/Manila",
     meeting_link: Optional[str] = None,
+    meeting_id: Optional[str] = None,
     meeting_passcode: Optional[str] = None,
     location: Optional[str] = None,
-    notes: Optional[str] = None
+    internal_notes: Optional[str] = None,
+    ics_content: Optional[str] = None
 ) -> bool:
     """
-    Send interview scheduling notification to the interviewer/manager.
-    
+    Send panel/interviewer assignment notification with ICS calendar invite.
+
+    INTERNAL: This email may include internal_notes. It must NEVER be sent
+    to the applicant. internal_notes are shown here but not in the applicant email.
+
     Args:
-        interviewer_name: Full name of the interviewer/manager
-        interviewer_email: Email address of the interviewer/manager
-        applicant_name: Full name of the applicant
-        applicant_email: Email address of the applicant
-        job_title: Position being interviewed for
-        interview_date: Interview date (YYYY-MM-DD)
-        interview_time: Interview time (HH:MM)
-        interview_type: 'online' or 'in-person'
-        meeting_link: URL for online meeting (optional)
-        location: Physical location for in-person interview (optional)
-        notes: Additional notes about the interview (optional)
-    
+        interviewer_name: Interviewer's display name
+        interviewer_email: Interviewer's email address
+        applicant_name: Applicant's full name
+        applicant_email: Applicant's email (shown for reference, not emailed)
+        job_title: Position title
+        interview_date: YYYY-MM-DD
+        interview_time: HH:MM (24h)
+        interview_type: 'online', 'in-person', or 'hybrid'
+        duration_minutes: Duration in minutes
+        time_zone: Time zone label for display
+        meeting_link: Meeting URL
+        meeting_id: Meeting ID (optional)
+        meeting_passcode: Meeting passcode (optional)
+        location: Physical location (optional)
+        internal_notes: Internal HR notes — shown only to interviewers
+        ics_content: Pre-generated ICS string; if None, no ICS is attached
+
     Returns:
-        True if sent successfully
+        True if email sent successfully
     """
-    subject = f"Interview Scheduled - {applicant_name} - {job_title}"
-    
-    # Format date and time for display
+    subject = f"Interview Assignment – {applicant_name} for {job_title}"
+
     try:
         formatted_date = datetime.strptime(interview_date, "%Y-%m-%d").strftime("%A, %B %d, %Y")
-    except:
+    except Exception:
         formatted_date = interview_date
-    
-    # Format time for display
+
     try:
-        time_obj = datetime.strptime(interview_time, "%H:%M")
-        formatted_time = time_obj.strftime("%I:%M %p")
-    except:
+        formatted_time = datetime.strptime(interview_time, "%H:%M").strftime("%I:%M %p")
+    except Exception:
         formatted_time = interview_time
-    
-    # Build details rows
-    details_rows = f"""
-    <tr>
-        <td style="padding: 8px 0; color: #6b7280; width: 120px;">Applicant:</td>
-        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{applicant_name}</td>
-    </tr>
-    <tr>
-        <td style="padding: 8px 0; color: #6b7280;">Email:</td>
-        <td style="padding: 8px 0; color: #111827;">{applicant_email}</td>
-    </tr>
-    <tr>
-        <td style="padding: 8px 0; color: #6b7280;">Position:</td>
-        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{job_title}</td>
-    </tr>
-    <tr>
-        <td style="padding: 8px 0; color: #6b7280;">Date:</td>
-        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{formatted_date}</td>
-    </tr>
-    <tr>
-        <td style="padding: 8px 0; color: #6b7280;">Time:</td>
-        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{formatted_time} (Asia/Manila Time)</td>
-    </tr>
-    <tr>
-        <td style="padding: 8px 0; color: #6b7280;">Format:</td>
-        <td style="padding: 8px 0; font-weight: 600; color: #111827;">{'Video Conference' if interview_type == 'online' else 'In-Person'}</td>
-    </tr>
-    """
-    
-    # Build meeting/location section
-    if interview_type == "online" and meeting_link:
+
+    type_label = {"online": "Online / Video Conference", "in-person": "In-Person", "hybrid": "Hybrid"}.get(interview_type, interview_type.title())
+
+    # --- Plain text body ---
+    plain_lines = [
+        f"Dear {interviewer_name},",
+        "",
+        f"You have been assigned to interview {applicant_name} for the {job_title} position.",
+        "",
+        "INTERVIEW DETAILS",
+        f"  Applicant  : {applicant_name} ({applicant_email})",
+        f"  Position   : {job_title}",
+        f"  Date       : {formatted_date}",
+        f"  Time       : {formatted_time} ({time_zone})",
+        f"  Duration   : {duration_minutes} minutes",
+        f"  Format     : {type_label}",
+    ]
+    if meeting_link and interview_type in ("online", "hybrid"):
+        plain_lines += ["", "MEETING DETAILS", f"  Join Link  : {meeting_link}"]
+        if meeting_id:
+            plain_lines.append(f"  Meeting ID : {meeting_id}")
         if meeting_passcode:
-            meeting_section = f"""
-        <div style="background: #1e3a8a; padding: 24px; border-radius: 8px; margin: 24px 0;">
-            <p style="color: white; margin: 0 0 16px 0; font-size: 14px; font-weight: 600;">Microsoft Teams Meeting</p>
-            <a href="{meeting_link}" style="display: inline-block; background: #ffffff; color: #1e3a8a; padding: 14px 32px; text-decoration: none; font-weight: 600; border-radius: 6px; font-size: 15px; margin-bottom: 16px;">Join Meeting</a>
-            <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 6px; margin-top: 16px;">
-                <p style="color: white; margin: 0 0 8px 0; font-size: 13px; font-weight: 600;">Meeting Credentials</p>
-                <p style="color: white; margin: 0; font-size: 12px;">Passcode: {meeting_passcode}</p>
-            </div>
-        </div>
-        """
-        else:
-            meeting_section = f"""
-        <div style="background: #1e3a8a; padding: 24px; border-radius: 8px; margin: 24px 0;">
-            <p style="color: white; margin: 0 0 16px 0; font-size: 14px; font-weight: 600;">Microsoft Teams Meeting</p>
-            <a href="{meeting_link}" style="display: inline-block; background: #ffffff; color: #1e3a8a; padding: 14px 32px; text-decoration: none; font-weight: 600; border-radius: 6px; font-size: 15px;">Join Meeting</a>
-        </div>
-        """
-    elif interview_type == "in-person" and location:
-        meeting_section = f"""
-        <div style="background: #fffbeb; border: 1px solid #fcd34d; padding: 20px; border-radius: 8px; margin: 24px 0;">
-            <p style="margin: 0 0 8px 0; color: #92400e; font-weight: 600;">Interview Location</p>
-            <p style="margin: 0; color: #78350f;">{location}</p>
-        </div>
-        """
-    else:
-        meeting_section = ""
-    
-    # Build notes section
-    notes_section = ""
-    if notes:
-        notes_section = f"""
-        <div style="background: #f9fafb; border-left: 4px solid #1e3a8a; padding: 16px 20px; margin: 24px 0;">
-            <p style="margin: 0 0 8px 0; color: #4b5563; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Interviewer Notes</p>
-            <p style="margin: 0; color: #374151; line-height: 1.6;">{notes}</p>
-        </div>
-        """
-    
-    body_html = f"""
-<!DOCTYPE html>
+            plain_lines.append(f"  Passcode   : {meeting_passcode}")
+    if location and interview_type in ("in-person", "hybrid"):
+        plain_lines += ["", f"  Location   : {location}"]
+    if internal_notes:
+        plain_lines += ["", "INTERNAL NOTES (not shared with applicant)", internal_notes]
+    plain_lines += [
+        "",
+        "A calendar invite is attached. Please accept to confirm your availability.",
+        "",
+        "Best regards,",
+        "AutoIntel Recruitment Team"
+    ]
+    body_text = "\n".join(plain_lines)
+
+    # --- Meeting section ---
+    meeting_html = ""
+    if interview_type in ("online", "hybrid") and meeting_link:
+        creds_html = ""
+        if meeting_id or meeting_passcode:
+            rows = ""
+            if meeting_id:
+                rows += f'<tr><td style="padding:4px 0;color:#6b7280;width:110px;">Meeting ID</td><td style="padding:4px 0;color:#111827;">{meeting_id}</td></tr>'
+            if meeting_passcode:
+                rows += f'<tr><td style="padding:4px 0;color:#6b7280;">Passcode</td><td style="padding:4px 0;color:#111827;">{meeting_passcode}</td></tr>'
+            creds_html = f'<table style="width:100%;margin-top:12px;border-top:1px solid #e5e7eb;padding-top:12px;">{rows}</table>'
+        meeting_html = f"""
+        <div style="border:1px solid #e5e7eb;border-radius:6px;padding:20px;margin:20px 0;">
+          <p style="margin:0 0 12px 0;font-size:13px;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:.5px;">Meeting Details</p>
+          <a href="{meeting_link}" style="display:inline-block;background:#1d4ed8;color:#fff;padding:10px 24px;text-decoration:none;font-weight:600;border-radius:5px;font-size:14px;">Join Meeting</a>
+          <p style="margin:10px 0 0 0;font-size:12px;color:#6b7280;word-break:break-all;">{meeting_link}</p>
+          {creds_html}
+        </div>"""
+    if interview_type in ("in-person", "hybrid") and location:
+        meeting_html += f"""
+        <div style="border:1px solid #e5e7eb;border-radius:6px;padding:16px;margin:12px 0;">
+          <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:.5px;">Location</p>
+          <p style="margin:0;color:#374151;">{location}</p>
+        </div>"""
+
+    # --- Internal notes section (interviewer-only) ---
+    notes_html = ""
+    if internal_notes:
+        notes_html = f"""
+        <div style="border-left:3px solid #f59e0b;padding:12px 16px;margin:20px 0;background:#fffbeb;">
+          <p style="margin:0 0 6px 0;font-size:12px;font-weight:600;color:#92400e;text-transform:uppercase;letter-spacing:.5px;">Internal Notes</p>
+          <p style="margin:0;color:#374151;font-size:14px;line-height:1.6;">{internal_notes}</p>
+        </div>"""
+
+    body_html = f"""<!DOCTYPE html>
 <html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-        <tr>
-            <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
-                    <!-- Header -->
-                    <tr>
-                        <td style="background: #1e3a8a; padding: 32px 40px; text-align: center;">
-                            <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">Interview Assigned</h1>
-                            <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 14px;">{job_title}</p>
-                        </td>
-                    </tr>
-                    
-                    <!-- Content -->
-                    <tr>
-                        <td style="padding: 40px;">
-                            <p style="margin: 0 0 24px 0; color: #374151; font-size: 15px; line-height: 1.6;">
-                                Dear <strong style="color: #111827;">{interviewer_name}</strong>,
-                            </p>
-                            <p style="margin: 0 0 32px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
-                                You have been assigned to conduct an interview. Please find the details below.
-                            </p>
-                            
-                            <!-- Interview Details Card -->
-                            <div style="background: #f9fafb; border-radius: 8px; padding: 24px; margin: 0 0 24px 0;">
-                                <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Interview Details</p>
-                                <table width="100%" cellspacing="0" cellpadding="0" border="0">
-                                    {details_rows}
-                                </table>
-                            </div>
-                            
-                            <!-- Meeting / Location -->
-                            {meeting_section}
-                            
-                            <!-- Notes -->
-                            {notes_section}
-                            
-                            <!-- Footer Info -->
-                            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
-                            <p style="margin: 0; color: #374151; font-size: 15px; line-height: 1.6;">
-                                Please ensure you are available at the scheduled time and prepare accordingly.
-                            </p>
-                        </td>
-                    </tr>
-                    
-                    <!-- Footer -->
-                    <tr>
-                        <td style="background: #f9fafb; padding: 24px 40px; text-align: center; border-top: 1px solid #e5e7eb;">
-                            <p style="margin: 0 0 4px 0; color: #111827; font-weight: 600;">AutoIntel Recruitment</p>
-                            <p style="margin: 0; color: #6b7280; font-size: 12px;">This is an automated message. Please do not reply directly to this email.</p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellspacing="0" cellpadding="0" border="0">
+  <tr><td align="center" style="padding:32px 16px;">
+    <table width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+
+      <!-- Header -->
+      <tr><td style="background:#1e3a8a;padding:28px 36px;">
+        <p style="margin:0;color:#fff;font-size:20px;font-weight:600;">Interview Assignment</p>
+        <p style="margin:6px 0 0 0;color:#93c5fd;font-size:13px;">{job_title}</p>
+      </td></tr>
+
+      <!-- Body -->
+      <tr><td style="padding:32px 36px;">
+        <p style="margin:0 0 20px 0;color:#374151;font-size:15px;">Dear <strong>{interviewer_name}</strong>,</p>
+        <p style="margin:0 0 24px 0;color:#4b5563;font-size:14px;line-height:1.7;">
+          You have been assigned to conduct an interview. Please review the details below and accept the calendar invite to confirm your availability.
+        </p>
+
+        <!-- Applicant + interview details -->
+        <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:20px;margin-bottom:20px;">
+          <p style="margin:0 0 14px 0;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Interview Details</p>
+          <table width="100%" cellspacing="0" cellpadding="0" border="0">
+            <tr><td style="padding:5px 0;color:#6b7280;width:110px;font-size:14px;">Applicant</td><td style="padding:5px 0;font-weight:600;color:#111827;font-size:14px;">{applicant_name}</td></tr>
+            <tr><td style="padding:5px 0;color:#6b7280;font-size:14px;">Email</td><td style="padding:5px 0;color:#374151;font-size:14px;">{applicant_email}</td></tr>
+            <tr><td style="padding:5px 0;color:#6b7280;font-size:14px;">Position</td><td style="padding:5px 0;font-weight:600;color:#111827;font-size:14px;">{job_title}</td></tr>
+            <tr><td style="padding:5px 0;color:#6b7280;font-size:14px;">Date</td><td style="padding:5px 0;font-weight:600;color:#111827;font-size:14px;">{formatted_date}</td></tr>
+            <tr><td style="padding:5px 0;color:#6b7280;font-size:14px;">Time</td><td style="padding:5px 0;font-weight:600;color:#111827;font-size:14px;">{formatted_time} ({time_zone})</td></tr>
+            <tr><td style="padding:5px 0;color:#6b7280;font-size:14px;">Duration</td><td style="padding:5px 0;color:#111827;font-size:14px;">{duration_minutes} minutes</td></tr>
+            <tr><td style="padding:5px 0;color:#6b7280;font-size:14px;">Format</td><td style="padding:5px 0;color:#111827;font-size:14px;">{type_label}</td></tr>
+          </table>
+        </div>
+
+        {meeting_html}
+        {notes_html}
+
+        <!-- Calendar invite note -->
+        <div style="border:1px solid #e5e7eb;border-radius:6px;padding:14px 16px;margin:20px 0;background:#f9fafb;">
+          <p style="margin:0;font-size:13px;color:#374151;">
+            📅 A calendar invite is attached. Please <strong>accept or decline</strong> to confirm your availability.
+          </p>
+        </div>
+
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
+        <p style="margin:0;color:#4b5563;font-size:14px;line-height:1.6;">
+          Please ensure you are available at the scheduled time. If you have any conflicts, contact HR as soon as possible.
+        </p>
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td style="background:#f9fafb;padding:20px 36px;border-top:1px solid #e5e7eb;text-align:center;">
+        <p style="margin:0 0 4px 0;font-size:13px;font-weight:600;color:#111827;">AutoIntel Recruitment</p>
+        <p style="margin:0;font-size:12px;color:#9ca3af;">This is an automated message. Please do not reply directly to this email.</p>
+      </td></tr>
+
     </table>
+  </td></tr>
+</table>
 </body>
-</html>
-"""
-    
+</html>"""
+
+    if ics_content:
+        return send_email_with_ics(
+            to_email=interviewer_email,
+            subject=subject,
+            body_text=body_text,
+            body_html=body_html,
+            ics_content=ics_content
+        )
     return send_email(to_email=interviewer_email, subject=subject, body=body_html)
 
 

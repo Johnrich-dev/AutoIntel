@@ -459,7 +459,7 @@ export function AdminDashboard() {
           {activeMenu === 'interview-scheduling' && <InterviewScheduling preSelectedApplicantId={pendingInterviewApplicantId} onPreSelectedConsumed={() => setPendingInterviewApplicantId(null)} />}
           
           {/* Shortlisted and Final Decisions use ShortlistedCandidates - filter to only shortlisted/verified */}
-          {(activeMenu === 'shortlisted' || activeMenu === 'final-decisions') && <ShortlistedCandidates applicants={applicants.filter(a => a.status === 'shortlisted' || a.status === 'final_interview')} onNavigateToInterview={(applicantId) => { setPendingInterviewApplicantId(applicantId); setActiveMenu('interview-scheduling'); }} />}
+          {(activeMenu === 'shortlisted' || activeMenu === 'final-decisions') && <ShortlistedCandidates applicants={applicants.filter(a => a.status === 'shortlisted' || a.status === 'final_interview')} onNavigateToInterview={(applicantId) => { setPendingInterviewApplicantId(applicantId); setActiveMenu('interview-scheduling'); }} onApplicantStatusChanged={loadApplicants} />}
           
           {/* Analytics & Reports */}
           {activeMenu === 'analytics-reports' && <ReportsDashboard applicants={applicants} />}
