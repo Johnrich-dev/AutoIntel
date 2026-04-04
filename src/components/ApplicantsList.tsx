@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
   ChevronDown, 
-  Eye, 
   FileText, 
   RefreshCw,
   ChevronLeft,
@@ -30,8 +29,6 @@ interface ApplicantWithResume extends Applicant {
   video?: VideoAssessment;
   test?: PersonalityTest | any;
 }
-
-type ApplicationStatus = 'all' | 'pending' | 'processing' | 'parsed' | 'error';
 
 interface StatusConfig {
   label: string;
@@ -79,19 +76,13 @@ function TableSkeleton() {
       {[...Array(5)].map((_, i) => (
         <tr key={i} className="border-b border-gray-100">
           <td className="px-4 py-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gray-200 rounded-lg animate-pulse" />
-              <div className="space-y-2">
-                <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
-                <div className="h-3 w-24 bg-gray-100 rounded animate-pulse" />
-              </div>
-            </div>
+            <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
           </td>
           <td className="px-4 py-5">
-            <div className="h-4 w-28 bg-gray-200 rounded animate-pulse mx-auto" />
+            <div className="h-4 w-28 bg-gray-200 rounded animate-pulse" />
           </td>
           <td className="px-4 py-5">
-            <div className="h-4 w-40 bg-gray-200 rounded animate-pulse mx-auto" />
+            <div className="h-4 w-40 bg-gray-200 rounded animate-pulse" />
           </td>
           <td className="px-4 py-5">
             <div className="h-8 w-24 bg-gray-200 rounded-lg animate-pulse mx-auto" />
@@ -100,13 +91,7 @@ function TableSkeleton() {
             <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse mx-auto" />
           </td>
           <td className="px-4 py-5">
-            <div className="h-4 w-24 bg-gray-200 rounded animate-pulse mx-auto" />
-          </td>
-          <td className="px-4 py-5">
-            <div className="flex items-center justify-center gap-2">
-              <div className="h-8 w-8 bg-gray-200 rounded-lg animate-pulse" />
-              <div className="h-8 w-8 bg-gray-100 rounded-lg animate-pulse" />
-            </div>
+            <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
           </td>
         </tr>
       ))}
@@ -118,7 +103,7 @@ function TableSkeleton() {
 function EmptyState({ selectedJob }: { selectedJob: string | null }) {
   return (
     <tr>
-      <td colSpan={7} className="px-4 py-16 text-center">
+      <td colSpan={6} className="px-4 py-16 text-center">
         <div className="flex flex-col items-center justify-center">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
             <Users className="w-8 h-8 text-gray-400" />
@@ -142,12 +127,12 @@ export function ApplicantsList() {
   const [positions, setPositions] = useState<PositionOption[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ApplicationStatus>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetchingJobs, setIsFetchingJobs] = useState(true);
   const [applicants, setApplicants] = useState<ApplicantWithResume[]>([]);
   const [selectedApplicant, setSelectedApplicant] = useState<ApplicantWithResume | null>(null);
+  const [selectedApplicantIndex, setSelectedApplicantIndex] = useState<number>(-1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   
@@ -167,8 +152,6 @@ export function ApplicantsList() {
           .order('position', { ascending: true });
 
         if (error) throw error;
-        
-        // Count applicants per position
         
         // Count applicants per position
         const positionCounts = (data || []).reduce((acc, applicant) => {
@@ -347,13 +330,8 @@ export function ApplicantsList() {
       );
     }
     
-    // Status filter
-    if (statusFilter !== 'all') {
-      result = result.filter(a => getApplicationStatus(a) === statusFilter);
-    }
-    
     return result;
-  }, [applicants, searchQuery, statusFilter]);
+  }, [applicants, searchQuery]);
 
   // Pagination
   const totalPages = Math.ceil(filteredApplicants.length / itemsPerPage);
@@ -365,38 +343,34 @@ export function ApplicantsList() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, selectedJobId]);
+  }, [searchQuery, selectedJobId]);
 
   // Handlers
-  const handleOpenModal = (applicant: ApplicantWithResume, e?: React.MouseEvent) => {
-    e?.stopPropagation();
+  const handleOpenModal = (applicant: ApplicantWithResume, index: number) => {
     setSelectedApplicant(applicant);
+    setSelectedApplicantIndex(index);
     setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedApplicant(null);
+    setSelectedApplicantIndex(-1);
   };
 
-  // Refresh applicants list from server
-  const refreshApplicants = async () => {
-    await fetchApplicantsList();
+  const handlePrevApplicant = () => {
+    const prevIndex = selectedApplicantIndex - 1;
+    if (prevIndex >= 0) {
+      setSelectedApplicant(filteredApplicants[prevIndex]);
+      setSelectedApplicantIndex(prevIndex);
+    }
   };
 
-  const handleModalStatusChange = async (id: string, newStatus: string) => {
-    try {
-      const adminClient = getSupabaseAdminClient();
-      const { error } = await adminClient
-        .from('applicants')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', id);
-      
-      if (error) throw error;
-      await refreshApplicants();
-    } catch (err) {
-      console.error('Error updating status:', err);
-      alert('Failed to update status. Please try again.');
+  const handleNextApplicant = () => {
+    const nextIndex = selectedApplicantIndex + 1;
+    if (nextIndex < filteredApplicants.length) {
+      setSelectedApplicant(filteredApplicants[nextIndex]);
+      setSelectedApplicantIndex(nextIndex);
     }
   };
 
@@ -471,7 +445,7 @@ export function ApplicantsList() {
             <p className="text-gray-500 mt-1">
               {selectedPosition 
                 ? `${filteredApplicants.length} applicant${filteredApplicants.length !== 1 ? 's' : ''} for ${selectedPosition.position}`
-                : 'Select a job position to view applicants'}
+                : 'New applicants — track resume upload and parse status before AI screening'}
             </p>
           </div>
         </div>
@@ -530,33 +504,7 @@ export function ApplicantsList() {
             </div>
           </div>
 
-          {/* Status Filter Tabs */}
-          {selectedJobId && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <div className="flex flex-wrap gap-2">
-                {(['all', 'pending', 'processing', 'parsed', 'error'] as ApplicationStatus[]).map(status => (
-                  <button
-                    key={status}
-                    onClick={() => setStatusFilter(status)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                      statusFilter === status
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {status === 'all' ? 'All' : STATUS_CONFIGS[status].label}
-                    {status !== 'all' && (
-                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs ${
-                        statusFilter === status ? 'bg-blue-500' : 'bg-gray-200'
-                      }`}>
-                        {applicants.filter(a => getApplicationStatus(a) === status).length}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+
         </div>
 
         {/* Table Card */}
@@ -579,13 +527,10 @@ export function ApplicantsList() {
                     Resume
                   </th>
                   <th className="px-4 py-4 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    Status
+                    Resume Status
                   </th>
                   <th className="px-4 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                     Applied Date
-                  </th>
-                  <th className="px-4 py-4 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    Actions
                   </th>
                 </tr>
               </thead>
@@ -595,25 +540,22 @@ export function ApplicantsList() {
                 ) : (
                   <>
                     {paginatedApplicants.length > 0 ? (
-                      paginatedApplicants.map((applicant) => {
+                      paginatedApplicants.map((applicant, pageIndex) => {
                         const status = getApplicationStatus(applicant);
                         const isError = status === 'error';
+                        const globalIndex = (currentPage - 1) * itemsPerPage + pageIndex;
                         
                         return (
                           <tr 
-                            key={applicant.id} 
-                            className="hover:bg-gray-50/80 transition-colors duration-150 group"
+                            key={applicant.id}
+                            onClick={() => handleOpenModal(applicant, globalIndex)}
+                            className="hover:bg-blue-50/40 transition-colors duration-150 cursor-pointer group"
                           >
                             {/* Name */}
                             <td className="px-4 py-4">
-                              <button
-                                onClick={(e) => handleOpenModal(applicant, e)}
-                                className="text-left hover:opacity-80 transition-opacity"
-                              >
-                                <p className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
-                                  {applicant.name}
-                                </p>
-                              </button>
+                              <p className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                                {applicant.name}
+                              </p>
                             </td>
 
                             {/* Job Applied */}
@@ -649,39 +591,25 @@ export function ApplicantsList() {
                               </button>
                             </td>
 
-                            {/* Status */}
+                            {/* Resume Status */}
                             <td className="px-4 py-4 text-center">
                               {getStatusBadge(status)}
                             </td>
 
                             {/* Applied Date */}
                             <td className="px-4 py-4">
-                              <span className="text-sm text-gray-500">
-                                {formatDate(applicant.created_at)}
-                              </span>
-                            </td>
-
-                            {/* Actions */}
-                            <td className="px-4 py-4">
-                              <div className="flex items-center justify-center gap-1.5">
-                                {/* View Details */}
-                                <button
-                                  onClick={(e) => handleOpenModal(applicant, e)}
-                                  className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                  title="View Details"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </button>
-
-                                {/* Retry Parsing (only for error state) */}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm text-gray-500">
+                                  {formatDate(applicant.created_at)}
+                                </span>
                                 {isError && (
                                   <button
                                     onClick={(e) => handleRetryParsing(applicant, e)}
                                     disabled={retryingId === applicant.id}
-                                    className="p-2 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded-lg transition-all disabled:opacity-50"
+                                    className="p-1.5 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded-lg transition-all disabled:opacity-50"
                                     title="Retry Parsing"
                                   >
-                                    <RefreshCw className={`w-4 h-4 ${retryingId === applicant.id ? 'animate-spin' : ''}`} />
+                                    <RefreshCw className={`w-3.5 h-3.5 ${retryingId === applicant.id ? 'animate-spin' : ''}`} />
                                   </button>
                                 )}
                               </div>
@@ -743,31 +671,10 @@ export function ApplicantsList() {
         applicant={selectedApplicant}
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        onStatusChange={handleModalStatusChange}
-        onAddNote={async (id, note) => {
-          try {
-            const adminClient = getSupabaseAdminClient();
-            const { error } = await adminClient
-              .from('admin_actions')
-              .insert({ applicant_id: id, action_type: 'note_added', notes: note });
-            if (error) throw error;
-          } catch (err) {
-            console.error('Error adding note:', err);
-            alert('Failed to add note. Please try again.');
-          }
-        }}
-        onAddTag={async (id, tag) => {
-          console.log('Tag added:', id, tag);
-          // Tags would need a tags table or column - just log for now
-        }}
-        onRemoveTag={async (id, tag) => {
-          console.log('Tag removed:', id, tag);
-          // Tags would need a tags table or column - just log for now
-        }}
-        onSendEmail={async (id, template) => {
-          console.log('Email sent:', id, template);
-          // Email sending would be implemented here
-        }}
+        onPrev={selectedApplicantIndex > 0 ? handlePrevApplicant : undefined}
+        onNext={selectedApplicantIndex < filteredApplicants.length - 1 ? handleNextApplicant : undefined}
+        currentIndex={selectedApplicantIndex}
+        totalCount={filteredApplicants.length}
       />
     </div>
   );

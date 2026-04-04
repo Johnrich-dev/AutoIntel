@@ -1,68 +1,41 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  X,
-  CheckCircle,
-  XCircle,
-  TrendingUp,
-  Target,
-  Star,
-  Briefcase,
-  Award,
-  Check,
-  AlertCircle,
-  Lightbulb,
+  X, CheckCircle, XCircle, TrendingUp, Star, Briefcase,
+  AlertCircle, ChevronLeft, ChevronRight, FileText, Download, Clock,
+  Video, ClipboardList, Wrench, GraduationCap, Award, User,
 } from 'lucide-react';
 import { Applicant, Resume } from '../lib/supabase';
 
-interface ScreenedApplicant extends Applicant {
+interface ScreenedApplicant extends Omit<Applicant, 'screening_status' | 'screened_at'> {
   resume?: Resume;
   overall_score?: number;
-  skills_score?: number;
-  experience_score?: number;
-  education_score?: number;
-  screening_status?: 'passed' | 'in_review' | 'failed';
-  screening_stage?: 'screened' | 'review' | 'shortlisted';
-  screened_at?: string;
+  requirement_match_score?: number | null;
+  count_score?: number | null;
+  skills_score?: number | null;
+  experience_score?: number | null;
+  education_score?: number | null;
+  projects_score?: number | null;
+  traincert_score?: number | null;
+  achievements_score?: number | null;
+  count_breakdown?: Record<string, { count: number; score: number }> | null;
+  screening_status?: 'passed' | 'in_review' | 'failed' | 'not_scored';
+  screened_at?: string | null;
   matched_skills?: string[];
   missing_skills?: string[];
+  video_submitted?: boolean;
+  work_style_completed?: boolean;
 }
 
-interface StatusConfig {
-  label: string;
-  bg: string;
-  text: string;
-  border: string;
-  icon: React.ElementType;
-}
-
-const STATUS_CONFIGS: Record<string, StatusConfig> = {
-  passed: {
-    label: 'Passed',
-    bg: 'bg-green-50',
-    text: 'text-green-700',
-    border: 'border-green-200',
-    icon: CheckCircle,
-  },
-  in_review: {
-    label: 'In Review',
-    bg: 'bg-yellow-50',
-    text: 'text-yellow-700',
-    border: 'border-yellow-200',
-    icon: AlertCircle,
-  },
-  failed: {
-    label: 'Failed',
-    bg: 'bg-red-50',
-    text: 'text-red-700',
-    border: 'border-red-200',
-    icon: XCircle,
-  },
-};
+const STATUS_CONFIGS = {
+  passed:     { label: 'Passed',     bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200',  icon: CheckCircle },
+  in_review:  { label: 'In Review',  bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', icon: AlertCircle },
+  failed:     { label: 'Failed',     bg: 'bg-red-50',    text: 'text-red-700',    border: 'border-red-200',    icon: XCircle },
+  not_scored: { label: 'Not Scored', bg: 'bg-gray-50',   text: 'text-gray-500',   border: 'border-gray-200',   icon: Clock },
+} as const;
 
 function StatusBadge({ status }: { status: string }) {
-  const config = STATUS_CONFIGS[status] || STATUS_CONFIGS.failed;
+  const config = STATUS_CONFIGS[status as keyof typeof STATUS_CONFIGS] ?? STATUS_CONFIGS.not_scored;
   const Icon = config.icon;
-
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${config.bg} ${config.text} ${config.border}`}>
       <Icon className="w-3.5 h-3.5" />
@@ -71,420 +44,411 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// Helper functions for AI insights
-function getAlternativeRoles(skills: string[]): string[] {
-  const skillLower = skills.map(s => s.toLowerCase());
-  
-  const roleMappings: Record<string, string[]> = {
-    'python': ['Data Scientist', 'ML Engineer', 'Backend Developer'],
-    'sql': ['Data Analyst', 'Business Analyst', 'Database Administrator'],
-    'tableau': ['Data Analyst', 'BI Developer', 'Analytics Manager'],
-    'powerbi': ['BI Analyst', 'Data Analyst', 'Analytics Manager'],
-    'excel': ['Data Analyst', 'Financial Analyst', 'Business Analyst'],
-    'machine learning': ['ML Engineer', 'Data Scientist', 'AI Developer'],
-    'deep learning': ['AI Engineer', 'Data Scientist', 'Research Scientist'],
-    'nlp': ['NLP Engineer', 'AI Developer', 'Computational Linguist'],
-    'aws': ['Cloud Engineer', 'DevOps Engineer', 'Solutions Architect'],
-    'azure': ['Cloud Developer', 'Data Engineer', 'Solutions Architect'],
-    'gcp': ['Cloud Engineer', 'Data Engineer', 'ML Engineer'],
-    'spark': ['Data Engineer', 'Big Data Developer', 'ML Engineer'],
-    'hadoop': ['Big Data Engineer', 'Data Scientist', 'Systems Administrator'],
-    'kafka': ['Data Engineer', 'Backend Developer', 'DevOps Engineer'],
-    'airflow': ['Data Engineer', 'ML Ops Engineer', 'Analytics Engineer'],
-    'docker': ['DevOps Engineer', 'Backend Developer', 'Cloud Engineer'],
-    'kubernetes': ['DevOps Engineer', 'Cloud Engineer', 'Platform Engineer'],
-    'snowflake': ['Data Engineer', 'Analytics Engineer', 'BI Developer'],
-    'postgresql': ['Backend Developer', 'Database Administrator', 'Data Engineer'],
-    'mongodb': ['Backend Developer', 'Full Stack Developer', 'Data Engineer'],
-  };
-
-  const roles = new Set<string>();
-  
-  for (const skill of skillLower) {
-    for (const [key, value] of Object.entries(roleMappings)) {
-      if (skill.includes(key) || key.includes(skill)) {
-        value.forEach(role => roles.add(role));
-      }
-    }
-  }
-
-  const defaultRoles = ['Data Analyst', 'Business Analyst', 'Junior Developer', 'Technical Support'];
-  
-  if (roles.size === 0) {
-    return defaultRoles.slice(0, 3);
-  }
-
-  return Array.from(roles).slice(0, 3);
+function ScoreBar({ score, color }: { score: number; color: string }) {
+  return (
+    <div className="w-full h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
+      <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(Math.max(score, 0), 100)}%` }} />
+    </div>
+  );
 }
 
-  // Get strengths insight based on available scores
-  const getStrengthsInsight = (applicant: ScreenedApplicant): string => {
-    const skills = applicant.skills_score || 0;
-    const experience = applicant.experience_score || 0;
-    const education = applicant.education_score || 0;
-    const overall = applicant.overall_score || 0;
-    
-    // If no scores at all, provide a generic insight
-    if (skills === 0 && experience === 0 && education === 0) {
-      return 'No detailed score data available. The overall screening score is ' + Math.round(overall) + '%.';
-    }
-    
-    // Find highest score
-    const scores = [
-      { name: 'Skills', score: skills },
-      { name: 'Experience', score: experience },
-      { name: 'Education', score: education },
-    ].sort((a, b) => b.score - a.score);
-
-    const topStrength = scores[0];
-    const secondStrength = scores[1];
-
-    if (topStrength.score >= 80) {
-      return `Strong ${topStrength.name.toLowerCase()} foundation (${Math.round(topStrength.score)}%). ${secondStrength.name.toLowerCase()} is also solid at ${Math.round(secondStrength.score)}%. Overall score: ${Math.round(overall)}%.`;
-    } else if (topStrength.score >= 60) {
-      return `Good potential in ${topStrength.name.toLowerCase()} (${Math.round(topStrength.score)}%). Consider developing ${secondStrength.name.toLowerCase()} skills further. Overall score: ${Math.round(overall)}%.`;
-    } else {
-      return `Area for growth across all dimensions. Overall score: ${Math.round(overall)}%. Recommended to focus on foundational skills development.`;
-    }
-  };
+function Toast({ message, type, onDismiss }: { message: string; type: 'success' | 'error'; onDismiss: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 5000);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+  return (
+    <div className={`fixed bottom-6 right-6 z-[60] flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border max-w-sm w-[calc(100vw-3rem)]
+      ${type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+      {type === 'success'
+        ? <CheckCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+        : <XCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />}
+      <p className="text-sm flex-1">{message}</p>
+      <button onClick={onDismiss} className="opacity-60 hover:opacity-100 flex-shrink-0"><X className="w-4 h-4" /></button>
+    </div>
+  );
+}
 
 interface ScreeningDetailModalProps {
   applicant: ScreenedApplicant;
   onClose: () => void;
   onUpdateStatus?: (applicantId: string, newStatus: 'passed' | 'failed') => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  currentIndex?: number;
+  totalCount?: number;
 }
 
 export function ScreeningDetailModal({
-  applicant,
-  onClose,
-  onUpdateStatus,
+  applicant, onClose, onUpdateStatus, onPrev, onNext, currentIndex, totalCount,
 }: ScreeningDetailModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
-  
-  const hasResumeData = applicant.resume?.parsed_data && typeof applicant.resume?.parsed_data === 'object';
-  const parsedData = hasResumeData ? applicant.resume?.parsed_data : null;
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
 
-  // Handle HR decision for in_review applicants
+  useEffect(() => { setShowRejectConfirm(false); }, [applicant.id]);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (showRejectConfirm) return;
+      if (e.key === 'ArrowLeft') onPrev?.();
+      if (e.key === 'ArrowRight') onNext?.();
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onPrev, onNext, onClose, showRejectConfirm]);
+
   const handleDecision = async (decision: 'approved' | 'rejected') => {
-    console.log('handleDecision called with decision:', decision);
-    console.log('Applicant ID:', applicant.id);
-    console.log('Applicant email:', applicant.email);
-    
-    if (!applicant.id || !applicant.email) {
-      console.error('Missing applicant ID or email');
-      return;
-    }
-
+    if (!applicant.id || !applicant.email) return;
+    setShowRejectConfirm(false);
     setIsProcessing(true);
     try {
-      // Prepare request data with safe defaults
-      const requestData = {
-        applicant_id: applicant.id,
-        applicant_email: applicant.email,
-        applicant_name: applicant.name,
-        position: applicant.position,
-        overall_score: applicant.overall_score || 0,
-        skills_score: applicant.skills_score || 0,
-        experience_score: applicant.experience_score || 0,
-        education_score: applicant.education_score || 0,
-        requirement_match_score: applicant.requirement_match_score || null,
-        count_score: applicant.count_score || null,
-        requirement_breakdown: applicant.requirement_breakdown || null,
-        count_breakdown: applicant.count_breakdown || null,
-        weights_used: applicant.weights_used || null,
-      };
-
-      console.log('Request data:', requestData);
-
-      // Call API endpoint
-      const endpoint = decision === 'approved' ? '/api/grant-access' : '/api/reject-applicant';
-      const apiUrl = `http://localhost:5000${endpoint}`;
-      console.log('Calling API:', apiUrl);
-      
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData),
-      });
-
-      console.log('API response status:', response.status);
+      const response = await fetch(
+        `http://localhost:5000${decision === 'approved' ? '/api/grant-access' : '/api/reject-applicant'}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            applicant_id: applicant.id,
+            applicant_email: applicant.email,
+            applicant_name: applicant.name,
+            position: applicant.position,
+            overall_score: applicant.overall_score ?? 0,
+            skills_score: applicant.skills_score ?? 0,
+            experience_score: applicant.experience_score ?? 0,
+            education_score: applicant.education_score ?? 0,
+          }),
+        }
+      );
       const result = await response.json();
-      console.log('API response:', result);
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to process request');
-      }
-
-      // Call the onUpdateStatus callback to update local state
-      const newStatus = decision === 'approved' ? 'passed' : 'failed';
-      if (onUpdateStatus) {
-        onUpdateStatus(applicant.id, newStatus);
-      }
-      
-      const message = decision === 'approved' 
-        ? `Access granted! Email sent to ${applicant.email} with access token.`
-        : `Applicant rejected. Email sent to ${applicant.email}.`;
-      alert(message);
+      if (!response.ok || !result.success) throw new Error(result.error || 'Failed to process request');
+      onUpdateStatus?.(applicant.id, decision === 'approved' ? 'passed' : 'failed');
+      setToast({
+        type: 'success',
+        message: decision === 'approved'
+          ? `Access granted. Email sent to ${applicant.email}.`
+          : `${applicant.name} rejected. Notification email sent.`,
+      });
     } catch (error) {
-      console.error('Error processing decision:', error);
-      alert(`Error processing request: ${error.message}`);
+      setToast({ type: 'error', message: `Error: ${(error as Error).message}` });
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const matchedSkills = applicant.matched_skills || [];
-  const missingSkills = applicant.missing_skills || [];
-  
-  console.log('ScreeningDetailModal - applicant:', applicant.name);
-  console.log('ScreeningDetailModal - matched_skills:', matchedSkills);
-  console.log('ScreeningDetailModal - skills_score:', applicant.skills_score);
+  // ── Derived values ──────────────────────────────────────────────────────────
+  const overallScore          = applicant.overall_score ?? 0;
+  const requirementMatchScore = applicant.requirement_match_score ?? null;
+  const countScore            = applicant.count_score ?? null;
+  const matchedSkills         = applicant.matched_skills ?? [];
+  const missingSkills         = applicant.missing_skills ?? [];
+  const resumeUrl             = applicant.resume?.resume_url ?? null;
+  const assessmentsDone       = (applicant.video_submitted ? 1 : 0) + (applicant.work_style_completed ? 1 : 0);
+
+  const status      = applicant.screening_status ?? 'not_scored';
+  const isPassed    = status === 'passed';
+  const isInReview  = status === 'in_review';
+  const isFailed    = status === 'failed';
+  const isNotScored = status === 'not_scored';
+  const hasScore    = !isNotScored && overallScore > 0;
+
+  // Per-category requirement match — only show categories with real values
+  const reqCategories: { label: string; score: number; Icon: React.ElementType; iconColor: string }[] = [];
+  const pushReq = (label: string, val: number | null | undefined, Icon: React.ElementType, iconColor: string) => {
+    if (val != null && val > 0) reqCategories.push({ label, score: val, Icon, iconColor });
+  };
+  pushReq('Skills',       applicant.skills_score,      Star,          'text-purple-500');
+  pushReq('Experience',   applicant.experience_score,  Briefcase,     'text-blue-500');
+  pushReq('Education',    applicant.education_score,   GraduationCap, 'text-green-500');
+  pushReq('Projects',     applicant.projects_score,    Award,         'text-orange-500');
+  pushReq('Train/Certs',  applicant.traincert_score,   Wrench,        'text-teal-500');
+  pushReq('Achievements', applicant.achievements_score, TrendingUp,   'text-pink-500');
+
+  const scoreColor      = (s: number) => s >= 78 ? 'bg-green-500' : s >= 65 ? 'bg-yellow-400' : 'bg-red-400';
+  const scoreLabel      = (s: number) => s >= 78 ? 'Strong' : s >= 65 ? 'Moderate' : 'Weak';
+  const scoreLabelColor = (s: number) => s >= 78 ? 'text-green-600' : s >= 65 ? 'text-yellow-600' : 'text-red-500';
+
+  const screenedDate = applicant.screened_at
+    ? new Date(applicant.screened_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+    : new Date(applicant.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
-      
-      {/* Side Panel */}
-      <div className="fixed inset-y-0 right-0 z-50 bg-white shadow-2xl w-full max-w-2xl flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Applicant Details</h2>
-            <p className="text-sm text-gray-500 mt-1">{applicant.name} - {applicant.position}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
-        {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)] space-y-6">
-          {/* Overall Score */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <Target className="w-6 h-6 text-blue-600" />
+      <div className="fixed inset-0 sm:inset-y-0 sm:right-0 sm:left-auto z-50 bg-white shadow-2xl w-full sm:max-w-2xl flex flex-col">
+
+        {/* ── Header ── */}
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-100 bg-white flex-shrink-0">
+          <div className="flex items-start justify-between gap-3">
+            {/* Photo + identity */}
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-blue-500 to-indigo-600">
+                {applicant.photo_url
+                  ? <img src={applicant.photo_url} alt={applicant.name} className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center text-white font-semibold text-lg">
+                      {applicant.name?.charAt(0).toUpperCase() ?? <User className="w-5 h-5" />}
+                    </div>
+                }
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-lg font-semibold text-gray-900 truncate">{applicant.name}</h2>
+                  <StatusBadge status={status} />
                 </div>
-                <div>
-                  <p className="text-sm text-blue-600 font-medium">Overall Score</p>
-                  <p className="text-3xl font-bold text-blue-900">{Math.round(applicant.overall_score || 0)}%</p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <span className="text-sm text-gray-500 truncate">{applicant.position || '—'}</span>
+                  <span className="text-gray-300 hidden sm:inline">·</span>
+                  <a href={`mailto:${applicant.email}`} className="text-sm text-indigo-500 hover:underline truncate hidden sm:inline">
+                    {applicant.email}
+                  </a>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-blue-600 font-medium">Status</p>
-                <StatusBadge status={applicant.screening_status || 'failed'} />
-              </div>
             </div>
-          </div>
 
-          {/* Score Breakdown */}
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-gray-500" />
-              Score Breakdown
-            </h3>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                <div className="flex items-center gap-2 mb-2">
-                  <Star className="w-4 h-4 text-purple-500" />
-                  <span className="text-xs font-medium text-gray-500">Skills</span>
-                </div>
-                <p className="text-2xl font-bold text-gray-900">{Math.round(applicant.skills_score || 0)}%</p>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                <div className="flex items-center gap-2 mb-2">
-                  <Briefcase className="w-4 h-4 text-blue-500" />
-                  <span className="text-xs font-medium text-gray-500">Experience</span>
-                </div>
-                <p className="text-2xl font-bold text-gray-900">{Math.round(applicant.experience_score || 0)}%</p>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                <div className="flex items-center gap-2 mb-2">
-                  <Award className="w-4 h-4 text-green-500" />
-                  <span className="text-xs font-medium text-gray-500">Education</span>
-                </div>
-                <p className="text-2xl font-bold text-gray-900">{Math.round(applicant.education_score || 0)}%</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Skills Match */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-              <h4 className="text-sm font-semibold text-green-800 mb-3 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4" />
-                Matched Skills ({matchedSkills.length})
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {matchedSkills.length > 0 ? (
-                  matchedSkills.map((skill, i) => (
-                    <span key={i} className="px-2 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-medium">
-                      {skill}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-green-600">No matched skills data</span>
-                )}
-              </div>
-            </div>
-            <div className="bg-red-50 rounded-xl p-4 border border-red-100">
-              <h4 className="text-sm font-semibold text-red-800 mb-3 flex items-center gap-2">
-                <XCircle className="w-4 h-4" />
-                Missing Skills ({missingSkills.length})
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {missingSkills.length > 0 ? (
-                  missingSkills.map((skill, i) => (
-                    <span key={i} className="px-2 py-1 bg-red-100 text-red-700 rounded-lg text-xs font-medium">
-                      {skill}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-red-600">No missing skills data</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Summary */}
-          {applicant.screening_status === 'passed' && (
-            <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-              <h4 className="text-sm font-semibold text-green-800 mb-2 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4" />
-                Passed Screening
-              </h4>
-              <p className="text-sm text-green-700">
-                This candidate has passed the initial screening with a score of {Math.round(applicant.overall_score || 0)}%. 
-                They have been automatically granted access to complete preliminary assessments (video and work style tests).
-              </p>
-            </div>
-          )}
-
-          {applicant.screening_status === 'in_review' && (
-            <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-100">
-              <h4 className="text-sm font-semibold text-yellow-800 mb-2 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" />
-                Requires Manual Review
-              </h4>
-              <p className="text-sm text-yellow-700">
-                This candidate falls below the qualified threshold ({Math.round(applicant.overall_score || 0)}%) and requires manual HR evaluation. 
-                HR can decide whether to grant access to assessments or not.
-              </p>
-            </div>
-          )}
-
-          {applicant.screening_status === 'failed' && (
-            <div className="bg-red-50 rounded-xl p-4 border border-red-100">
-              <h4 className="text-sm font-semibold text-red-800 mb-2 flex items-center gap-2">
-                <XCircle className="w-4 h-4" />
-                Did Not Pass Screening
-              </h4>
-              <p className="text-sm text-red-700">
-                This candidate scored {Math.round(applicant.overall_score || 0)}% which is below the review threshold. 
-                They do not proceed further in the pipeline.
-              </p>
-            </div>
-          )}
-
-          {/* AI Insights */}
-          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-4 border border-purple-100">
-            <h4 className="text-sm font-semibold text-purple-800 mb-3 flex items-center gap-2">
-              <Lightbulb className="w-4 h-4" />
-              AI Career Insights
-            </h4>
-            <div className="space-y-3">
-              <div className="bg-white/70 rounded-lg p-3">
-                <p className="text-xs font-medium text-purple-700 mb-1">Alternative Roles</p>
-                <p className="text-sm text-gray-700">
-                  {matchedSkills.length > 0 
-                    ? `Based on the applicant's skills profile (${matchedSkills.slice(0, 5).join(', ')}), they could also excel in:`
-                    : 'Based on the applicant\'s experience and background, they could also excel in:'
-                  }
-                </p>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {getAlternativeRoles(matchedSkills).map((role, idx) => (
-                    <span key={idx} className="px-2 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
-                      {role}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="bg-white/70 rounded-lg p-3">
-                <p className="text-xs font-medium text-purple-700 mb-1">Strengths</p>
-                <p className="text-sm text-gray-700">
-                  {getStrengthsInsight(applicant)}
-                </p>
-              </div>
-              {matchedSkills.length > 0 && missingSkills.length > 0 && (
-                <div className="bg-white/70 rounded-lg p-3">
-                  <p className="text-xs font-medium text-purple-700 mb-1">Growth Potential</p>
-                  <p className="text-sm text-gray-700">
-                    With {matchedSkills.length} matched skills, this candidate shows strong alignment with technical requirements. 
-                    Consider upskilling in {missingSkills.slice(0, 2).join(', ')} to unlock more senior opportunities.
-                  </p>
-                </div>
+            {/* Nav + close */}
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {totalCount != null && totalCount > 1 && (
+                <>
+                  <span className="text-xs text-gray-400 mr-1 hidden sm:inline">
+                    {currentIndex != null ? currentIndex + 1 : '—'}/{totalCount}
+                  </span>
+                  <button onClick={onPrev} disabled={!onPrev}
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Previous (←)">
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button onClick={onNext} disabled={!onNext}
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Next (→)">
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                  <div className="w-px h-5 bg-gray-200 mx-1" />
+                </>
               )}
+              <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                <X className="w-5 h-5" />
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center justify-between p-6 border-t border-gray-100 bg-gray-50">
-          <div className="text-sm text-gray-500">
-            Screened on {new Date(applicant.screened_at || applicant.created_at).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
+        {/* ── Content ── */}
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4">
+
+          {/* Score + Resume — side by side */}
+          <div className="flex gap-3">
+            {/* Score card */}
+            <div className="flex-1 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+              <p className="text-xs text-blue-500 font-medium mb-1">AI Screening Score</p>
+              {isNotScored
+                ? <p className="text-2xl font-semibold text-gray-400">Pending</p>
+                : <>
+                    <p className="text-4xl font-bold text-blue-900">{Math.round(overallScore)}%</p>
+                    {requirementMatchScore != null && countScore != null && (
+                      <p className="text-xs text-blue-400 mt-1">
+                        {Math.round(requirementMatchScore)}% match · {Math.round(countScore)}% completeness
+                      </p>
+                    )}
+                  </>
+              }
+            </div>
+
+            {/* Resume + quick info */}
+            <div className="flex flex-col gap-2 justify-between">
+              {resumeUrl ? (
+                <>
+                  <a href={resumeUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all shadow-sm whitespace-nowrap">
+                    <FileText className="w-4 h-4 text-indigo-500 flex-shrink-0" />View Resume
+                  </a>
+                  <a href={resumeUrl} download
+                    className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all shadow-sm whitespace-nowrap">
+                    <Download className="w-4 h-4 text-gray-400 flex-shrink-0" />Download
+                  </a>
+                </>
+              ) : (
+                <span className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm text-gray-400 whitespace-nowrap">
+                  <FileText className="w-4 h-4 flex-shrink-0" />No Resume
+                </span>
+              )}
+              <p className="text-xs text-gray-400 text-right">Screened {screenedDate}</p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            {applicant.screening_status === 'in_review' && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleDecision('rejected')}
-                  disabled={isProcessing}
-                  className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  Reject
+
+          {/* Assessment progress — only for passed / in_review */}
+          {(isPassed || isInReview) && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-900">Assessments</h3>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  assessmentsDone === 2 ? 'bg-green-100 text-green-700' :
+                  assessmentsDone === 1 ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-gray-100 text-gray-500'
+                }`}>{assessmentsDone}/2 Complete</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className={`flex items-center gap-3 p-3 rounded-lg border ${applicant.video_submitted ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                  <Video className={`w-4 h-4 flex-shrink-0 ${applicant.video_submitted ? 'text-green-600' : 'text-gray-400'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-gray-700">Video</p>
+                    <p className={`text-xs ${applicant.video_submitted ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
+                      {applicant.video_submitted ? 'Submitted' : 'Pending'}
+                    </p>
+                  </div>
+                  {applicant.video_submitted && <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />}
+                </div>
+                <div className={`flex items-center gap-3 p-3 rounded-lg border ${applicant.work_style_completed ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                  <ClipboardList className={`w-4 h-4 flex-shrink-0 ${applicant.work_style_completed ? 'text-green-600' : 'text-gray-400'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-gray-700">Work Style</p>
+                    <p className={`text-xs ${applicant.work_style_completed ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
+                      {applicant.work_style_completed ? 'Submitted' : 'Pending'}
+                    </p>
+                  </div>
+                  {applicant.work_style_completed && <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Score breakdown — only when real data exists */}
+          {hasScore && reqCategories.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-gray-400" />
+                  Score Breakdown
+                </h3>
+                {requirementMatchScore != null && countScore != null && (
+                  <span className="text-xs text-gray-400">
+                    {Math.round(requirementMatchScore)}% job match · {Math.round(countScore)}% profile completeness
+                  </span>
+                )}
+              </div>
+              <div className={`grid gap-2 ${reqCategories.length <= 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-3'}`}>
+                {reqCategories.map(({ label, score, Icon, iconColor }) => (
+                  <div key={label} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                    <div className="flex items-center justify-between mb-1 gap-1">
+                      <div className="flex items-center gap-1">
+                        <Icon className={`w-3.5 h-3.5 ${iconColor} flex-shrink-0`} />
+                        <span className="text-xs font-medium text-gray-500 truncate">{label}</span>
+                      </div>
+                      <span className={`text-xs font-semibold flex-shrink-0 ${scoreLabelColor(score)}`}>{scoreLabel(score)}</span>
+                    </div>
+                    <p className="text-xl font-bold text-gray-900">{Math.round(score)}%</p>
+                    <ScoreBar score={score} color={scoreColor(score)} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Skills */}
+          {hasScore && (matchedSkills.length > 0 || missingSkills.length > 0) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="bg-green-50 rounded-xl p-4 border border-green-100">
+                <h4 className="text-xs font-semibold text-green-800 mb-2 flex items-center gap-1.5">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  Resume Skills ({matchedSkills.length})
+                </h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {matchedSkills.length > 0
+                    ? matchedSkills.map((s, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-green-100 text-green-700 rounded-md text-xs font-medium">{s}</span>
+                      ))
+                    : <span className="text-xs text-green-600 italic">No data</span>
+                  }
+                </div>
+              </div>
+              <div className="bg-red-50 rounded-xl p-4 border border-red-100">
+                <h4 className="text-xs font-semibold text-red-800 mb-2 flex items-center gap-1.5">
+                  <XCircle className="w-3.5 h-3.5" />
+                  Skills Gap ({missingSkills.length})
+                </h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {missingSkills.length > 0
+                    ? missingSkills.map((s, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-red-100 text-red-700 rounded-md text-xs font-medium">{s}</span>
+                      ))
+                    : <span className="text-xs text-red-500 italic">None detected</span>
+                  }
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Context note for in_review */}
+          {isInReview && (
+            <div className="bg-yellow-50 rounded-xl p-3 border border-yellow-100 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-yellow-700">
+                Scored {Math.round(overallScore)}% — below the qualified threshold. Grant access if you think this candidate is worth reviewing further.
+              </p>
+            </div>
+          )}
+
+          {/* Not scored */}
+          {isNotScored && (
+            <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 flex items-start gap-2">
+              <Clock className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-gray-500">Resume hasn't been processed yet. Score will appear once the AI screener runs.</p>
+            </div>
+          )}
+
+          {/* Reject confirm */}
+          {showRejectConfirm && (
+            <div className="bg-red-50 rounded-xl p-4 border border-red-200">
+              <p className="text-sm font-semibold text-red-800 mb-1">Confirm rejection</p>
+              <p className="text-sm text-red-700 mb-3">
+                Reject <span className="font-medium">{applicant.name}</span> and send a rejection email. This cannot be undone.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setShowRejectConfirm(false)}
+                  className="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                  Cancel
                 </button>
-                <button
-                  onClick={() => handleDecision('approved')}
-                  disabled={isProcessing}
-                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isProcessing ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4" />
-                      Grant Access
-                    </>
-                  )}
+                <button onClick={() => handleDecision('rejected')} disabled={isProcessing}
+                  className="px-3 py-1.5 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50 flex items-center gap-1.5 transition-colors">
+                  {isProcessing && <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                  Yes, Reject
                 </button>
               </div>
-            )}
-            {applicant.screening_status !== 'in_review' && applicant.screening_status !== undefined && (
-              <span className="text-sm text-gray-500">
-                Status: <span className="font-medium text-gray-700">
-                  {applicant.screening_status === 'passed' ? 'Passed' : 
-                   applicant.screening_status === 'in_review' ? 'In Review' : 
-                   applicant.screening_status === 'failed' ? 'Failed' : 'Unknown'}
-                </span>
-              </span>
-            )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="flex-shrink-0 flex items-center justify-between px-4 sm:px-6 py-4 border-t border-gray-100 bg-gray-50 gap-3">
+          {/* Left: passed/failed/pending label */}
+          <div>
+            {isPassed    && <span className="text-xs text-green-600 font-medium">✓ Access granted</span>}
+            {isFailed    && <span className="text-xs text-red-500 font-medium">✕ Rejected</span>}
+            {isNotScored && <span className="text-xs text-gray-400">Pending screening</span>}
+            {isInReview  && !showRejectConfirm && <span className="text-xs text-yellow-600 font-medium">Awaiting your decision</span>}
           </div>
+
+          {/* Right: action buttons — only for in_review */}
+          {isInReview && !showRejectConfirm && (
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowRejectConfirm(true)} disabled={isProcessing}
+                className="px-4 py-2 text-sm font-medium text-red-700 bg-white hover:bg-red-50 border border-red-200 rounded-lg transition-colors disabled:opacity-50">
+                Reject
+              </button>
+              <button onClick={() => handleDecision('approved')} disabled={isProcessing}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2">
+                {isProcessing
+                  ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Processing...</>
+                  : <><CheckCircle className="w-4 h-4" />Grant Access</>
+                }
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
     </>
   );
 }
