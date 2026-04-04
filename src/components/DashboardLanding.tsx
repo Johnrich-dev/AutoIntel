@@ -6,10 +6,7 @@ interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
   video?: VideoAssessment;
   test?: PersonalityTest;
-<<<<<<< HEAD
   screening_status?: 'passed' | 'in_review' | 'failed' | 'not_scored';
-=======
->>>>>>> 420ffa484db6781fde6ec8e350dfde773aef87d8
 }
 
 interface DashboardLandingProps {
