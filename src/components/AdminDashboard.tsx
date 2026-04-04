@@ -104,11 +104,8 @@ export function AdminDashboard() {
   const [schedulePlatform, setSchedulePlatform] = useState('Google Meet');
   const [scheduleNotes, setScheduleNotes] = useState('');
   const [scheduling, setScheduling] = useState(false);
-<<<<<<< HEAD
   const [navBadges, setNavBadges] = useState<Record<string, number>>({});
-=======
   const [pendingInterviewApplicantId, setPendingInterviewApplicantId] = useState<string | null>(null);
->>>>>>> 1b5e2831f4b6ed7966abe5a6bcd105ef171299f7
 
   useEffect(() => {
     loadApplicants();
