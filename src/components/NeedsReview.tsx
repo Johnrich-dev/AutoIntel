@@ -24,6 +24,7 @@ import {
   Clock
 } from 'lucide-react';
 import { Resume, JobPosting, getSupabaseAdminClient } from '../lib/supabase';
+import { FilterDropdown } from './FilterDropdown';
 import { NeedsReviewDetailPanel } from './NeedsReviewDetailPanel';
 
 // Toast notification component
@@ -546,20 +547,15 @@ export function NeedsReview() {
             </div>
 
             {/* Job Selector */}
-            <div className="relative min-w-[200px]">
-              <select
-                value={selectedJob}
-                onChange={(e) => setSelectedJob(e.target.value)}
-                className="w-full appearance-none pl-4 pr-10 py-2.5 border border-gray-200 rounded-xl text-sm font-medium bg-white cursor-pointer focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              >
-                {jobs.map(job => (
-                  <option key={job.id} value={job.id}>
-                    {job.title} {job.count > 0 && `(${job.count})`}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-            </div>
+            <FilterDropdown
+              value={selectedJob}
+              onChange={(v) => setSelectedJob(v)}
+              options={jobs.map(job => ({
+                value: job.id,
+                label: `${job.title}${job.count > 0 ? ` (${job.count})` : ''}`
+              }))}
+              className="min-w-[200px]"
+            />
 
             {/* Filter Toggle */}
             <button
@@ -634,17 +630,17 @@ export function NeedsReview() {
                 {/* Sort */}
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-gray-500">Sort by:</span>
-                  <select
+                  <FilterDropdown
                     value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as SortOption)}
-                    className="appearance-none px-3 py-1 border border-gray-200 rounded-lg text-sm bg-white"
-                  >
-                    <option value="score_desc">Score (High to Low)</option>
-                    <option value="score_asc">Score (Low to High)</option>
-                    <option value="date_desc">Date (Newest First)</option>
-                    <option value="date_asc">Date (Oldest First)</option>
-                    <option value="name_asc">Name (A-Z)</option>
-                  </select>
+                    onChange={(v) => setSortBy(v as SortOption)}
+                    options={[
+                      { value: 'score_desc', label: 'Score (High to Low)' },
+                      { value: 'score_asc', label: 'Score (Low to High)' },
+                      { value: 'date_desc', label: 'Date (Newest First)' },
+                      { value: 'date_asc', label: 'Date (Oldest First)' },
+                      { value: 'name_asc', label: 'Name (A-Z)' },
+                    ]}
+                  />
                 </div>
 
                 {/* Clear Filters */}

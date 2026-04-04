@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { Applicant, Resume, getSupabaseAdminClient } from '../lib/supabase';
+import { FilterDropdown } from './FilterDropdown';
 import { ScreeningDetailModal } from './ScreeningDetailModal';
 
 interface ScreenedApplicant extends Omit<Applicant, 'screening_status' | 'screened_at'> {
@@ -458,14 +459,14 @@ export function ScreeningResults() {
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
             />
           </div>
-          <div className="relative">
-            <select value={selectedJob} onChange={e => setSelectedJob(e.target.value)}
-              className="appearance-none pl-4 pr-10 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer">
-              <option value="all">All Jobs</option>
-              {jobs.map(j => <option key={j.id} value={j.title}>{j.title} ({j.count})</option>)}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-          </div>
+          <FilterDropdown
+            value={selectedJob}
+            onChange={(v) => setSelectedJob(v)}
+            options={[
+              { value: 'all', label: 'All Jobs' },
+              ...jobs.map(j => ({ value: j.title, label: `${j.title} (${j.count})` }))
+            ]}
+          />
           {/* Filters toggle */}
           <button
             onClick={() => setShowFilters(f => !f)}

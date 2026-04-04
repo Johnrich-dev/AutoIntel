@@ -1,6 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { Briefcase, Plus, Search, Edit2, Power, PowerOff, Copy, X, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import { getSupabaseAdminClient, JobPosting, JobPostingFormData } from '../lib/supabase';
+import { FilterDropdown } from './FilterDropdown';
 import { TagInput } from './TagInput';
 
 // Role family options
@@ -539,38 +540,39 @@ export function AdminJobManagement() {
               </div>
 
               {/* Source Filter */}
-              <select
+              <FilterDropdown
                 value={filterSource}
-                onChange={(e) => setFilterSource(e.target.value as typeof filterSource)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Sources</option>
-                <option value="admin">Admin Created</option>
-                <option value="dataset">Dataset Imported</option>
-              </select>
+                onChange={(v) => setFilterSource(v as typeof filterSource)}
+                options={[
+                  { value: 'all', label: 'All Sources' },
+                  { value: 'admin', label: 'Admin Created' },
+                  { value: 'dataset', label: 'Dataset Imported' },
+                ]}
+              />
 
               {/* Department Filter */}
-              <select
+              <FilterDropdown
                 value={filterDepartment}
-                onChange={(e) => setFilterDepartment(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Departments</option>
-                {Array.from(new Set(jobs.map(j => j.department).filter(Boolean))).sort().map(dept => (
-                  <option key={dept} value={dept!}>{dept}</option>
-                ))}
-              </select>
+                onChange={(v) => setFilterDepartment(v)}
+                options={[
+                  { value: 'all', label: 'All Departments' },
+                  ...Array.from(new Set(jobs.map(j => j.department).filter(Boolean))).sort().map(dept => ({
+                    value: dept!,
+                    label: dept!,
+                  }))
+                ]}
+              />
 
               {/* Active Filter */}
-              <select
+              <FilterDropdown
                 value={filterActive}
-                onChange={(e) => setFilterActive(e.target.value as typeof filterActive)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active Only</option>
-                <option value="inactive">Inactive Only</option>
-              </select>
+                onChange={(v) => setFilterActive(v as typeof filterActive)}
+                options={[
+                  { value: 'all', label: 'All Status' },
+                  { value: 'active', label: 'Active Only' },
+                  { value: 'inactive', label: 'Inactive Only' },
+                ]}
+              />
             </div>
 
             <button

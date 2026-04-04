@@ -31,6 +31,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest, ResumeParsedData, ScoringSettings } from '../lib/supabase';
+import { FilterDropdown } from './FilterDropdown';
 import { supabase } from '../lib/supabase';
 import {
   calculateAlignmentScore,
@@ -1190,27 +1191,25 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
           </div>
 
           {/* Department filter */}
-          <select
+          <FilterDropdown
             value={departmentFilter}
-            onChange={e => { setDepartmentFilter(e.target.value); setCurrentPage(1); }}
-            className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-          >
-            <option value="all">All Departments</option>
-            {departments.map(dept => (
-              <option key={dept} value={dept}>{dept}</option>
-            ))}
-          </select>
+            onChange={(v) => { setDepartmentFilter(v); setCurrentPage(1); }}
+            options={[
+              { value: 'all', label: 'All Departments' },
+              ...departments.map(dept => ({ value: dept, label: dept }))
+            ]}
+          />
 
           {/* Status dropdown (mirrors filter chips) */}
-          <select
+          <FilterDropdown
             value={statusFilter}
-            onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-            className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-          >
-            <option value="all">All Statuses</option>
-            <option value="shortlisted">Shortlisted</option>
-            <option value="final_interview">Final Interview</option>
-          </select>
+            onChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}
+            options={[
+              { value: 'all', label: 'All Statuses' },
+              { value: 'shortlisted', label: 'Shortlisted' },
+              { value: 'final_interview', label: 'Final Interview' },
+            ]}
+          />
         </div>
       </div>
 

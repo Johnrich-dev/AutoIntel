@@ -26,6 +26,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { getSupabaseAdminClient, Applicant, Resume } from '../lib/supabase';
+import { FilterDropdown } from './FilterDropdown';
 
 // ============================================================================
 // Types & Interfaces
@@ -974,10 +975,11 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
       setLoading(true);
       const adminClient = getSupabaseAdminClient();
 
-      // Load applicants for the dropdown
+      // Load applicants for the dropdown - exclude those with final decisions
       const { data: applicantsData } = await adminClient
         .from('applicants')
         .select('*')
+        .not('status', 'in', '("hired","rejected")')
         .order('created_at', { ascending: false });
 
       if (applicantsData) {
@@ -1260,10 +1262,11 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
     try {
       const adminClient = getSupabaseAdminClient();
       
-      // Update applicant's status to hired
+      // Update applicant's status to hired and record decision date
+      const now = new Date().toISOString();
       await adminClient
         .from('applicants')
-        .update({ status: 'hired', updated_at: new Date().toISOString() })
+        .update({ status: 'hired', decision_date: now, updated_at: now })
         .eq('id', applicantId);
       
       // Optionally notify the applicant via API
@@ -1297,10 +1300,11 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
     try {
       const adminClient = getSupabaseAdminClient();
       
-      // Update applicant's status to rejected
+      // Update applicant's status to rejected and record decision date
+      const now = new Date().toISOString();
       await adminClient
         .from('applicants')
-        .update({ status: 'rejected', updated_at: new Date().toISOString() })
+        .update({ status: 'rejected', decision_date: now, updated_at: now })
         .eq('id', applicantId);
       
       setNotification({ type: 'success', message: 'Applicant marked as REJECTED.' });
@@ -1369,20 +1373,15 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
           {/* Left side: Filters */}
           <div className="flex-1 flex flex-col sm:flex-row gap-3">
             {/* Job Selector */}
-            <div className="w-full sm:w-48">
-              <select
-                value={selectedJob}
-                onChange={(e) => setSelectedJob(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Jobs</option>
-                {jobs.map((job) => (
-                  <option key={job.job_id} value={job.title}>
-                    {job.title}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <FilterDropdown
+              value={selectedJob}
+              onChange={(v) => setSelectedJob(v)}
+              options={[
+                { value: 'all', label: 'All Jobs' },
+                ...jobs.map(job => ({ value: job.title, label: job.title }))
+              ]}
+              className="w-full sm:w-48"
+            />
 
             {/* Search Bar */}
             <div className="relative flex-1 max-w-xs">
@@ -1397,18 +1396,17 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
             </div>
 
             {/* Status Filter */}
-            <div className="w-full sm:w-40">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Status</option>
-                <option value="scheduled">Scheduled</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-            </div>
+            <FilterDropdown
+              value={statusFilter}
+              onChange={(v) => setStatusFilter(v as StatusFilter)}
+              options={[
+                { value: 'all', label: 'All Status' },
+                { value: 'scheduled', label: 'Scheduled' },
+                { value: 'completed', label: 'Completed' },
+                { value: 'cancelled', label: 'Cancelled' },
+              ]}
+              className="w-full sm:w-40"
+            />
 
             {/* Date Filter */}
             <div className="w-full sm:w-40">

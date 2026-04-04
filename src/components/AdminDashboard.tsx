@@ -9,6 +9,7 @@ import { AdminSettings } from './AdminSettings';
 import { ShortlistedCandidates } from './ShortlistedCandidates';
 import { NeedsReview } from './NeedsReview';
 import { InterviewScheduling } from './InterviewScheduling';
+import { FinalDecisions } from './FinalDecisions';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Applicant, PersonalityTest, Resume, ResumeParsedData, getSupabaseAdminClient, VideoAssessment } from '../lib/supabase';
@@ -465,8 +466,11 @@ export function AdminDashboard() {
             <ApplicantsList />}
           {activeMenu === 'interview-scheduling' && <InterviewScheduling preSelectedApplicantId={pendingInterviewApplicantId} onPreSelectedConsumed={() => setPendingInterviewApplicantId(null)} />}
           
-          {/* Shortlisted and Final Decisions use ShortlistedCandidates - filter to only shortlisted/verified */}
-          {(activeMenu === 'shortlisted' || activeMenu === 'final-decisions') && <ShortlistedCandidates applicants={applicants.filter(a => a.status === 'shortlisted' || a.status === 'final_interview')} onNavigateToInterview={(applicantId) => { setPendingInterviewApplicantId(applicantId); setActiveMenu('interview-scheduling'); }} onApplicantStatusChanged={loadApplicants} />}
+          {/* Shortlisted */}
+          {activeMenu === 'shortlisted' && <ShortlistedCandidates applicants={applicants.filter(a => a.status === 'shortlisted' || a.status === 'final_interview')} onNavigateToInterview={(applicantId) => { setPendingInterviewApplicantId(applicantId); setActiveMenu('interview-scheduling'); }} onApplicantStatusChanged={loadApplicants} />}
+
+          {/* Final Decisions - hired/rejected outcomes only */}
+          {activeMenu === 'final-decisions' && <FinalDecisions />}
           
           {/* Analytics & Reports */}
           {activeMenu === 'analytics-reports' && <ReportsDashboard applicants={applicants} />}

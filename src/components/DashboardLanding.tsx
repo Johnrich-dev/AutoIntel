@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Users, FileText, Video, TrendingUp, CheckCircle, AlertCircle, XCircle, Calendar, ChevronDown, Search, UserPlus } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest, getSupabaseAdminClient } from '../lib/supabase';
+import { FilterDropdown } from './FilterDropdown';
 
 interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
@@ -235,18 +236,11 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
             <p className="text-gray-400 text-sm mt-0.5">Recruitment overview</p>
           </div>
           <div className="flex items-center gap-4">
-            <div className="relative">
-              <select
+            <FilterDropdown
                 value={selectedJob}
-                onChange={(e) => setSelectedJob(e.target.value)}
-                className="appearance-none bg-white border border-gray-200 text-gray-700 py-2.5 px-4 pr-10 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer hover:border-gray-300 transition-colors"
-              >
-                {jobs.map(job => (
-                  <option key={job} value={job}>{job === 'all' ? 'All Jobs' : job}</option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            </div>
+                onChange={(v) => setSelectedJob(v)}
+                options={jobs.map(job => ({ value: job, label: job === 'all' ? 'All Jobs' : job }))}
+              />
             <div className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-600">
               <Calendar className="w-4 h-4" />
               <span>{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
@@ -353,16 +347,16 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
                       className="pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
-                  <select
+                  <FilterDropdown
                     value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All Status</option>
-                    <option value="passed">Passed</option>
-                    <option value="in_review">In Review</option>
-                    <option value="failed">Failed</option>
-                  </select>
+                    onChange={(v) => setStatusFilter(v)}
+                    options={[
+                      { value: 'all', label: 'All Status' },
+                      { value: 'passed', label: 'Passed' },
+                      { value: 'in_review', label: 'In Review' },
+                      { value: 'failed', label: 'Failed' },
+                    ]}
+                  />
                 </div>
               </div>
               {recentApplicants.length > 0 ? (

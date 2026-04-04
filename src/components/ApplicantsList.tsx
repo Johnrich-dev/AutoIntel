@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
-  ChevronDown, 
   FileText, 
   RefreshCw,
   ChevronLeft,
@@ -16,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest } from '../lib/supabase';
 import { getSupabaseAdminClient } from '../lib/supabase';
+import { FilterDropdown } from './FilterDropdown';
 import { ApplicantDetailModal } from './ApplicantDetailModal';
 
 // Interface for position/role option from applicants
@@ -407,11 +407,6 @@ export function ApplicantsList() {
     }
   };
 
-  const handleJobChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    setSelectedJobId(value === '' ? null : value);
-  };
-
   const selectedPosition = positions.find(p => p.position === selectedJobId);
 
   const getStatusBadge = (status: string) => {
@@ -459,22 +454,15 @@ export function ApplicantsList() {
                 <Briefcase className="w-4 h-4 inline mr-1.5 text-gray-400" />
                 Job Position
               </label>
-              <div className="relative">
-                <select
-                  value={selectedJobId || ''}
-                  onChange={handleJobChange}
-                  disabled={isFetchingJobs}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none cursor-pointer hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="">All Jobs</option>
-                  {positions.map(pos => (
-                    <option key={pos.position} value={pos.position}>
-                      {pos.position} ({pos.count})
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-              </div>
+              <FilterDropdown
+                value={selectedJobId || ''}
+                onChange={(v) => setSelectedJobId(v === '' ? null : v)}
+                options={[
+                  { value: '', label: 'All Jobs' },
+                  ...positions.map(pos => ({ value: pos.position, label: `${pos.position} (${pos.count})` }))
+                ]}
+                className={isFetchingJobs ? 'opacity-50 pointer-events-none' : ''}
+              />
             </div>
 
             {/* Search */}

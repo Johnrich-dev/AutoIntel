@@ -29,10 +29,6 @@ interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
   video?: VideoAssessment;
   test?: PersonalityTest;
-<<<<<<< HEAD
-  screening_status?: 'passed' | 'in_review' | 'failed' | 'not_scored';
-=======
->>>>>>> 420ffa484db6781fde6ec8e350dfde773aef87d8
   screened_at?: string;
 }
 
@@ -68,13 +64,8 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
   // Calculate metrics
   const metrics = useMemo(() => {
     const total = filteredApplicants.length;
-<<<<<<< HEAD
-    const forReview = filteredApplicants.filter(a => a.screening_status === 'passed').length;
-    const inProgress = filteredApplicants.filter(a => a.screening_status === 'in_review').length;
-=======
     const forReview = filteredApplicants.filter(a => a.screening_status === 'in_review').length;
     const inProgress = filteredApplicants.filter(a => a.screening_status === 'passed').length;
->>>>>>> 420ffa484db6781fde6ec8e350dfde773aef87d8
     const videoCompleted = filteredApplicants.filter(a => a.video?.status === 'completed').length;
     const assessmentCompleted = filteredApplicants.filter(a => a.test?.status === 'completed').length;
     
@@ -110,13 +101,8 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
 
   // Pipeline data
   const pipelineData = useMemo(() => {
-<<<<<<< HEAD
-    const forReview = filteredApplicants.filter(a => a.screening_status === 'passed').length;
-    const inProgress = filteredApplicants.filter(a => a.screening_status === 'in_review').length;
-=======
     const forReview = filteredApplicants.filter(a => a.screening_status === 'in_review').length;
     const inProgress = filteredApplicants.filter(a => a.screening_status === 'passed').length;
->>>>>>> 420ffa484db6781fde6ec8e350dfde773aef87d8
     
     return [
       { stage: 'Applied', count: filteredApplicants.length, color: 'bg-blue-500' },
@@ -154,11 +140,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
         score = resumeScore;
       } else {
         // Fallback: derive from screening status
-<<<<<<< HEAD
-        score = a.screening_status === 'passed' ? 80 : a.screening_status === 'in_review' ? 60 : 40;
-=======
         score = a.screening_status === 'in_review' ? 80 : a.screening_status === 'passed' ? 60 : 40;
->>>>>>> 420ffa484db6781fde6ec8e350dfde773aef87d8
       }
       
       if (score >= 90) ranges[0].count++;
@@ -186,11 +168,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
   // Calculate average days for each stage
   const timelineAverages = useMemo(() => {
     // Resume review: applicants who have been screened (screened_at timestamp)
-<<<<<<< HEAD
-    const forReviewApplicants = filteredApplicants.filter(a => a.screening_status === 'passed' && a.screened_at);
-=======
     const forReviewApplicants = filteredApplicants.filter(a => a.screening_status === 'in_review' && a.screened_at);
->>>>>>> 420ffa484db6781fde6ec8e350dfde773aef87d8
     
     // Video complete: video assessments with submitted_at timestamp
     const videoCompleted = filteredApplicants.filter(a => a.video?.status === 'completed' && a.video?.submitted_at);
@@ -445,11 +423,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                     },
                     { 
                       stage: 'For Review', 
-<<<<<<< HEAD
-                      count: filteredApplicants.filter(a => a.screening_status === 'passed').length,
-=======
                       count: filteredApplicants.filter(a => a.screening_status === 'in_review').length,
->>>>>>> 420ffa484db6781fde6ec8e350dfde773aef87d8
                       desc: 'Ready for review',
                       color: 'bg-emerald-500',
                       icon: FileText
@@ -470,11 +444,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                     },
                     { 
                       stage: 'In Progress', 
-<<<<<<< HEAD
-                      count: filteredApplicants.filter(a => a.screening_status === 'in_review').length,
-=======
                       count: filteredApplicants.filter(a => a.screening_status === 'passed').length,
->>>>>>> 420ffa484db6781fde6ec8e350dfde773aef87d8
                       desc: 'Screening in progress',
                       color: 'bg-blue-500',
                       icon: Clock
@@ -606,11 +576,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                 {filteredApplicants
                   .filter(a => {
                     // Filter by completion status
-<<<<<<< HEAD
-                    const hasCompletedAssessment = a.test?.status === 'completed' || a.video?.status === 'completed' || a.screening_status === 'passed';
-=======
                     const hasCompletedAssessment = a.test?.status === 'completed' || a.video?.status === 'completed' || a.screening_status === 'in_review';
->>>>>>> 420ffa484db6781fde6ec8e350dfde773aef87d8
                     if (!hasCompletedAssessment) return false;
                     
                     // Filter by department (mock logic - in production, join with job_postings)
@@ -641,11 +607,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold text-blue-600">
-<<<<<<< HEAD
-                          {applicant.test?.semantic_score ?? (applicant.video?.transcript_score != null ? Math.round(applicant.video.transcript_score * 10) : null) ?? applicant.screening_score ?? (applicant.screening_status === 'passed' ? 80 : applicant.screening_status === 'in_review' ? 60 : 0)}
-=======
                           {applicant.test?.semantic_score ?? (applicant.video?.transcript_score != null ? Math.round(applicant.video.transcript_score * 10) : null) ?? applicant.screening_score ?? (applicant.screening_status === 'in_review' ? 80 : applicant.screening_status === 'passed' ? 60 : 0)}
->>>>>>> 420ffa484db6781fde6ec8e350dfde773aef87d8
                         </p>
                         <p className="text-xs text-gray-400">score</p>
                       </div>
