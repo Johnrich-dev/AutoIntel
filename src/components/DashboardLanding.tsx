@@ -6,7 +6,10 @@ interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
   video?: VideoAssessment;
   test?: PersonalityTest;
+<<<<<<< HEAD
   screening_status?: 'passed' | 'in_review' | 'failed' | 'not_scored';
+=======
+>>>>>>> 420ffa484db6781fde6ec8e350dfde773aef87d8
 }
 
 interface DashboardLandingProps {
@@ -36,7 +39,10 @@ function resolveScreeningStatus(
   applicant: ApplicantWithDetails,
   thresholds: ScoringThresholds
 ): 'passed' | 'in_review' | 'failed' {
-  if (applicant.screening_status) return applicant.screening_status;
+  if (applicant.screening_status) {
+    if (applicant.screening_status === 'not_scored') return 'failed';
+    return applicant.screening_status;
+  }
 
   const dbStatus = (applicant as any).status as string | undefined;
   if (dbStatus) {
