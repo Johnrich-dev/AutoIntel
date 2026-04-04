@@ -1,4 +1,4 @@
-import { Calendar, CheckCircle, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, XCircle, Briefcase, BarChart3, Sliders, ChevronLeft, ChevronRight, ClipboardList, Plus, FolderOpen, Archive, UserCheck, Search, Eye, ListChecks, CalendarDays, Award, TrendingUp } from 'lucide-react';
+import { Calendar, CheckCircle, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, Briefcase, Sliders, ChevronLeft, ChevronRight, ClipboardList, UserCheck, Search, Eye, ListChecks, CalendarDays, Award, TrendingUp } from 'lucide-react';
 import { AdminJobManagement } from './AdminJobManagement';
 import { AdminScoringSettings } from './AdminScoringSettings';
 import { DashboardLanding } from './DashboardLanding';
@@ -9,7 +9,7 @@ import { AdminSettings } from './AdminSettings';
 import { ShortlistedCandidates } from './ShortlistedCandidates';
 import { NeedsReview } from './NeedsReview';
 import { InterviewScheduling } from './InterviewScheduling';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Applicant, PersonalityTest, Resume, ResumeParsedData, getSupabaseAdminClient, VideoAssessment } from '../lib/supabase';
 
@@ -78,22 +78,12 @@ const groupedMenuItems = menuItems.reduce((acc, item) => {
   return acc;
 }, {} as Record<string, typeof menuItems>);
 
-// Flatten all items (including children) for lookup
-const allMenuItems = menuItems.flatMap(item => {
-  if (item.children) {
-    return [item, ...item.children];
-  }
-  return [item];
-});
-
 export function AdminDashboard() {
-  const { adminLogout, isAdminAuthenticated } = useAuth();
+  const { adminLogout } = useAuth();
   const [applicants, setApplicants] = useState<ApplicantWithDetails[]>([]);
-  const [filteredApplicants, setFilteredApplicants] = useState<ApplicantWithDetails[]>([]);
   const [selectedApplicant, setSelectedApplicant] = useState<ApplicantWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'filtered' | 'unfiltered'>('all');
-  const [error, setError] = useState<string | null>(null);
+  const [_error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeMenu, setActiveMenu] = useState<MenuId>('dashboard');
@@ -129,17 +119,6 @@ export function AdminDashboard() {
       // silently fail — badges are non-critical
     }
   };
-
-  useEffect(() => {
-    let filtered = applicants;
-    if (filter === 'filtered') {
-      filtered = applicants.filter(app => app.resume?.status === 'suitable');
-    } else if (filter === 'unfiltered') {
-      filtered = applicants.filter(app => !app.resume || app.resume.status !== 'suitable');
-    }
-    // 'all' shows all
-    setFilteredApplicants(filtered);
-  }, [applicants, filter]);
 
   const loadApplicants = async () => {
     try {
