@@ -193,7 +193,7 @@ export function NeedsReviewDetailPanel({
           .from('applicants')
           .select('hr_notes')
           .eq('id', applicant.id)
-          .single();
+          .maybeSingle();
         if (data?.hr_notes) setHrNotes(data.hr_notes);
       } catch {
         // silently ignore — notes are optional
@@ -210,7 +210,7 @@ export function NeedsReviewDetailPanel({
           .eq('applicant_id', applicant.id)
           .order('score_id', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
         if (data) {
           // If sub-scores are zero, try to recover from match_explain JSON
           let scores = {
@@ -313,7 +313,7 @@ export function NeedsReviewDetailPanel({
     }
 
     const video = document.createElement('video');
-    video.src = videoData.video_url;
+    video.src = `${videoData.video_url}#t=0.001`;
     video.muted = true;
     video.preload = 'metadata';
     video.crossOrigin = 'anonymous';
@@ -1000,17 +1000,10 @@ export function NeedsReviewDetailPanel({
                 </div>
                 <div className="p-5 space-y-4">
                   {parsedResume.projects.map((project: any, idx: number) => (
-<<<<<<< HEAD
                     <div key={idx} className="flex items-start gap-4">
                       <div className="w-2 h-2 rounded-full bg-purple-400 mt-2 flex-shrink-0" />
                       <div>
                         <p className="font-medium text-gray-900">{(project as any).name || (project as any).title || 'Untitled Project'}</p>
-=======
-                      <div key={idx} className="flex items-start gap-4">
-                        <div className="w-2 h-2 rounded-full bg-purple-400 mt-2 flex-shrink-0" />
-                        <div>
-                          <p className="font-medium text-gray-900">{(project as any).name || (project as any).title || 'Untitled Project'}</p>
->>>>>>> 1b5e2831f4b6ed7966abe5a6bcd105ef171299f7
                         {(project as any).details && (
                           <p className="text-sm text-gray-600 mt-1 leading-relaxed">
                             {typeof (project as any).details === 'string' 
@@ -1037,11 +1030,7 @@ export function NeedsReviewDetailPanel({
                   <h3 className="font-semibold text-gray-900">Certifications & Training</h3>
                 </div>
                 <div className="p-5 space-y-3">
-<<<<<<< HEAD
                   {parsedResume.trainings.map((training: any, idx: number) => (
-=======
-                  {parsedResume.trainings.map((training: string | any, idx: number) => (
->>>>>>> 1b5e2831f4b6ed7966abe5a6bcd105ef171299f7
                     <div key={idx} className="flex items-center gap-3">
                       <Check className="w-4 h-4 text-amber-500 flex-shrink-0" />
                       <p className="text-sm text-gray-700 font-medium">
@@ -1147,7 +1136,7 @@ export function NeedsReviewDetailPanel({
                 ) : videoData?.video_url ? (
                   <div className="space-y-4">
                     <video
-                      src={videoData.video_url}
+                      src={`${videoData.video_url}#t=0.001`}
                       controls
                       className="w-full rounded-lg bg-black"
                       preload="metadata"

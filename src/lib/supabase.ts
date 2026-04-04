@@ -75,7 +75,11 @@ export const getSupabaseAdminClient = () => {
     return cachedAdminClient;
   }
   cachedAdminClient = createClient(supabaseUrl as string, supabaseServiceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      storageKey: 'supabase-admin',
+    },
   });
   return cachedAdminClient;
 };
