@@ -128,9 +128,13 @@ def create_interview_ics(
     interview_time: str,
     interview_type: str,
     meeting_link: Optional[str] = None,
+    meeting_id: Optional[str] = None,
+    meeting_passcode: Optional[str] = None,
     location: Optional[str] = None,
     interviewer_name: Optional[str] = None,
     interviewer_email: Optional[str] = None,
+    additional_attendees: Optional[List[str]] = None,
+    applicant_instructions: Optional[str] = None,
     notes: Optional[str] = None,
     duration_minutes: int = 60,
     organizer_name: str = "AutoIntel Recruitment",
@@ -139,76 +143,112 @@ def create_interview_ics(
 ) -> Optional[str]:
     """
     Create ICS calendar file content for an interview.
-    
+    Supports additional attendees, meeting credentials, and applicant instructions.
+
+    IMPORTANT: The ICS METHOD:REQUEST causes Gmail/Outlook to render an
+    Accept/Decline card. All attendees (applicant + interviewers) receive
+    the same ICS so the event appears in everyone's calendar.
+
     Args:
         applicant_name: Full name of the applicant
         applicant_email: Email of the applicant
         job_title: Position title
         interview_date: Date in YYYY-MM-DD format
         interview_time: Time in HH:MM format
-        interview_type: 'online' or 'in-person'
+        interview_type: 'online', 'in-person', or 'hybrid'
         meeting_link: Microsoft Teams or other meeting link
-        location: Physical location for in-person
-        interviewer_name: Name of the interviewer
-        interviewer_email: Email of the interviewer
-        notes: Additional notes
+        meeting_id: Meeting ID (optional)
+        meeting_passcode: Meeting passcode (optional)
+        location: Physical location for in-person/hybrid
+        interviewer_name: Name of the primary interviewer
+        interviewer_email: Email of the primary interviewer
+        additional_attendees: Extra attendee emails (panel members, HR, etc.)
+        applicant_instructions: Instructions shown in description (applicant-safe)
+        notes: Internal notes — NOT included in ICS description
         duration_minutes: Meeting duration
         organizer_name: Name of the organizer
         organizer_email: Email of the organizer
-        time_zone: Time zone
-    
+        time_zone: Time zone string (e.g. Asia/Manila)
+
     Returns:
         ICS content as string, or None if failed
     """
     try:
-        # Parse date and time
         start_datetime = datetime.strptime(f"{interview_date} {interview_time}", "%Y-%m-%d %H:%M")
         end_datetime = start_datetime + timedelta(minutes=duration_minutes)
     except ValueError as e:
         print(f"Invalid date/time format: {e}")
         return None
-    
-    # Build event summary
+
     summary = f"Interview: {applicant_name} - {job_title}"
-    
-    # Build event description
+
+    # Build description — applicant-safe content only (no internal notes)
     desc_parts = [
+        f"Interview Invitation",
+        f"",
         f"Applicant: {applicant_name}",
         f"Position: {job_title}",
-        f"Type: {interview_type.capitalize()}",
+        f"Type: {interview_type.replace('-', ' ').title()}",
+        f"Duration: {duration_minutes} minutes",
     ]
     if interviewer_name:
         desc_parts.append(f"Interviewer: {interviewer_name}")
-    if notes:
+    if meeting_link and interview_type in ("online", "hybrid"):
         desc_parts.append(f"")
-        desc_parts.append(f"Notes: {notes}")
-    
+        desc_parts.append(f"Join Meeting: {meeting_link}")
+    if meeting_id:
+        desc_parts.append(f"Meeting ID: {meeting_id}")
+    if meeting_passcode:
+        desc_parts.append(f"Passcode: {meeting_passcode}")
+    if location and interview_type in ("in-person", "hybrid"):
+        desc_parts.append(f"")
+        desc_parts.append(f"Location: {location}")
+    if applicant_instructions:
+        desc_parts.append(f"")
+        desc_parts.append(f"Instructions: {applicant_instructions}")
+    desc_parts.append(f"")
+    desc_parts.append(f"Please accept or decline this calendar invite to confirm your attendance.")
+
     description = "\\n".join(desc_parts)
-    
-    # Determine location/meeting link
-    event_location = ""
+
+    # Determine ICS location field
+    # For online: use meeting link so calendar apps show a clickable URL
+    # For in-person: use physical address
+    # For hybrid: combine both
     if interview_type == "online" and meeting_link:
         event_location = meeting_link
     elif interview_type == "in-person" and location:
         event_location = location
-    
-    # Build attendees list
+    elif interview_type == "hybrid":
+        parts = []
+        if meeting_link:
+            parts.append(meeting_link)
+        if location:
+            parts.append(location)
+        event_location = " | ".join(parts) if parts else None
+    else:
+        event_location = None
+
+    # Build attendees: applicant + primary interviewer + additional attendees
     attendees = [applicant_email]
     if interviewer_email:
         attendees.append(interviewer_email)
-    
-    # Generate ICS content
+    if additional_attendees:
+        for email in additional_attendees:
+            if email and email not in attendees:
+                attendees.append(email)
+
     return generate_ics_content(
         summary=summary,
         start_time=start_datetime,
         end_time=end_datetime,
         description=description,
-        location=event_location if event_location else None,
+        location=event_location,
         organizer_name=organizer_name,
         organizer_email=organizer_email,
         attendees=attendees,
         categories="Interview,Recruitment",
-        url=meeting_link if interview_type == "online" else None
+        url=meeting_link if interview_type in ("online", "hybrid") else None
     )
 
 
@@ -220,21 +260,24 @@ def create_interview_email_with_ics(
     interview_time: str,
     interview_type: str,
     meeting_link: Optional[str] = None,
+    meeting_id: Optional[str] = None,
+    meeting_passcode: Optional[str] = None,
     location: Optional[str] = None,
     interviewer_name: Optional[str] = None,
     interviewer_email: Optional[str] = None,
+    additional_attendees: Optional[List[str]] = None,
+    applicant_instructions: Optional[str] = None,
     notes: Optional[str] = None,
-    duration_minutes: int = 60
+    duration_minutes: int = 60,
+    time_zone: str = "Asia/Manila"
 ) -> Optional[Dict[str, Any]]:
     """
-    Create email content with ICS calendar attachment.
-    This is used by email_service to attach the calendar invite.
-    
-    Args:
-        Same as create_interview_ics
-    
-    Returns:
-        Dict with 'ics_content' and other event details
+    Create ICS calendar content for attaching to interview emails.
+    Called by email_service.send_interview_notification and
+    email_service.send_interviewer_notification.
+
+    Returns a dict with 'ics_content' plus all event metadata,
+    or None if ICS generation failed.
     """
     ics_content = create_interview_ics(
         applicant_name=applicant_name,
@@ -244,16 +287,21 @@ def create_interview_email_with_ics(
         interview_time=interview_time,
         interview_type=interview_type,
         meeting_link=meeting_link,
+        meeting_id=meeting_id,
+        meeting_passcode=meeting_passcode,
         location=location,
         interviewer_name=interviewer_name,
         interviewer_email=interviewer_email,
+        additional_attendees=additional_attendees,
+        applicant_instructions=applicant_instructions,
         notes=notes,
-        duration_minutes=duration_minutes
+        duration_minutes=duration_minutes,
+        time_zone=time_zone
     )
-    
+
     if not ics_content:
         return None
-    
+
     return {
         "ics_content": ics_content,
         "applicant_name": applicant_name,
@@ -263,10 +311,16 @@ def create_interview_email_with_ics(
         "interview_time": interview_time,
         "interview_type": interview_type,
         "meeting_link": meeting_link,
+        "meeting_id": meeting_id,
+        "meeting_passcode": meeting_passcode,
         "location": location,
         "interviewer_name": interviewer_name,
         "interviewer_email": interviewer_email,
-        "notes": notes
+        "additional_attendees": additional_attendees or [],
+        "applicant_instructions": applicant_instructions,
+        "notes": notes,
+        "duration_minutes": duration_minutes,
+        "time_zone": time_zone
     }
 
 

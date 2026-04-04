@@ -104,7 +104,11 @@ export function AdminDashboard() {
   const [schedulePlatform, setSchedulePlatform] = useState('Google Meet');
   const [scheduleNotes, setScheduleNotes] = useState('');
   const [scheduling, setScheduling] = useState(false);
+<<<<<<< HEAD
   const [navBadges, setNavBadges] = useState<Record<string, number>>({});
+=======
+  const [pendingInterviewApplicantId, setPendingInterviewApplicantId] = useState<string | null>(null);
+>>>>>>> 1b5e2831f4b6ed7966abe5a6bcd105ef171299f7
 
   useEffect(() => {
     loadApplicants();
@@ -483,10 +487,10 @@ export function AdminDashboard() {
           {activeMenu === 'needs-review' && <NeedsReview />}
           {(activeMenu === 'applications') && 
             <ApplicantsList />}
-          {activeMenu === 'interview-scheduling' && <InterviewScheduling />}
+          {activeMenu === 'interview-scheduling' && <InterviewScheduling preSelectedApplicantId={pendingInterviewApplicantId} onPreSelectedConsumed={() => setPendingInterviewApplicantId(null)} />}
           
           {/* Shortlisted and Final Decisions use ShortlistedCandidates - filter to only shortlisted/verified */}
-          {(activeMenu === 'shortlisted' || activeMenu === 'final-decisions') && <ShortlistedCandidates applicants={applicants.filter(a => a.status === 'shortlisted')} />}
+          {(activeMenu === 'shortlisted' || activeMenu === 'final-decisions') && <ShortlistedCandidates applicants={applicants.filter(a => a.status === 'shortlisted' || a.status === 'final_interview')} onNavigateToInterview={(applicantId) => { setPendingInterviewApplicantId(applicantId); setActiveMenu('interview-scheduling'); }} onApplicantStatusChanged={loadApplicants} />}
           
           {/* Analytics & Reports */}
           {activeMenu === 'analytics-reports' && <ReportsDashboard applicants={applicants} />}

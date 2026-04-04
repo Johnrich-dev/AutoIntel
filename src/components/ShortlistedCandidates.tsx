@@ -1352,9 +1352,11 @@ function ExportModal({ isOpen, onClose, onExport, candidateCount }: ExportModalP
 
 interface ShortlistedCandidatesProps {
   applicants?: ApplicantWithDetails[];
+  onNavigateToInterview?: (applicantId: string) => void;
+  onApplicantStatusChanged?: () => void;
 }
 
-export function ShortlistedCandidates({ applicants: externalApplicants }: ShortlistedCandidatesProps) {
+export function ShortlistedCandidates({ applicants: externalApplicants, onNavigateToInterview, onApplicantStatusChanged }: ShortlistedCandidatesProps) {
   // State
   const [applicants, setApplicants] = useState<ApplicantWithDetails[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1565,31 +1567,55 @@ export function ShortlistedCandidates({ applicants: externalApplicants }: Shortl
     }
   };
 
-  const handleStatusChange = useCallback((id: string, newStatus: string) => {
-    setApplicants((prev) =>
-      prev.map((a) => {
-        if (a.id !== id) return a;
-        
-        // When moving to Final Interview, set recommendation to 'pending' if not already explicitly set
-        if (newStatus === 'final_interview' && !a.explicitRecommendation) {
-          return { ...a, status: newStatus, explicitRecommendation: 'pending' as const };
-        }
-        
-        return { ...a, status: newStatus };
-      })
-    );
-    
-    // Update selected candidate as well if it's the same one
-    if (selectedCandidate?.id === id) {
-      setSelectedCandidate((prev) => {
-        if (!prev) return null;
-        if (newStatus === 'final_interview' && !prev.explicitRecommendation) {
-          return { ...prev, status: newStatus, explicitRecommendation: 'pending' as const };
-        }
-        return { ...prev, status: newStatus };
-      });
+  const handleStatusChange = useCallback(async (id: string, newStatus: string) => {
+    try {
+      // Update backend first
+      const { error } = await supabase
+        .from('applicants')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error updating applicant status:', error);
+        return;
+      }
+
+      // Update local state
+      setApplicants((prev) =>
+        prev.map((a) => {
+          if (a.id !== id) return a;
+
+          // When moving to Final Interview, set recommendation to 'pending' if not already explicitly set
+          if (newStatus === 'final_interview' && !a.explicitRecommendation) {
+            return { ...a, status: newStatus, explicitRecommendation: 'pending' as const };
+          }
+
+          return { ...a, status: newStatus };
+        })
+      );
+
+      // Update selected candidate as well if it's the same one
+      if (selectedCandidate?.id === id) {
+        setSelectedCandidate((prev) => {
+          if (!prev) return null;
+          if (newStatus === 'final_interview' && !prev.explicitRecommendation) {
+            return { ...prev, status: newStatus, explicitRecommendation: 'pending' as const };
+          }
+          return { ...prev, status: newStatus };
+        });
+      }
+
+      // Notify parent so it can reload its applicants list (prevents stale prop reset)
+      onApplicantStatusChanged?.();
+
+      // If moving to final interview, navigate via callback (no page reload)
+      if (newStatus === 'final_interview' && onNavigateToInterview) {
+        onNavigateToInterview(id);
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
     }
-  }, [selectedCandidate]);
+  }, [selectedCandidate, onNavigateToInterview, onApplicantStatusChanged]);
 
   const handleRecommendationChange = useCallback((id: string, recommendation: 'highly_recommended' | 'recommended' | 'needs_review' | 'pending') => {
     setApplicants((prev) =>

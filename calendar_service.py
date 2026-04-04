@@ -155,12 +155,7 @@ def create_interview_event(
         # Build summary
         summary = f"Interview: {applicant_name} - {job_title}"
         
-        # Build attendees list for Gmail Event Card
-        attendees = [{"email": applicant_email}]
-        if interviewer_email:
-            attendees.append({"email": interviewer_email})
-        
-        # Build event body with attendees for Gmail Event Card
+        # Build event body (no attendees - service accounts cannot invite without Domain-Wide Delegation)
         event_body = {
             "summary": summary,
             "description": description,
@@ -172,7 +167,6 @@ def create_interview_event(
                 "dateTime": end_time_str,
                 "timeZone": time_zone
             },
-            "attendees": attendees,  # This triggers Gmail Event Card
             "reminders": {
                 "useDefault": False,
                 "overrides": [
@@ -190,11 +184,11 @@ def create_interview_event(
         if interview_type == "online" and meeting_link:
             event_body["location"] = meeting_link
         
-        # Create the event with attendees for Gmail Event Card
+        # Create the event
         event = service.events().insert(
             calendarId=GOOGLE_CALENDAR_ID,
             body=event_body,
-            sendUpdates="all"  # Send calendar invitations to attendees
+            sendUpdates="none"
         ).execute()
         
         # Extract response data
