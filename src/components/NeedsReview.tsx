@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Search,
   ChevronDown,
@@ -18,10 +18,30 @@ import {
   AlertTriangle,
   Video,
   ClipboardCheck,
-  FolderOpen
+  FolderOpen,
+  UserCheck,
+  UserX,
+  Clock
 } from 'lucide-react';
 import { Resume, JobPosting, getSupabaseAdminClient } from '../lib/supabase';
 import { NeedsReviewDetailPanel } from './NeedsReviewDetailPanel';
+
+// Toast notification component
+function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 4000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+  return (
+    <div className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium transition-all ${
+      type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+    }`}>
+      {type === 'success' ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+      {message}
+      <button onClick={onClose} className="ml-2 opacity-70 hover:opacity-100"><X className="w-3.5 h-3.5" /></button>
+    </div>
+  );
+}
 
 // Interfaces - separate from Applicant to avoid requiring all base fields
 interface NeedsReviewApplicant {
@@ -148,22 +168,18 @@ function EmptyState() {
   );
 }
 
-// Assessment status badge
-function AssessmentStatusBadge({ video, profiling }: { video: boolean; profiling: boolean }) {
+// Days since screened badge — highlights stale reviews
+function DaysAgoBadge({ dateStr }: { dateStr?: string }) {
+  if (!dateStr) return <span className="text-sm text-gray-400">N/A</span>;
+  const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+  const urgent = days >= 5;
   return (
-    <div className="flex flex-col gap-1 text-xs">
-      <div className="flex items-center gap-1">
-        <Video className="w-3 h-3" />
-        <span className={video ? 'text-green-600' : 'text-gray-400'}>
-          {video ? 'Completed' : 'Missing'}
-        </span>
-      </div>
-      <div className="flex items-center gap-1">
-        <ClipboardCheck className="w-3 h-3" />
-        <span className={profiling ? 'text-green-600' : 'text-gray-400'}>
-          {profiling ? 'Completed' : 'Missing'}
-        </span>
-      </div>
+    <div className="flex flex-col items-center gap-0.5">
+      <span className="text-sm text-gray-600">{new Date(dateStr).toLocaleDateString()}</span>
+      <span className={`text-xs font-medium flex items-center gap-1 ${urgent ? 'text-red-500' : 'text-gray-400'}`}>
+        {urgent && <Clock className="w-3 h-3" />}
+        {days === 0 ? 'Today' : `${days}d ago`}
+      </span>
     </div>
   );
 }
@@ -205,63 +221,41 @@ export function NeedsReview() {
   const [jobs, setJobs] = useState<JobOption[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [bulkConfirm, setBulkConfirm] = useState<{ type: 'shortlist' | 'reject'; count: number } | null>(null);
   const itemsPerPage = 10;
 
-  // Fetch distinct positions from applicants for dropdown (separate from main data)
+  // Build job dropdown counts from the already-loaded needs-review applicants
   useEffect(() => {
-    async function fetchPositions() {
-      try {
-        const adminClient = getSupabaseAdminClient();
-        // Get distinct positions from ALL applicants
-        const { data, error } = await adminClient
-          .from('applicants')
-          .select('position')
-          .order('position', { ascending: true });
+    if (applicants.length === 0) return;
+    const positionCounts = applicants.reduce((acc, a) => {
+      if (a.position) acc[a.position] = (acc[a.position] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
 
-        if (error) throw error;
-
-        // Count applicants per position
-        const positionCounts = (data || []).reduce((acc, applicant) => {
-          if (applicant.position) {
-            acc[applicant.position] = (acc[applicant.position] || 0) + 1;
-          }
-          return acc;
-        }, {} as Record<string, number>);
-
-        // Convert to JobOption array and sort alphabetically
-        const jobOptionsArray: JobOption[] = [
-          { id: 'all', title: 'All Jobs', department: '', count: Object.values(positionCounts).reduce((a, b) => a + b, 0) },
-          ...(Object.entries(positionCounts) as [string, number][])
-            .map(([position, count]) => ({
-              id: position,
-              title: position,
-              department: 'General',
-              count,
-            }))
-            .sort((a, b) => a.title.localeCompare(b.title))
-        ];
-
-        setJobs(jobOptionsArray);
-      } catch (err) {
-        console.error('Error fetching positions:', err);
-      }
-    }
-
-    fetchPositions();
-  }, []);
+    const jobOptionsArray: JobOption[] = [
+      { id: 'all', title: 'All Jobs', department: '', count: applicants.length },
+      ...(Object.entries(positionCounts) as [string, number][])
+        .map(([position, count]) => ({ id: position, title: position, department: 'General', count }))
+        .sort((a, b) => a.title.localeCompare(b.title)),
+    ];
+    setJobs(jobOptionsArray);
+  }, [applicants]);
 
   // Fetch data from database
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const adminClient = getSupabaseAdminClient();
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const adminClient = getSupabaseAdminClient();
 
-        // Fetch applicants that need review (not shortlisted, rejected, or hired)
+        // Fetch applicants who completed both assessments and are awaiting HR identity verification
+        // Includes both auto-passed and HR-approved (in_review) applicants
         const { data: applicantsData, error: applicantsError } = await adminClient
           .from('applicants')
           .select('*')
+          .in('screening_status', ['passed', 'in_review'])
           .not('status', 'eq', 'shortlisted')
           .not('status', 'eq', 'rejected')
           .not('status', 'eq', 'hired')
@@ -317,14 +311,13 @@ export function NeedsReview() {
           
           if (workStyleAssessmentsData) {
             workStyleAssessmentsData.forEach(test => {
-              // Consider completed if status is 'submitted' or 'completed' or if submitted_at exists
               personalityTestsMap[test.applicant_id] = 
                 test.status === 'submitted' || 
                 test.status === 'completed' || 
                 !!test.submitted_at;
-              // Store the score
-              if (test.semantic_score !== null && test.semantic_score !== undefined) {
-                workStyleScoresMap[test.applicant_id] = test.semantic_score;
+              const score = test.semantic_score;
+              if (score !== null && score !== undefined) {
+                workStyleScoresMap[test.applicant_id] = score;
               }
             });
           }
@@ -355,16 +348,15 @@ export function NeedsReview() {
       } finally {
         setLoading(false);
       }
-    };
+  };
 
+  useEffect(() => {
     loadData();
   }, []);
 
-  // Helper function to determine key issue based on score
-  const determineKeyIssue = (score: number): string => {
-    if (score >= 75) return 'Borderline score';
-    if (score >= 65) return 'Low experience match';
-    return 'Missing required skills';
+  // Key issue is taken from screening_fit_category if available, otherwise a neutral label
+  const determineKeyIssue = (_score: number): string => {
+    return 'Borderline score';
   };
 
   // Filter and sort applicants
@@ -448,118 +440,70 @@ export function NeedsReview() {
   };
 
   const handleRefresh = () => {
-    // Trigger reload by calling loadData
-    setLoading(true);
-    const loadData = async () => {
-      try {
-        setError(null);
-        const adminClient = getSupabaseAdminClient();
-
-        const { data: applicantsData, error: applicantsError } = await adminClient
-          .from('applicants')
-          .select('*')
-          .not('status', 'eq', 'shortlisted')
-          .not('status', 'eq', 'rejected')
-          .not('status', 'eq', 'hired')
-          .order('created_at', { ascending: false });
-
-        if (applicantsError) throw applicantsError;
-
-        const applicantIds = (applicantsData || []).map(a => a.id);
-        let resumesMap: Record<string, Resume> = {};
-        let videoAssessmentsMap: Record<string, boolean> = {};
-        let personalityTestsMap: Record<string, boolean> = {};
-        let videoScoresMap: Record<string, number> = {};
-        let workStyleScoresMap: Record<string, number> = {};
-        
-        if (applicantIds.length > 0) {
-          const { data: resumesData } = await adminClient
-            .from('resumes')
-            .select('*')
-            .in('applicant_id', applicantIds);
-          
-          if (resumesData) {
-            resumesData.forEach(resume => {
-              resumesMap[resume.applicant_id] = resume;
-            });
-          }
-
-          // Fetch video assessments to check completion status and scores
-          const { data: videoAssessmentsData } = await adminClient
-            .from('video_assessments')
-            .select('applicant_id, status, submitted_at, transcript_score')
-            .in('applicant_id', applicantIds);
-          
-          if (videoAssessmentsData) {
-            videoAssessmentsData.forEach(assessment => {
-              // Consider completed if status is 'submitted' or 'completed' or if submitted_at exists
-              videoAssessmentsMap[assessment.applicant_id] = 
-                assessment.status === 'submitted' || 
-                assessment.status === 'completed' || 
-                !!assessment.submitted_at;
-              // Store the score (transcript_score is 0-10, convert to 0-100 for percentage display)
-              if (assessment.transcript_score !== null && assessment.transcript_score !== undefined) {
-                videoScoresMap[assessment.applicant_id] = Math.round(assessment.transcript_score * 10);
-              }
-            });
-          }
-
-          // Fetch work style assessments (personality tests) to check completion status and scores
-          const { data: workStyleAssessmentsData } = await adminClient
-            .from('work_style_assessments')
-            .select('applicant_id, status, submitted_at, semantic_score')
-            .in('applicant_id', applicantIds);
-          
-          if (workStyleAssessmentsData) {
-            workStyleAssessmentsData.forEach(test => {
-              // Consider completed if status is 'submitted' or 'completed' or if submitted_at exists
-              personalityTestsMap[test.applicant_id] = 
-                test.status === 'submitted' || 
-                test.status === 'completed' || 
-                !!test.submitted_at;
-              // Store the score
-              if (test.semantic_score !== null && test.semantic_score !== undefined) {
-                workStyleScoresMap[test.applicant_id] = test.semantic_score;
-              }
-            });
-          }
-        }
-
-        if (applicantsData) {
-          const mappedApplicants: NeedsReviewApplicant[] = applicantsData
-            .map(applicant => ({
-              ...applicant,
-              resume: resumesMap[applicant.id],
-              overall_score: applicant.screening_score || 0,
-              screened_at: applicant.updated_at || applicant.created_at,
-              video_completed: videoAssessmentsMap[applicant.id] || false,
-              profiling_completed: personalityTestsMap[applicant.id] || false,
-              video_assessment_score: videoScoresMap[applicant.id],
-              work_style_score: workStyleScoresMap[applicant.id],
-              key_issue: applicant.screening_fit_category || determineKeyIssue(applicant.screening_score || 0),
-            }))
-            .filter(applicant => applicant.video_completed && applicant.profiling_completed);
-
-          setApplicants(mappedApplicants);
-        }
-      } catch (err) {
-        console.error('Error refreshing data:', err);
-        setError('Failed to refresh. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
     loadData();
+  };
+
+  // Navigate between applicants in the detail panel
+  const handleNavigate = (direction: 'prev' | 'next') => {
+    if (!selectedApplicant) return;
+    const idx = filteredApplicants.findIndex(a => a.id === selectedApplicant.id);
+    const next = direction === 'next' ? idx + 1 : idx - 1;
+    if (next >= 0 && next < filteredApplicants.length) {
+      setSelectedApplicant(filteredApplicants[next]);
+    }
+  };
+
+  const selectedApplicantIndex = selectedApplicant
+    ? filteredApplicants.findIndex(a => a.id === selectedApplicant.id)
+    : -1;
+
+  // Bulk shortlist
+  const handleBulkShortlist = () => {
+    if (selectedApplicants.size === 0) return;
+    setBulkConfirm({ type: 'shortlist', count: selectedApplicants.size });
+  };
+
+  // Bulk reject
+  const handleBulkReject = () => {
+    if (selectedApplicants.size === 0) return;
+    setBulkConfirm({ type: 'reject', count: selectedApplicants.size });
+  };
+
+  const executeBulkAction = async () => {
+    if (!bulkConfirm) return;
+    setBulkProcessing(true);
+    setBulkConfirm(null);
+    try {
+      const adminClient = getSupabaseAdminClient();
+      const ids = Array.from(selectedApplicants);
+      const { error } = await adminClient
+        .from('applicants')
+        .update({ status: bulkConfirm.type === 'shortlist' ? 'shortlisted' : 'rejected' })
+        .in('id', ids);
+      if (error) throw error;
+      setToast({ message: `${ids.length} applicant(s) ${bulkConfirm.type === 'shortlist' ? 'shortlisted' : 'rejected'}`, type: 'success' });
+      setSelectedApplicants(new Set());
+      loadData();
+    } catch {
+      setToast({ message: `Failed to ${bulkConfirm?.type === 'shortlist' ? 'shortlist' : 'reject'} applicants`, type: 'error' });
+    } finally {
+      setBulkProcessing(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50/50">
+      {/* Toast */}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
       {/* Header */}
       <div className="px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Needs Review</h1>
-            <p className="text-sm text-gray-500 mt-1">Applicants requiring manual review</p>
+            <p className="text-sm text-gray-500 mt-1">
+              {loading ? 'Loading...' : `${filteredApplicants.length} applicant${filteredApplicants.length !== 1 ? 's' : ''} requiring manual review`}
+            </p>
           </div>
           <button
             onClick={handleRefresh}
@@ -631,7 +575,29 @@ export function NeedsReview() {
             {/* Bulk Actions */}
             {selectedApplicants.size > 0 && (
               <div className="flex items-center gap-2 ml-auto">
-                <span className="text-sm text-gray-500">{selectedApplicants.size} selected</span>
+                <span className="text-sm text-gray-500 font-medium">{selectedApplicants.size} selected</span>
+                <button
+                  onClick={handleBulkShortlist}
+                  disabled={bulkProcessing}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  {bulkProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserCheck className="w-3.5 h-3.5" />}
+                  Shortlist
+                </button>
+                <button
+                  onClick={handleBulkReject}
+                  disabled={bulkProcessing}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {bulkProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserX className="w-3.5 h-3.5" />}
+                  Reject
+                </button>
+                <button
+                  onClick={() => setSelectedApplicants(new Set())}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
               </div>
             )}
           </div>
@@ -687,7 +653,7 @@ export function NeedsReview() {
                     onClick={() => {
                       setSearchQuery('');
                       setSelectedJob('all');
-                      setScoreRange([60, 80]);
+                      setScoreRange([0, 100]);
                     }}
                     className="text-sm text-amber-600 hover:text-amber-700 font-medium"
                   >
@@ -722,7 +688,6 @@ export function NeedsReview() {
                   <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Job Applied</th>
                   <th className="px-4 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Score</th>
                   <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Key Issue</th>
-                  <th className="px-4 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Assessment</th>
                   <th className="px-4 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Date Screened</th>
                   <th className="px-4 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -730,7 +695,7 @@ export function NeedsReview() {
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8">
+                    <td colSpan={7} className="px-4 py-8">
                       <div className="flex flex-col items-center justify-center">
                         <Loader2 className="w-8 h-8 text-amber-600 animate-spin mb-2" />
                         <span className="text-sm text-gray-500">Loading applicants...</span>
@@ -778,7 +743,7 @@ export function NeedsReview() {
                       <td className="px-4 py-4">
                         <span className="text-sm text-gray-700">{applicant.position || 'N/A'}</span>
                       </td>
-                      <td className="px-4 py-4">
+                      <td className="px-4 py-4 text-center">
                         <span className={`text-sm font-bold ${
                           (applicant.overall_score || 0) >= 80 ? 'text-green-600' :
                           (applicant.overall_score || 0) >= 60 ? 'text-amber-600' : 'text-red-600'
@@ -789,27 +754,18 @@ export function NeedsReview() {
                       <td className="px-4 py-4">
                         <KeyIssueBadge issue={applicant.key_issue || 'Borderline score'} />
                       </td>
-                      <td className="px-4 py-4">
-                        <div className="flex justify-center">
-                          <AssessmentStatusBadge 
-                            video={applicant.video_completed || false}
-                            profiling={applicant.profiling_completed || false}
-                          />
-                        </div>
-                      </td>
                       <td className="px-4 py-4 text-center">
-                        <span className="text-sm text-gray-600">
-                          {applicant.screened_at ? new Date(applicant.screened_at).toLocaleDateString() : 'N/A'}
-                        </span>
+                        <DaysAgoBadge dateStr={applicant.screened_at} />
                       </td>
                       <td className="px-4 py-4">
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => openDetailPanel(applicant)}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors group"
-                            title="View Details"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition-colors text-xs font-medium"
+                            title="Review applicant"
                           >
-                            <Eye className="w-4 h-4 text-gray-500 group-hover:text-blue-600" />
+                            <Eye className="w-3.5 h-3.5" />
+                            Review
                           </button>
                         </div>
                       </td>
@@ -875,9 +831,57 @@ export function NeedsReview() {
         onClose={() => {
           setShowDetailPanel(false);
           setSelectedApplicant(null);
+          loadData();
         }}
-
+        onNavigate={handleNavigate}
+        currentIndex={selectedApplicantIndex}
+        totalCount={filteredApplicants.length}
+        onDecision={(type) => {
+          setToast({ message: type === 'verified' ? 'Applicant shortlisted' : 'Applicant rejected', type: 'success' });
+          loadData();
+        }}
       />
+
+      {/* Bulk Action Confirmation Dialog */}
+      {bulkConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${
+              bulkConfirm.type === 'shortlist' ? 'bg-green-100' : 'bg-red-100'
+            }`}>
+              {bulkConfirm.type === 'shortlist'
+                ? <UserCheck className="w-6 h-6 text-green-600" />
+                : <UserX className="w-6 h-6 text-red-600" />}
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 text-center mb-1">
+              {bulkConfirm.type === 'shortlist' ? 'Shortlist' : 'Reject'} {bulkConfirm.count} applicant{bulkConfirm.count !== 1 ? 's' : ''}?
+            </h3>
+            <p className="text-sm text-gray-500 text-center mb-5">
+              {bulkConfirm.type === 'shortlist'
+                ? 'They will be moved to shortlisted candidates.'
+                : 'This will reject all selected applicants. This cannot be undone.'}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setBulkConfirm(null)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeBulkAction}
+                disabled={bulkProcessing}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-50 ${
+                  bulkConfirm.type === 'shortlist' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {bulkProcessing && <Loader2 className="w-4 h-4 animate-spin" />}
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

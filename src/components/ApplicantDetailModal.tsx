@@ -11,14 +11,15 @@ import {
   User,
   GraduationCap,
   Award,
-  Target,
   Shield,
   Check,
   Sparkles,
   Brain,
   TrendingUp,
   Video,
-  ClipboardList
+  ClipboardList,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Applicant, Resume, ResumeParsedData, VideoAssessment, PersonalityTest } from '../lib/supabase';
 
@@ -36,6 +37,10 @@ interface ApplicantDetailModalProps {
   applicant?: ApplicantWithDetails | null;
   isOpen: boolean;
   onClose: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  currentIndex?: number;
+  totalCount?: number;
 }
 
 // Helper to parse resume data
@@ -52,6 +57,7 @@ function getParsedResumeData(resume: Resume | undefined): ResumeParsedData | nul
 // Status configurations
 const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string; dotColor: string }> = {
   passed: { label: 'Passed', color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200', dotColor: 'bg-emerald-500' },
+  in_review: { label: 'In Review', color: 'text-yellow-700', bgColor: 'bg-yellow-50 border-yellow-200', dotColor: 'bg-yellow-500' },
   needs_review: { label: 'Needs Review', color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200', dotColor: 'bg-amber-500' },
   failed: { label: 'Failed', color: 'text-red-700', bgColor: 'bg-red-50 border-red-200', dotColor: 'bg-red-500' },
   shortlisted: { label: 'Shortlisted', color: 'text-purple-700', bgColor: 'bg-purple-50 border-purple-200', dotColor: 'bg-purple-500' },
@@ -70,7 +76,11 @@ export function ApplicantDetailModal({
   applicantId,
   applicant: initialApplicant,
   isOpen,
-  onClose
+  onClose,
+  onPrev,
+  onNext,
+  currentIndex,
+  totalCount,
 }: ApplicantDetailModalProps) {
   const [activeTab, setActiveTab] = useState<'summary' | 'resume'>('summary');
   
@@ -144,15 +154,38 @@ export function ApplicantDetailModal({
     }
   };
 
+  // Keyboard navigation
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') onPrev?.();
+      if (e.key === 'ArrowRight') onNext?.();
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isOpen, onPrev, onNext, onClose]);
+
+  // Reset tab when applicant changes
+  useEffect(() => {
+    setActiveTab('summary');
+  }, [initialApplicant?.id]);
+
+  // Sync internal state whenever the passed-in applicant changes (prev/next navigation)
+  useEffect(() => {
+    if (initialApplicant) {
+      setApplicant(initialApplicant as ApplicantWithDetails);
+      setFetchError(null);
+    }
+  }, [initialApplicant?.id]);
+
   // Fetch data when modal opens or applicantId changes
   useEffect(() => {
     if (isOpen) {
-      // If we have an applicantId, fetch fresh data
       if (applicantId) {
         fetchApplicantData();
       } else if (initialApplicant) {
-        // Use the pre-loaded applicant data
-        setApplicant(initialApplicant);
+        setApplicant(initialApplicant as ApplicantWithDetails);
       }
     }
   }, [isOpen, applicantId]);
@@ -229,7 +262,11 @@ export function ApplicantDetailModal({
 
 
   const parsedResume = applicant ? getParsedResumeData(applicant.resume) : null;
-  const isScreeningComplete = !!applicant?.resume;
+  // Screening is complete only when the applicant has an actual score, not just a resume file
+  const isScreeningComplete = !!(applicant?.screening_score && applicant.screening_score > 0);
+  const hasResume = !!applicant?.resume;
+  const screeningScore = applicant?.screening_score ?? null;
+  const screeningStatus = (applicant as any)?.screening_status ?? null;
 
   // Generate recent activity from available data
   const getRecentActivity = () => {
@@ -343,9 +380,9 @@ export function ApplicantDetailModal({
                 <div className="flex items-center gap-3 flex-wrap">
                   <h2 className="text-2xl font-bold text-gray-900">{applicant.name}</h2>
                   {/* Status Badge */}
-                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium border ${getStatusConfig(applicant.status || 'pending').bgColor} ${getStatusConfig(applicant.status || 'pending').color}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${getStatusConfig(applicant.status || 'pending').dotColor}`} />
-                    {getStatusConfig(applicant.status || 'pending').label}
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium border ${getStatusConfig(screeningStatus || applicant.status || 'pending').bgColor} ${getStatusConfig(screeningStatus || applicant.status || 'pending').color}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${getStatusConfig(screeningStatus || applicant.status || 'pending').dotColor}`} />
+                    {getStatusConfig(screeningStatus || applicant.status || 'pending').label}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-1 text-gray-500">
@@ -361,26 +398,51 @@ export function ApplicantDetailModal({
           </div>
         </div>
 
+        {/* ===== PREV / NEXT NAV ===== */}
+        {totalCount != null && totalCount > 1 && (
+          <div className="px-6 py-2 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+            <span className="text-xs text-gray-500">
+              {currentIndex != null ? currentIndex + 1 : '—'} of {totalCount} applicants
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={onPrev}
+                disabled={!onPrev}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Previous applicant (←)"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Prev
+              </button>
+              <button
+                onClick={onNext}
+                disabled={!onNext}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Next applicant (→)"
+              >
+                Next
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ===== QUICK ACTION BAR ===== */}
-        <div className="px-6 py-3 border-b border-gray-100 bg-white flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <Mail className="w-4 h-4" />
-            <a 
-              href={`mailto:${applicant.email}`} 
-              className="truncate max-w-[200px] text-indigo-600 hover:text-indigo-800 hover:underline"
-            >
-              {applicant.email}
-            </a>
-            {parsedResume?.phone && (
-              <>
-                <span className="text-gray-300">•</span>
-                <Phone className="w-4 h-4" />
-                <span>{parsedResume.phone}</span>
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-          </div>
+        <div className="px-6 py-3 border-b border-gray-100 bg-white flex items-center gap-2 text-sm text-gray-500">
+          <Mail className="w-4 h-4" />
+          <a
+            href={`mailto:${applicant.email}`}
+            className="truncate max-w-[200px] text-indigo-600 hover:text-indigo-800 hover:underline"
+          >
+            {applicant.email}
+          </a>
+          {parsedResume?.phone && (
+            <>
+              <span className="text-gray-300">•</span>
+              <Phone className="w-4 h-4" />
+              <span>{parsedResume.phone}</span>
+            </>
+          )}
         </div>
 
         {/* ===== NAVIGATION TABS ===== */}
@@ -420,9 +482,10 @@ export function ApplicantDetailModal({
                 <div className="flex items-center justify-between">
                   {[
                     { step: 1, label: 'Applied', icon: User, complete: !!applicant?.created_at },
-                    { step: 2, label: 'Screening', icon: Brain, complete: isScreeningComplete },
-                    { step: 3, label: 'Video', icon: Video, complete: !!(applicant as any)?.video?.submitted_at },
-                    { step: 4, label: 'Assessment', icon: ClipboardList, complete: !!(applicant as any)?.test?.submitted_at },
+                    { step: 2, label: 'Resume', icon: FileText, complete: hasResume },
+                    { step: 3, label: 'Screened', icon: Brain, complete: isScreeningComplete },
+                    { step: 4, label: 'Video', icon: Video, complete: !!(applicant as any)?.video?.submitted_at },
+                    { step: 5, label: 'Assessment', icon: ClipboardList, complete: !!(applicant as any)?.test?.submitted_at },
                   ].map((item, idx) => (
                     <div key={idx} className="flex flex-col items-center">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
@@ -447,10 +510,11 @@ export function ApplicantDetailModal({
                       width: `${(() => {
                         let completed = 0;
                         if (applicant?.created_at) completed++;
+                        if (hasResume) completed++;
                         if (isScreeningComplete) completed++;
                         if ((applicant as any)?.video?.submitted_at) completed++;
                         if ((applicant as any)?.test?.submitted_at) completed++;
-                        return (completed / 4) * 100;
+                        return (completed / 5) * 100;
                       })()}%` 
                     }}
                   />
@@ -460,45 +524,87 @@ export function ApplicantDetailModal({
               {isScreeningComplete ? (
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-indigo-50/50 to-white">
-                    <div className="flex items-center gap-2">
-                      <Brain className="w-5 h-5 text-indigo-600" />
-                      <h3 className="font-semibold text-gray-900">AI Evaluation Summary</h3>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Brain className="w-5 h-5 text-indigo-600" />
+                        <h3 className="font-semibold text-gray-900">Screening Result</h3>
+                      </div>
+                      {screeningStatus && (
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+                          screeningStatus === 'passed' ? 'bg-green-50 text-green-700 border-green-200' :
+                          screeningStatus === 'in_review' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                          'bg-red-50 text-red-700 border-red-200'
+                        }`}>
+                          {screeningStatus === 'passed' ? 'Passed' : screeningStatus === 'in_review' ? 'In Review' : 'Failed'}
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <div className="p-5">
-                    {/* Why This Candidate */}
-                    <div>
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <Target className="w-4 h-4 text-indigo-600" />
-                        Why This Candidate is Good for the Position
-                      </h4>
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-700 leading-relaxed">
-                          {applicant.name} demonstrates strong qualifications for the {applicant.position} role. 
-                          {parsedResume?.experience && parsedResume.experience.length > 0 && 
-                            ` With ${parsedResume.experience.length} year${parsedResume.experience.length > 1 ? 's' : ''} of professional experience, `}
-                          {parsedResume?.skills && parsedResume.skills.hard_skills && parsedResume.skills.hard_skills.length > 0 &&
-                            `they bring ${parsedResume.skills.hard_skills.length} technical skill${parsedResume.skills.hard_skills.length > 1 ? 's' : ''} that align with job requirements. `}
+                  <div className="p-5 space-y-4">
+                    {/* Score display */}
+                    <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+                      <div className={`text-4xl font-bold ${
+                        screeningScore! >= 78 ? 'text-green-600' :
+                        screeningScore! >= 65 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        {screeningScore}%
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">AI Screening Score</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {screeningScore! >= 78
+                            ? 'Above qualified threshold — automatically granted assessment access'
+                            : screeningScore! >= 65
+                            ? 'Borderline — requires HR manual review before proceeding'
+                            : 'Below review threshold — does not proceed further'}
                         </p>
                       </div>
                     </div>
+                    {/* Skills summary if available */}
+                    {parsedResume?.skills && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Detected Skills</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {((parsedResume.skills as any).hard_skills || Object.values(parsedResume.skills as any).flat()).slice(0, 12).map((skill: string, i: number) => (
+                            <span key={i} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-medium border border-indigo-100">
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              ) : (
-                /* Placeholder when screening not complete */
+              ) : hasResume ? (
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50/50 to-white">
                     <div className="flex items-center gap-2">
                       <Brain className="w-5 h-5 text-gray-400" />
-                      <h3 className="font-semibold text-gray-900">AI Evaluation Summary</h3>
+                      <h3 className="font-semibold text-gray-900">Screening Result</h3>
+                    </div>
+                  </div>
+                  <div className="p-8 text-center">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-yellow-50 flex items-center justify-center">
+                      <Clock className="w-8 h-8 text-yellow-400" />
+                    </div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Resume uploaded — awaiting AI scoring</p>
+                    <p className="text-xs text-gray-500">The AI screening pipeline will process this resume shortly.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50/50 to-white">
+                    <div className="flex items-center gap-2">
+                      <Brain className="w-5 h-5 text-gray-400" />
+                      <h3 className="font-semibold text-gray-900">Screening Result</h3>
                     </div>
                   </div>
                   <div className="p-8 text-center">
                     <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
                       <Clock className="w-8 h-8 text-gray-400" />
                     </div>
-                    <p className="text-sm font-medium text-gray-700 mb-1">Evaluation in progress</p>
-                    <p className="text-xs text-gray-500">AI evaluation is in progress. Check back once screening is complete.</p>
+                    <p className="text-sm font-medium text-gray-700 mb-1">No resume uploaded yet</p>
+                    <p className="text-xs text-gray-500">Screening will begin once the applicant uploads their resume.</p>
                   </div>
                 </div>
               )}
@@ -584,26 +690,29 @@ export function ApplicantDetailModal({
                     </div>
                   </div>
                   <div className="p-5">
-                    {getRecentActivity().length > 0 ? (
-                      <div className="space-y-3">
-                        {getRecentActivity().map((activity, idx) => (
-                          <div key={idx} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50">
-                            <div className="flex-shrink-0 mt-0.5 text-blue-600">
-                              {activity.icon}
+                    {(() => {
+                      const activities = getRecentActivity();
+                      return activities.length > 0 ? (
+                        <div className="space-y-3">
+                          {activities.map((activity, idx) => (
+                            <div key={idx} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50">
+                              <div className="flex-shrink-0 mt-0.5 text-blue-600">
+                                {activity.icon}
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm text-gray-700">{activity.text}</p>
+                                <p className="text-xs text-gray-400 mt-1">{activity.date}</p>
+                              </div>
                             </div>
-                            <div className="flex-1">
-                              <p className="text-sm text-gray-700">{activity.text}</p>
-                              <p className="text-xs text-gray-400 mt-1">{activity.date}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-6 text-gray-400">
-                        <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">No activity recorded yet</p>
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 text-gray-400">
+                          <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No activity recorded yet</p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -612,7 +721,8 @@ export function ApplicantDetailModal({
           )}
 
           {/* ===== RESUME TAB ===== */}
-          {activeTab === 'resume' && parsedResume && (
+          {activeTab === 'resume' && (
+            parsedResume ? (
             <div className="space-y-6">
               
               {/* Resume File Card */}
@@ -798,15 +908,31 @@ export function ApplicantDetailModal({
                 </div>
               )}
             </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                  <FileText className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-sm font-medium text-gray-700 mb-1">No resume data available</p>
+                <p className="text-xs text-gray-500">
+                  {applicant.resume?.resume_url
+                    ? 'Resume was uploaded but has not been parsed yet.'
+                    : 'No resume has been uploaded for this applicant.'}
+                </p>
+                {applicant.resume?.resume_url && (
+                  <a
+                    href={applicant.resume.resume_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+                  >
+                    View Raw Resume
+                  </a>
+                )}
+              </div>
+            )
           )}
 
-          {/* VIDEO TAB REMOVED */}
-
-          {/* WORK PROFILING TAB REMOVED */}
-
-          {/* NOTES TAB REMOVED */}
-
-          {/* COMMUNICATION TAB REMOVED */}
         </div>
       </div>
     </div>

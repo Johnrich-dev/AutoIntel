@@ -271,7 +271,12 @@ def process_applicant_screening(
             
             component_scores = {
                 'requirement_match': hybrid_result.get('requirement_breakdown', {}),
-                'count': hybrid_result.get('count_breakdown', {})
+                'count': hybrid_result.get('count_breakdown', {}),
+                # Extract individual sub-scores from count_breakdown for resume_scores table
+                'experience': hybrid_result.get('count_breakdown', {}).get('experience', 0),
+                'skills': hybrid_result.get('count_breakdown', {}).get('skills', 0),
+                'education': hybrid_result.get('count_breakdown', {}).get('education', 0),
+                'projects': hybrid_result.get('count_breakdown', {}).get('projects', 0),
             }
             
             print(f"Scoring Type: {hybrid_result.get('scoring_type', 'unified')}")

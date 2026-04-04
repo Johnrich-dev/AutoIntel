@@ -104,11 +104,34 @@ export function AdminDashboard() {
   const [schedulePlatform, setSchedulePlatform] = useState('Google Meet');
   const [scheduleNotes, setScheduleNotes] = useState('');
   const [scheduling, setScheduling] = useState(false);
+<<<<<<< HEAD
+  const [navBadges, setNavBadges] = useState<Record<string, number>>({});
+=======
   const [pendingInterviewApplicantId, setPendingInterviewApplicantId] = useState<string | null>(null);
+>>>>>>> 1b5e2831f4b6ed7966abe5a6bcd105ef171299f7
 
   useEffect(() => {
     loadApplicants();
+    loadNavBadges();
   }, []);
+
+  const loadNavBadges = async () => {
+    try {
+      const adminClient = getSupabaseAdminClient();
+      const { data } = await adminClient
+        .from('applicants')
+        .select('screening_status, status');
+      if (!data) return;
+      const inReviewCount = data.filter(a => 
+        (a.screening_status === 'passed' || a.screening_status === 'in_review') && 
+        a.status !== 'shortlisted' && a.status !== 'rejected' && a.status !== 'hired'
+      ).length;
+      const shortlistedCount = data.filter(a => a.status === 'shortlisted').length;
+      setNavBadges({ 'needs-review': inReviewCount, 'shortlisted': shortlistedCount });
+    } catch {
+      // silently fail — badges are non-critical
+    }
+  };
 
   useEffect(() => {
     let filtered = applicants;
@@ -318,6 +341,11 @@ export function AdminDashboard() {
                                   )}
                                   <ChildIcon className={`w-3.5 h-3.5 flex-shrink-0 transition-transform duration-200 ${isChildActive ? 'text-blue-500' : 'text-gray-400 group-hover:translate-x-0.5'}`} />
                                   <span className="whitespace-nowrap overflow-hidden">{child.label}</span>
+                                  {navBadges[child.id] > 0 && (
+                                    <span className="ml-auto min-w-[20px] h-5 px-1.5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                                      {navBadges[child.id]}
+                                    </span>
+                                  )}
                                 </button>
                               </li>
                             );
@@ -397,6 +425,9 @@ export function AdminDashboard() {
                                   <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 bg-blue-500 rounded-r-full" />
                                 )}
                                 <ChildIcon className={`w-3.5 h-3.5 flex-shrink-0 ${isChildActive ? 'text-blue-500' : 'text-gray-500'}`} />
+                                {navBadges[child.id] > 0 && (
+                                  <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full" />
+                                )}
                               </button>
                             </li>
                           );

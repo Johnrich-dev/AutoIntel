@@ -21,7 +21,12 @@ import {
   Award,
   Sparkles,
   Shield,
-  Loader2
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  UserCheck,
+  UserX,
+  StickyNote
 } from 'lucide-react';
 import { getSupabaseAdminClient } from '../lib/supabase';
 
@@ -72,11 +77,19 @@ type TabId = typeof TABS[number]['id'];
 export function NeedsReviewDetailPanel({
   applicant,
   isOpen,
-  onClose
+  onClose,
+  onNavigate,
+  currentIndex,
+  totalCount,
+  onDecision,
 }: {
   applicant: NeedsReviewApplicant | null;
   isOpen: boolean;
   onClose: () => void;
+  onNavigate?: (direction: 'prev' | 'next') => void;
+  currentIndex?: number;
+  totalCount?: number;
+  onDecision?: (type: 'verified' | 'mismatch') => void;
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
@@ -85,13 +98,17 @@ export function NeedsReviewDetailPanel({
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const [loadingPhoto, setLoadingPhoto] = useState(false);
   const [videoSnapshotUrl, setVideoSnapshotUrl] = useState<string | null>(null);
-  const [videoReviewed, setVideoReviewed] = useState(false);
-  const [markingReviewed, setMarkingReviewed] = useState(false);
   const [aiInsights, setAiInsights] = useState<any>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [verifyingVideo, setVerifyingVideo] = useState(false);
   const [workStyleData, setWorkStyleData] = useState<any>(null);
   const [loadingWorkStyle, setLoadingWorkStyle] = useState(false);
+  const [resumeScores, setResumeScores] = useState<{ skills_score: number; experience_score: number; education_score: number; project_score: number } | null>(null);
+  const [hrNotes, setHrNotes] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ type: 'verified' | 'mismatch' } | null>(null);
+  const [showNotes, setShowNotes] = useState(false);
 
   // Handle video verification (Verified or Mismatch)
   const handleVideoVerification = async (verificationStatus: 'verified' | 'mismatch') => {
@@ -104,9 +121,7 @@ export function NeedsReviewDetailPanel({
     try {
       const response = await fetch('http://localhost:5000/api/video-verification', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           applicant_id: applicant.id,
           applicant_email: applicant.email,
@@ -119,23 +134,118 @@ export function NeedsReviewDetailPanel({
       const result = await response.json();
 
       if (result.success) {
-        if (verificationStatus === 'verified') {
-          alert('Applicant verified and moved to shortlisted!');
-        } else {
-          alert('Rejection email sent successfully!');
-        }
-        // Close the panel after successful verification
+        onDecision?.(verificationStatus);
         onClose();
       } else {
-        alert(`Error: ${result.error || 'Failed to process verification'}`);
+        // Surface error via onDecision with a fallback — parent handles toast
+        console.error('Verification error:', result.error);
       }
     } catch (error) {
       console.error('Error during video verification:', error);
-      alert('Failed to process video verification. Please try again.');
     } finally {
       setVerifyingVideo(false);
     }
   };
+
+  // Show confirmation dialog before making a decision
+  const requestDecision = (type: 'verified' | 'mismatch') => {
+    setConfirmDialog({ type });
+  };
+
+  const confirmDecision = () => {
+    if (confirmDialog) {
+      handleVideoVerification(confirmDialog.type);
+      setConfirmDialog(null);
+    }
+  };
+
+  // Save HR notes
+  const handleSaveNotes = async () => {
+    if (!applicant?.id || !hrNotes.trim()) return;
+    setSavingNotes(true);
+    try {
+      const adminClient = getSupabaseAdminClient();
+      await adminClient
+        .from('applicants')
+        .update({ hr_notes: hrNotes })
+        .eq('id', applicant.id);
+      setNotesSaved(true);
+      setTimeout(() => setNotesSaved(false), 2000);
+    } catch (err) {
+      console.error('Error saving notes:', err);
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  // Reset notes saved state when applicant changes, and load existing notes
+  useEffect(() => {
+    setHrNotes('');
+    setNotesSaved(false);
+    setShowNotes(false);
+    setResumeScores(null);
+
+    const fetchExistingNotes = async () => {
+      if (!applicant?.id) return;
+      try {
+        const adminClient = getSupabaseAdminClient();
+        const { data } = await adminClient
+          .from('applicants')
+          .select('hr_notes')
+          .eq('id', applicant.id)
+          .single();
+        if (data?.hr_notes) setHrNotes(data.hr_notes);
+      } catch {
+        // silently ignore — notes are optional
+      }
+    };
+
+    const fetchResumeScores = async () => {
+      if (!applicant?.id) return;
+      try {
+        const adminClient = getSupabaseAdminClient();
+        const { data } = await adminClient
+          .from('resume_scores')
+          .select('skills_score, experience_score, education_score, project_score, match_explain')
+          .eq('applicant_id', applicant.id)
+          .order('score_id', { ascending: false })
+          .limit(1)
+          .single();
+        if (data) {
+          // If sub-scores are zero, try to recover from match_explain JSON
+          let scores = {
+            skills_score: data.skills_score || 0,
+            experience_score: data.experience_score || 0,
+            education_score: data.education_score || 0,
+            project_score: data.project_score || 0,
+          };
+          const allZero = Object.values(scores).every(v => v === 0);
+          if (allZero && data.match_explain) {
+            try {
+              const explain = typeof data.match_explain === 'string'
+                ? JSON.parse(data.match_explain)
+                : data.match_explain;
+              const bd = explain?.component_breakdown?.count || explain?.count_breakdown || {};
+              scores = {
+                skills_score: bd.skills || 0,
+                experience_score: bd.experience || 0,
+                education_score: bd.education || 0,
+                project_score: bd.projects || 0,
+              };
+            } catch { /* ignore parse errors */ }
+          }
+          setResumeScores(scores);
+        }
+      } catch {
+        // no resume_scores row yet — breakdown stays empty
+      }
+    };
+
+    if (applicant?.id) {
+      fetchExistingNotes();
+      fetchResumeScores();
+    }
+  }, [applicant?.id]);
 
   // Fetch video assessment data when video tab is active
   useEffect(() => {
@@ -260,10 +370,10 @@ export function NeedsReviewDetailPanel({
           body: JSON.stringify({
             applicant_id: applicant.id,
             overall_score: applicant.overall_score || 0,
-            skills_score: applicant.skills_score || 0,
-            experience_score: applicant.experience_score || 0,
-            education_score: applicant.education_score || 0,
-            projects_score: applicant.projects_score || 0,
+            skills_score: resumeScores?.skills_score || applicant.skills_score || 0,
+            experience_score: resumeScores?.experience_score || applicant.experience_score || 0,
+            education_score: resumeScores?.education_score || applicant.education_score || 0,
+            projects_score: resumeScores?.project_score || applicant.projects_score || 0,
             video_score: applicant.video_assessment_score || 0,
             work_style_score: applicant.work_style_score || 0,
             matched_skills: applicant.matched_skills || [],
@@ -288,10 +398,10 @@ export function NeedsReviewDetailPanel({
       }
     };
 
-    if (isOpen && applicant) {
+    if (isOpen && applicant && resumeScores !== undefined) {
       fetchAiInsights();
     }
-  }, [isOpen, applicant?.id]);
+  }, [isOpen, applicant?.id, resumeScores]);
 
   // Fetch work style assessment data when work tab is active
   useEffect(() => {
@@ -322,30 +432,6 @@ export function NeedsReviewDetailPanel({
     }
   }, [isOpen, applicant?.id, activeTab]);
 
-  // Mark video as reviewed
-  const handleMarkVideoReviewed = async () => {
-    if (!applicant?.id) return;
-    
-    setMarkingReviewed(true);
-    try {
-      const adminClient = getSupabaseAdminClient();
-      const { error } = await adminClient
-        .from('video_assessments')
-        .update({ 
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: 'HR Reviewer'
-        })
-        .eq('applicant_id', applicant.id);
-      
-      if (error) throw error;
-      setVideoReviewed(true);
-    } catch (err) {
-      console.error('Error marking video as reviewed:', err);
-    } finally {
-      setMarkingReviewed(false);
-    }
-  };
-
   if (!isOpen || !applicant) return null;
 
   // Helper function to parse resume data
@@ -374,21 +460,57 @@ export function NeedsReviewDetailPanel({
   };
 
   const scoreCategories = [
-    { label: 'Skills', score: applicant.skills_score || 0, icon: Target },
-    { label: 'Experience', score: applicant.experience_score || 0, icon: Briefcase },
-    { label: 'Education', score: applicant.education_score || 0, icon: BookOpen },
-    { label: 'Projects', score: applicant.projects_score || 0, icon: FolderOpen },
+    { label: 'Skills', score: resumeScores?.skills_score || applicant.skills_score || 0, icon: Target },
+    { label: 'Experience', score: resumeScores?.experience_score || applicant.experience_score || 0, icon: Briefcase },
+    { label: 'Education', score: resumeScores?.education_score || applicant.education_score || 0, icon: BookOpen },
+    { label: 'Projects', score: resumeScores?.project_score || applicant.projects_score || 0, icon: FolderOpen },
   ];
 
+  // Compute overall combined score from all three pillars
+  const resumeScore = applicant.screening_score || applicant.overall_score || 0;
+  const videoScore = applicant.video_assessment_score || 0;
+  const workScore = applicant.work_style_score || 0;
+  const scoredPillars = [resumeScore, videoScore, workScore].filter(s => s > 0);
+  const overallCombined = scoredPillars.length > 0
+    ? Math.round(scoredPillars.reduce((a, b) => a + b, 0) / scoredPillars.length)
+    : 0;
+
   return (
-    <div className={`fixed inset-y-0 right-0 z-50 bg-white shadow-2xl transition-all duration-300 ${isFullscreen ? 'inset-0' : 'w-full max-w-2xl'}`}>
+    <div className={`fixed inset-y-0 right-0 z-50 bg-white shadow-2xl transition-all duration-300 flex flex-col ${isFullscreen ? 'inset-0' : 'w-full max-w-3xl'}`}>
       {/* Header */}
-      <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Applicant Details</h2>
-          <p className="text-sm text-gray-500">Review and make decision</p>
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10 flex-shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+            {applicant.name?.charAt(0).toUpperCase() || '?'}
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-gray-900 truncate">{applicant.name || 'Applicant Details'}</h2>
+            <p className="text-xs text-gray-500 truncate">{applicant.position || 'No position'}</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Prev / Next navigation */}
+          {onNavigate && totalCount !== undefined && currentIndex !== undefined && (
+            <div className="flex items-center gap-1 mr-2">
+              <button
+                onClick={() => onNavigate('prev')}
+                disabled={currentIndex <= 0}
+                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30"
+                title="Previous applicant"
+              >
+                <ChevronLeft className="w-4 h-4 text-gray-600" />
+              </button>
+              <span className="text-xs text-gray-500 px-1">{currentIndex + 1} / {totalCount}</span>
+              <button
+                onClick={() => onNavigate('next')}
+                disabled={currentIndex >= totalCount - 1}
+                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30"
+                title="Next applicant"
+              >
+                <ChevronRight className="w-4 h-4 text-gray-600" />
+              </button>
+            </div>
+          )}
           <button
             onClick={() => setIsFullscreen(!isFullscreen)}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -407,107 +529,205 @@ export function NeedsReviewDetailPanel({
       {/* Navigation Tabs */}
       <div className="px-6 border-b border-gray-200 bg-gray-50/50">
         <div className="flex gap-1 -mb-px">
-          {TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-indigo-600 text-indigo-600 bg-white rounded-t-lg'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-t-lg'
-              }`}
-            >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          ))}
+          {TABS.map(tab => {
+            // Status badge per tab
+            let badge: 'done' | 'missing' | null = null;
+            if (tab.id === 'resume') badge = parsedResume ? 'done' : 'missing';
+            if (tab.id === 'video') badge = (videoData?.video_url || applicant.video_completed) ? 'done' : 'missing';
+            if (tab.id === 'work') badge = (workStyleData || applicant.profiling_completed) ? 'done' : 'missing';
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-indigo-600 text-indigo-600 bg-white rounded-t-lg'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-t-lg'
+                }`}
+              >
+                <tab.icon className="w-4 h-4" />
+                {tab.label}
+                {badge === 'done' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 absolute top-2 right-1" />
+                )}
+                {badge === 'missing' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-300 absolute top-2 right-1" />
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Content */}
-      <div className="overflow-y-auto h-[calc(100vh-180px)] p-6 bg-gray-50/30">
+      <div className="overflow-y-auto flex-1 p-6 bg-gray-50/30">
         
         {/* ===== OVERVIEW TAB ===== */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            {/* Status Badge */}
-            <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-xl border border-amber-200">
-              <AlertCircle className="w-6 h-6 text-amber-600" />
-              <div>
-                <span className="text-sm font-medium text-amber-800">Status: Needs Review</span>
-                <p className="text-xs text-amber-600 mt-0.5">Borderline score - requires human decision</p>
-              </div>
-            </div>
-
-            {/* KPI Cards */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Resume Score</p>
-                    <p className={`text-2xl font-bold ${getScoreColor(applicant.screening_score || applicant.overall_score || 0)}`}>
-                      {applicant.screening_score || applicant.overall_score || 0}%
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                    <Video className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Video Score</p>
-                    <p className={`text-2xl font-bold ${getScoreColor(applicant.video_assessment_score || 0)}`}>
-                      {applicant.video_assessment_score || 0}%
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                    <ClipboardCheck className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Work Score</p>
-                    <p className={`text-2xl font-bold ${getScoreColor(applicant.work_style_score || 0)}`}>
-                      {applicant.work_style_score || 0}%
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Applicant Summary */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Applicant Summary</h3>
-              <div className="grid grid-cols-2 gap-4">
+            {/* Reason for Review — most important context for HR */}
+            {(applicant.reason_for_review || applicant.key_issue) && (
+              <div className="flex items-start gap-3 p-4 bg-amber-50 rounded-xl border border-amber-200">
+                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm text-gray-500">Name</p>
-                  <p className="font-medium text-gray-900">{applicant.name || 'Unknown'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Job Applied</p>
-                  <p className="font-medium text-gray-900">{applicant.position || 'Not specified'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Overall Score</p>
-                  <p className={`font-bold text-2xl ${getScoreColor(applicant.overall_score || 0)}`}>
-                    {applicant.overall_score || 0}%
+                  <span className="text-sm font-semibold text-amber-800">Why this applicant needs review</span>
+                  <p className="text-sm text-amber-700 mt-0.5">
+                    {applicant.reason_for_review || applicant.key_issue || 'Borderline score — requires human decision'}
                   </p>
                 </div>
+              </div>
+            )}
+
+            {/* Overall Combined Score */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+              <div className="flex items-center gap-4">
+                <div className="flex-shrink-0">
+                  <span className={`text-3xl font-bold ${getScoreColor(overallCombined)}`}>{overallCombined}%</span>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-gray-900">Overall Score</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Average across {scoredPillars.length} completed assessment{scoredPillars.length !== 1 ? 's' : ''}
+                  </p>
+                  {/* Mini bar */}
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
+                    <div className={`h-1.5 rounded-full ${getScoreBgColor(overallCombined)}`} style={{ width: `${overallCombined}%` }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* KPI Cards — 3 pillars */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <FileText className="w-3.5 h-3.5 text-blue-600" />
+                  </div>
+                  <p className="text-xs text-gray-500">Resume</p>
+                </div>
+                <p className={`text-xl font-bold ${getScoreColor(resumeScore)}`}>{resumeScore}%</p>
+                <div className="w-full bg-gray-100 rounded-full h-1 mt-1.5">
+                  <div className={`h-1 rounded-full ${getScoreBgColor(resumeScore)}`} style={{ width: `${resumeScore}%` }} />
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center">
+                    <Video className="w-3.5 h-3.5 text-green-600" />
+                  </div>
+                  <p className="text-xs text-gray-500">Video</p>
+                </div>
+                <p className={`text-xl font-bold ${getScoreColor(videoScore)}`}>{videoScore > 0 ? `${videoScore}%` : '—'}</p>
+                <div className="w-full bg-gray-100 rounded-full h-1 mt-1.5">
+                  <div className={`h-1 rounded-full ${getScoreBgColor(videoScore)}`} style={{ width: `${videoScore}%` }} />
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-lg bg-purple-100 flex items-center justify-center">
+                    <ClipboardCheck className="w-3.5 h-3.5 text-purple-600" />
+                  </div>
+                  <p className="text-xs text-gray-500">Work Style</p>
+                </div>
+                <p className={`text-xl font-bold ${getScoreColor(workScore)}`}>{workScore > 0 ? `${workScore}%` : '—'}</p>
+                <div className="w-full bg-gray-100 rounded-full h-1 mt-1.5">
+                  <div className={`h-1 rounded-full ${getScoreBgColor(workScore)}`} style={{ width: `${workScore}%` }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Resume Sub-scores breakdown */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Resume Breakdown</p>
+              {resumeScores ? (
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                  {scoreCategories.map(({ label, score, icon: Icon }) => (
+                    <div key={label} className="flex items-center gap-2">
+                      <Icon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                      <span className="text-xs text-gray-600 w-20">{label}</span>
+                      <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                        <div className={`h-1.5 rounded-full ${getScoreBgColor(score)}`} style={{ width: `${score}%` }} />
+                      </div>
+                      <span className={`text-xs font-semibold w-8 text-right ${getScoreColor(score)}`}>{score}%</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400">Sub-scores not available for this applicant.</p>
+              )}
+            </div>
+
+            {/* Applicant Summary — no duplicate score */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Applicant Summary</h3>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-gray-500">Date Screened</p>
-                  <p className="font-medium text-gray-900">
+                  <p className="text-xs text-gray-500">Name</p>
+                  <p className="text-sm font-medium text-gray-900">{applicant.name || 'Unknown'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Email</p>
+                  <p className="text-sm font-medium text-gray-900">{applicant.email || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Job Applied</p>
+                  <p className="text-sm font-medium text-gray-900">{applicant.position || 'Not specified'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Date Screened</p>
+                  <p className="text-sm font-medium text-gray-900">
                     {applicant.screened_at ? new Date(applicant.screened_at).toLocaleDateString() : 'N/A'}
                   </p>
                 </div>
               </div>
             </div>
+
+            {/* Skills Match — matched and missing skills explicitly listed */}
+            {((applicant.matched_skills && applicant.matched_skills.length > 0) || (applicant.missing_skills && applicant.missing_skills.length > 0)) && (
+              <div className="grid grid-cols-2 gap-4">
+                {applicant.matched_skills && applicant.matched_skills.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center">
+                        <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-gray-900">Matched Skills</h3>
+                      <span className="ml-auto text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                        {applicant.matched_skills.length}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {applicant.matched_skills.map((skill, i) => (
+                        <span key={i} className="px-2.5 py-1 bg-green-50 text-green-700 border border-green-100 rounded-lg text-xs font-medium">
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {applicant.missing_skills && applicant.missing_skills.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-600" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-gray-900">Missing Skills</h3>
+                      <span className="ml-auto text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                        {applicant.missing_skills.length}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {applicant.missing_skills.map((skill, i) => (
+                        <span key={i} className="px-2.5 py-1 bg-red-50 text-red-700 border border-red-100 rounded-lg text-xs font-medium">
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* AI Insights & Suggestions */}
             <div className="grid grid-cols-2 gap-4">
@@ -540,15 +760,18 @@ export function NeedsReviewDetailPanel({
                   <div className="space-y-3">
                     <div className="flex items-start gap-2">
                       <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-gray-700">Strong match in {applicant.matched_skills?.length || 0} required skills</p>
+                      <p className="text-sm text-gray-700">Matched {applicant.matched_skills?.length || 0} required skill{(applicant.matched_skills?.length || 0) !== 1 ? 's' : ''}</p>
                     </div>
                     <div className="flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-gray-700">Missing {applicant.missing_skills?.length || 0} key qualifications</p>
+                      <p className="text-sm text-gray-700">Missing {applicant.missing_skills?.length || 0} key qualification{(applicant.missing_skills?.length || 0) !== 1 ? 's' : ''}</p>
                     </div>
                     <div className="flex items-start gap-2">
                       <BarChart3 className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-gray-700">Score falls in borderline range (60-79%)</p>
+                      <p className="text-sm text-gray-700">
+                        Resume score: {resumeScore}% —{' '}
+                        {resumeScore >= 80 ? 'strong fit' : resumeScore >= 60 ? 'borderline, needs review' : 'below threshold'}
+                      </p>
                     </div>
                   </div>
                 )}
@@ -605,6 +828,23 @@ export function NeedsReviewDetailPanel({
         )}
 
         {/* ===== RESUME TAB ===== */}
+        {activeTab === 'resume' && !parsedResume && (
+          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+            <FileText className="w-12 h-12 mb-3" />
+            <p className="text-sm font-medium text-gray-500">Resume data not available</p>
+            <p className="text-xs text-gray-400 mt-1">The resume may not have been parsed yet, or parsing failed.</p>
+            {applicant.resume?.resume_url && (
+              <a
+                href={applicant.resume.resume_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+              >
+                View Original Resume
+              </a>
+            )}
+          </div>
+        )}
         {activeTab === 'resume' && parsedResume && (
           <div className="space-y-6">
             
@@ -683,7 +923,8 @@ export function NeedsReviewDetailPanel({
                   </div>
                   <h3 className="font-semibold text-gray-900">Skills</h3>
                   <span className="ml-auto text-xs text-gray-500">
-                    {Object.values(parsedResume.skills as Record<string, string | string[]>).flat().length} detected
+                    {Object.values(parsedResume.skills as Record<string, string | string[]>)
+                      .flatMap(v => typeof v === 'string' ? v.split(',') : v).length} detected
                   </span>
                 </div>
                 <div className="p-5">
@@ -759,10 +1000,17 @@ export function NeedsReviewDetailPanel({
                 </div>
                 <div className="p-5 space-y-4">
                   {parsedResume.projects.map((project: any, idx: number) => (
+<<<<<<< HEAD
+                    <div key={idx} className="flex items-start gap-4">
+                      <div className="w-2 h-2 rounded-full bg-purple-400 mt-2 flex-shrink-0" />
+                      <div>
+                        <p className="font-medium text-gray-900">{(project as any).name || (project as any).title || 'Untitled Project'}</p>
+=======
                       <div key={idx} className="flex items-start gap-4">
                         <div className="w-2 h-2 rounded-full bg-purple-400 mt-2 flex-shrink-0" />
                         <div>
                           <p className="font-medium text-gray-900">{(project as any).name || (project as any).title || 'Untitled Project'}</p>
+>>>>>>> 1b5e2831f4b6ed7966abe5a6bcd105ef171299f7
                         {(project as any).details && (
                           <p className="text-sm text-gray-600 mt-1 leading-relaxed">
                             {typeof (project as any).details === 'string' 
@@ -789,7 +1037,11 @@ export function NeedsReviewDetailPanel({
                   <h3 className="font-semibold text-gray-900">Certifications & Training</h3>
                 </div>
                 <div className="p-5 space-y-3">
+<<<<<<< HEAD
+                  {parsedResume.trainings.map((training: any, idx: number) => (
+=======
                   {parsedResume.trainings.map((training: string | any, idx: number) => (
+>>>>>>> 1b5e2831f4b6ed7966abe5a6bcd105ef171299f7
                     <div key={idx} className="flex items-center gap-3">
                       <Check className="w-4 h-4 text-amber-500 flex-shrink-0" />
                       <p className="text-sm text-gray-700 font-medium">
@@ -864,30 +1116,10 @@ export function NeedsReviewDetailPanel({
 
                 {/* Verification Status */}
                 <div className="flex gap-2 mb-4">
-                  <button 
-                    onClick={() => handleVideoVerification('verified')}
-                    disabled={verifyingVideo}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {verifyingVideo ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <CheckCircle className="w-4 h-4" />
-                    )}
-                    Verified 
-                  </button>
-                  <button 
-                    onClick={() => handleVideoVerification('mismatch')}
-                    disabled={verifyingVideo}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {verifyingVideo ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <AlertTriangle className="w-4 h-4" />
-                    )}
-                    Mismatch 
-                  </button>
+                  <div className="flex-1 flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-500">
+                    <CheckCircle className="w-4 h-4 text-gray-400" />
+                    Use the Shortlist / Reject buttons below to make a decision
+                  </div>
                 </div>
 
                 {/* Verification Notes */}
@@ -922,30 +1154,13 @@ export function NeedsReviewDetailPanel({
                     />
                     <p className="text-xs text-gray-500 text-center">Submitted video assessment</p>
                     
-                    {/* Mark as Reviewed Button */}
-                    <button
-                      onClick={handleMarkVideoReviewed}
-                      disabled={videoReviewed || markingReviewed}
-                      className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                        videoReviewed 
-                          ? 'bg-green-100 text-green-700 cursor-default'
-                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                      }`}
-                    >
-                      {markingReviewed ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : videoReviewed ? (
-                        <CheckCircle className="w-4 h-4" />
-                      ) : (
-                        <Check className="w-4 h-4" />
-                      )}
-                      {videoReviewed ? 'Video Reviewed' : 'Mark Video as Reviewed'}
-                    </button>
-                    
                     {/* Transcription Section */}
                     {videoData.transcription && (
                       <div className="mt-4 pt-4 border-t border-gray-200">
                         <h4 className="text-sm font-semibold text-gray-900 mb-2">Transcribed Answer</h4>
+                        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-1.5 mb-2">
+                          Timestamps are estimated based on speech rate and may not match the video exactly.
+                        </p>
                         <div className="bg-gray-50 rounded-lg p-3 max-h-48 overflow-y-auto">
                           {(() => {
                             // Split transcription into sentences and estimate timestamps
@@ -1006,111 +1221,100 @@ export function NeedsReviewDetailPanel({
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  {/* Relevance Score */}
-                  {videoData.relevance_score !== null && videoData.relevance_score !== undefined && (
-                    <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Target className="w-4 h-4 text-blue-600" />
-                          <span className="text-sm font-semibold text-gray-800">Relevance to Job</span>
+                {/* Normalise: scores stored as 0-10 → multiply by 10; already 0-100 → use as-is */}
+                {(() => {
+                  const norm = (v: number) => v <= 10 ? Math.round(v * 10) : Math.round(v);
+                  return (
+                    <div className="space-y-4">
+                      {videoData.relevance_score !== null && videoData.relevance_score !== undefined && (
+                        <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Target className="w-4 h-4 text-blue-600" />
+                              <span className="text-sm font-semibold text-gray-800">Relevance to Job</span>
+                            </div>
+                            <span className={`text-lg font-bold ${getScoreColor(norm(videoData.relevance_score))}`}>
+                              {norm(videoData.relevance_score)}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                            <div className={`h-2 rounded-full ${getScoreBgColor(norm(videoData.relevance_score))}`} style={{ width: `${norm(videoData.relevance_score)}%` }} />
+                          </div>
+                          <p className="text-xs text-gray-600">Measures how well the response addresses the job requirements and responsibilities.</p>
                         </div>
-                        <span className={`text-lg font-bold ${getScoreColor(Math.round(videoData.relevance_score * 10))}`}>
-                          {Math.round(videoData.relevance_score * 10)}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                        <div 
-                          className={`h-2 rounded-full ${getScoreBgColor(Math.round(videoData.relevance_score * 10))}`}
-                          style={{ width: `${Math.round(videoData.relevance_score * 10)}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-600">Measures how well the response addresses the job requirements and responsibilities.</p>
-                    </div>
-                  )}
+                      )}
 
-                  {/* Experience Score */}
-                  {videoData.experience_score !== null && videoData.experience_score !== undefined && (
-                    <div className="p-4 bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl border border-emerald-100">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Briefcase className="w-4 h-4 text-emerald-600" />
-                          <span className="text-sm font-semibold text-gray-800">Experience Demonstration</span>
+                      {videoData.experience_score !== null && videoData.experience_score !== undefined && (
+                        <div className="p-4 bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl border border-emerald-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Briefcase className="w-4 h-4 text-emerald-600" />
+                              <span className="text-sm font-semibold text-gray-800">Experience Demonstration</span>
+                            </div>
+                            <span className={`text-lg font-bold ${getScoreColor(norm(videoData.experience_score))}`}>
+                              {norm(videoData.experience_score)}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                            <div className={`h-2 rounded-full ${getScoreBgColor(norm(videoData.experience_score))}`} style={{ width: `${norm(videoData.experience_score)}%` }} />
+                          </div>
+                          <p className="text-xs text-gray-600">Evaluates how effectively the candidate demonstrates relevant work experience and achievements.</p>
                         </div>
-                        <span className={`text-lg font-bold ${getScoreColor(Math.round(videoData.experience_score * 10))}`}>
-                          {Math.round(videoData.experience_score * 10)}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                        <div 
-                          className={`h-2 rounded-full ${getScoreBgColor(Math.round(videoData.experience_score * 10))}`}
-                          style={{ width: `${Math.round(videoData.experience_score * 10)}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-600">Evaluates how effectively the candidate demonstrates relevant work experience and achievements.</p>
-                    </div>
-                  )}
+                      )}
 
-                  {/* Skills Score */}
-                  {videoData.skills_score !== null && videoData.skills_score !== undefined && (
-                    <div className="p-4 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-xl border border-amber-100">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Award className="w-4 h-4 text-amber-600" />
-                          <span className="text-sm font-semibold text-gray-800">Skills Alignment</span>
+                      {videoData.skills_score !== null && videoData.skills_score !== undefined && (
+                        <div className="p-4 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-xl border border-amber-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Award className="w-4 h-4 text-amber-600" />
+                              <span className="text-sm font-semibold text-gray-800">Skills Alignment</span>
+                            </div>
+                            <span className={`text-lg font-bold ${getScoreColor(norm(videoData.skills_score))}`}>
+                              {norm(videoData.skills_score)}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                            <div className={`h-2 rounded-full ${getScoreBgColor(norm(videoData.skills_score))}`} style={{ width: `${norm(videoData.skills_score)}%` }} />
+                          </div>
+                          <p className="text-xs text-gray-600">Assesses how well the candidate's mentioned skills match the required qualifications.</p>
                         </div>
-                        <span className={`text-lg font-bold ${getScoreColor(Math.round(videoData.skills_score * 10))}`}>
-                          {Math.round(videoData.skills_score * 10)}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                        <div 
-                          className={`h-2 rounded-full ${getScoreBgColor(Math.round(videoData.skills_score * 10))}`}
-                          style={{ width: `${Math.round(videoData.skills_score * 10)}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-600">Assesses how well the candidate's mentioned skills match the required qualifications.</p>
-                    </div>
-                  )}
+                      )}
 
-                  {/* Completeness Score */}
-                  {videoData.completeness_score !== null && videoData.completeness_score !== undefined && (
-                    <div className="p-4 bg-gradient-to-r from-violet-50 to-purple-50 rounded-xl border border-violet-100">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4 text-violet-600" />
-                          <span className="text-sm font-semibold text-gray-800">Response Completeness</span>
+                      {videoData.completeness_score !== null && videoData.completeness_score !== undefined && (
+                        <div className="p-4 bg-gradient-to-r from-violet-50 to-purple-50 rounded-xl border border-violet-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle className="w-4 h-4 text-violet-600" />
+                              <span className="text-sm font-semibold text-gray-800">Response Completeness</span>
+                            </div>
+                            <span className={`text-lg font-bold ${getScoreColor(norm(videoData.completeness_score))}`}>
+                              {norm(videoData.completeness_score)}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                            <div className={`h-2 rounded-full ${getScoreBgColor(norm(videoData.completeness_score))}`} style={{ width: `${norm(videoData.completeness_score)}%` }} />
+                          </div>
+                          <p className="text-xs text-gray-600">Evaluates the thoroughness and depth of the candidate's response to the assessment question.</p>
                         </div>
-                        <span className={`text-lg font-bold ${getScoreColor(Math.round(videoData.completeness_score * 10))}`}>
-                          {Math.round(videoData.completeness_score * 10)}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                        <div 
-                          className={`h-2 rounded-full ${getScoreBgColor(Math.round(videoData.completeness_score * 10))}`}
-                          style={{ width: `${Math.round(videoData.completeness_score * 10)}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-600">Evaluates the thoroughness and depth of the candidate's response to the assessment question.</p>
-                    </div>
-                  )}
+                      )}
 
-                  {/* Overall Transcript Score */}
-                  {videoData.transcript_score !== null && videoData.transcript_score !== undefined && (
-                    <div className="p-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-200 mt-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="w-5 h-5 text-indigo-600" />
-                          <span className="text-base font-bold text-gray-900">Overall Transcript Score</span>
+                      {videoData.transcript_score !== null && videoData.transcript_score !== undefined && (
+                        <div className="p-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-200 mt-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Sparkles className="w-5 h-5 text-indigo-600" />
+                              <span className="text-base font-bold text-gray-900">Overall Transcript Score</span>
+                            </div>
+                            <span className={`text-2xl font-bold ${getScoreColor(norm(videoData.transcript_score))}`}>
+                              {norm(videoData.transcript_score)}%
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600 mt-2">Combined score based on relevance, experience, skills, and completeness of the transcribed response.</p>
                         </div>
-                        <span className={`text-2xl font-bold ${getScoreColor(Math.round(videoData.transcript_score * 10))}`}>
-                          {Math.round(videoData.transcript_score * 10)}%
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-2">Combined score based on relevance, experience, skills, and completeness of the transcribed response.</p>
+                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -1180,75 +1384,27 @@ export function NeedsReviewDetailPanel({
                     <div className="grid grid-cols-2 gap-4">
                       {workStyleData.dimension_scores.map((dimension: any, index: number) => {
                         const dimensionKey = dimension.dimension?.toLowerCase().replace(/ /g, '_') || '';
-                        const dimensionDescriptions: Record<string, { high: string; low: string }> = {
-                          collaboration: {
-                            high: "Works exceptionally well with others, fosters teamwork, actively contributes to group goals, supports colleagues, values diverse perspectives, enjoys collaborative environments",
-                            low: "Prefers working alone, struggles in team settings, has difficulty cooperating with others, tends to work independently"
-                          },
-                          independence: {
-                            high: "Self-directed, works well without supervision, takes ownership of tasks, manages own time effectively, requires minimal guidance",
-                            low: "Needs constant direction, struggles to work autonomously, relies heavily on supervision, prefers structured guidance"
-                          },
-                          leadership_readiness: {
-                            high: "Ready to take charge, comfortable leading projects, willing to mentor others, takes responsibility for outcomes, motivates team members",
-                            low: "Uncomfortable leading, prefers following directions, avoids leadership responsibilities, hesitant to take charge"
-                          },
-                          adaptability: {
-                            high: "Embraces change, quickly adjusts to new situations, flexible in approach, thrives in dynamic environments, learns new skills readily",
-                            low: "Resistant to change, struggles with new environments, prefers stability and routine, slow to adapt"
-                          },
-                          attention_to_detail: {
-                            high: "Meticulous, thorough, catches errors,注重细节, ensures accuracy, comprehensive in review",
-                            low: "Overlooks details, makes careless errors, rushed work, misses important information"
-                          },
-                          problem_solving: {
-                            high: "Excellent analytical skills, enjoys complex challenges, finds creative solutions, thinks critically, approaches problems systematically",
-                            low: "Struggles with complex problems, avoids challenging situations, lacks analytical approach"
-                          },
-                          communication: {
-                            high: "Clearly expresses ideas, excellent verbal and written communication, articulates thoughts well, listens actively, presents effectively",
-                            low: "Difficult to understand, struggles to convey ideas, poor written communication, has difficulty explaining thoughts"
-                          },
-                          stress_tolerance: {
-                            high: "Remains calm under pressure, handles tight deadlines well, performs well in high-stress situations, stays composed",
-                            low: "Becomes overwhelmed, struggles with deadlines, anxious under pressure, difficulty functioning in stressful situations"
-                          },
-                          feedback_receptiveness: {
-                            high: "Actively seeks feedback, embraces constructive criticism, uses feedback to improve, open to learning from others",
-                            low: "Defensive about feedback, avoids criticism, resistant to input from others, dismisses constructive advice"
-                          },
-                          ambiguity_tolerance: {
-                            high: "Comfortable with uncertainty, makes decisions with incomplete information, handles ambiguous situations well, flexible thinking",
-                            low: "Needs clear instructions, uncomfortable with uncertainty, struggles when information is incomplete, prefers explicit guidance"
-                          },
-                          initiative: {
-                            high: "Takes initiative, proactive, starts projects without being asked, identifies and addresses problems, self-motivated",
-                            low: "Waits to be told what to do, reactive rather than proactive, lacks self-initiative, needs prompting"
-                          },
-                          relationship_building: {
-                            high: "Builds strong relationships, maintains professional networks, connects with others easily, fosters positive connections",
-                            low: "Struggles to build rapport, distant professionally, has difficulty maintaining relationships"
-                          },
-                          learning_orientation: {
-                            high: "Passionate about learning, continuously develops skills, seeks new knowledge, embraces professional development",
-                            low: "Satisfied with current knowledge, resists learning new things, no interest in self-improvement"
-                          },
-                          conflict_management: {
-                            high: "Addresses conflicts directly, resolves disagreements professionally, handles difficult conversations well, seeks win-win solutions",
-                            low: "Avoids conflict, struggles to address issues, allows problems to fester, uncomfortable with confrontation"
-                          },
-                          work_preference_balance: {
-                            high: "Values work-life balance, sets boundaries, manages time effectively, maintains well-being",
-                            low: "Neglects personal life for work, unable to set boundaries, overworked, poor time management"
-                          }
+                        const dimensionLabels: Record<string, { high: string; low: string }> = {
+                          collaboration: { high: 'Strong team player', low: 'Prefers solo work' },
+                          independence: { high: 'Self-directed', low: 'Needs close guidance' },
+                          leadership_readiness: { high: 'Ready to lead', low: 'Prefers following' },
+                          adaptability: { high: 'Embraces change', low: 'Prefers routine' },
+                          attention_to_detail: { high: 'Meticulous', low: 'Misses details' },
+                          problem_solving: { high: 'Analytical thinker', low: 'Avoids complexity' },
+                          communication: { high: 'Clear communicator', low: 'Struggles to convey ideas' },
+                          stress_tolerance: { high: 'Calm under pressure', low: 'Overwhelmed easily' },
+                          feedback_receptiveness: { high: 'Open to feedback', low: 'Defensive to criticism' },
+                          ambiguity_tolerance: { high: 'Comfortable with uncertainty', low: 'Needs clear instructions' },
+                          initiative: { high: 'Proactive self-starter', low: 'Waits for direction' },
+                          relationship_building: { high: 'Builds rapport easily', low: 'Struggles with rapport' },
+                          learning_orientation: { high: 'Continuous learner', low: 'Resists new learning' },
+                          conflict_management: { high: 'Resolves conflict well', low: 'Avoids confrontation' },
+                          work_preference_balance: { high: 'Healthy work-life balance', low: 'Poor boundary-setting' },
                         };
-                        const description = dimensionDescriptions[dimensionKey];
-                        const tooltipText = description 
-                          ? `High: ${description.high}\n\nLow: ${description.low}`
-                          : 'No description available';
-                        
+                        const label = dimensionLabels[dimensionKey];
+
                         return (
-                          <div key={index} className="p-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl border border-gray-200" title={tooltipText}>
+                          <div key={index} className="p-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl border border-gray-200">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
                                 <Target className="w-4 h-4 text-indigo-600" />
@@ -1261,13 +1417,18 @@ export function NeedsReviewDetailPanel({
                               </span>
                             </div>
                             <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                              <div 
+                              <div
                                 className={`h-2 rounded-full ${getScoreBgColor(dimension.hybrid_score || 0)}`}
                                 style={{ width: `${Math.round(dimension.hybrid_score || 0)}%` }}
                               />
                             </div>
+                            {label && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                {(dimension.hybrid_score || 0) >= 60 ? label.high : label.low}
+                              </p>
+                            )}
                             {dimension.reasoning && (
-                              <p className="text-xs text-gray-600 mt-2">{dimension.reasoning}</p>
+                              <p className="text-xs text-gray-400 mt-1 leading-relaxed">{dimension.reasoning}</p>
                             )}
                           </div>
                         );
@@ -1366,6 +1527,110 @@ export function NeedsReviewDetailPanel({
           </div>
         )}
       </div>
+
+      {/* Sticky Decision Footer — always visible regardless of active tab */}
+      <div className="flex-shrink-0 border-t border-gray-200 bg-white px-6 py-3">
+        {/* Collapsible HR Notes */}
+        {showNotes && (
+          <div className="mb-3 pb-3 border-b border-gray-100">
+            <div className="flex gap-2">
+              <textarea
+                value={hrNotes}
+                onChange={(e) => setHrNotes(e.target.value)}
+                placeholder="Add notes before making a decision..."
+                rows={2}
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 resize-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
+              <button
+                onClick={handleSaveNotes}
+                disabled={savingNotes || !hrNotes.trim()}
+                className={`self-end flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  notesSaved
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40'
+                }`}
+              >
+                {savingNotes ? <Loader2 className="w-3 h-3 animate-spin" /> : notesSaved ? <Check className="w-3 h-3" /> : null}
+                {notesSaved ? 'Saved' : 'Save'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-gray-500">Decision for</p>
+            <p className="text-sm font-semibold text-gray-900 truncate">{applicant.name || 'this applicant'}</p>
+          </div>
+          {/* Notes toggle */}
+          <button
+            onClick={() => setShowNotes(v => !v)}
+            title="HR Notes"
+            className={`p-2 rounded-lg border transition-colors ${
+              showNotes ? 'bg-slate-100 border-slate-300 text-slate-700' : 'border-gray-200 text-gray-400 hover:bg-gray-50'
+            } ${hrNotes.trim() ? 'text-indigo-600 border-indigo-200 bg-indigo-50' : ''}`}
+          >
+            <StickyNote className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => requestDecision('mismatch')}
+            disabled={verifyingVideo}
+            className="flex items-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+          >
+            {verifyingVideo ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserX className="w-4 h-4" />}
+            Reject
+          </button>
+          <button
+            onClick={() => requestDecision('verified')}
+            disabled={verifyingVideo}
+            className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+          >
+            {verifyingVideo ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
+            Shortlist
+          </button>
+        </div>
+      </div>
+
+      {/* Confirmation Dialog */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${
+              confirmDialog.type === 'verified' ? 'bg-green-100' : 'bg-red-100'
+            }`}>
+              {confirmDialog.type === 'verified'
+                ? <UserCheck className="w-6 h-6 text-green-600" />
+                : <UserX className="w-6 h-6 text-red-600" />}
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 text-center mb-1">
+              {confirmDialog.type === 'verified' ? 'Shortlist this applicant?' : 'Reject this applicant?'}
+            </h3>
+            <p className="text-sm text-gray-500 text-center mb-5">
+              {confirmDialog.type === 'verified'
+                ? `${applicant.name || 'This applicant'} will be moved to shortlisted candidates and notified by email.`
+                : `${applicant.name || 'This applicant'} will be rejected and notified by email. This cannot be undone.`}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDecision}
+                disabled={verifyingVideo}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-50 ${
+                  confirmDialog.type === 'verified' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {verifyingVideo ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                {confirmDialog.type === 'verified' ? 'Yes, Shortlist' : 'Yes, Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
