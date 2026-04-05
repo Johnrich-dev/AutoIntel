@@ -3,32 +3,25 @@ import {
   Search,
   ChevronDown,
   ChevronUp,
-  CheckSquare,
-  Square,
   Download,
-  FileText,
-  Video,
   Star,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
   User,
-  MessageSquare,
   FileSpreadsheet,
   File as FilePdf,
   FileCode,
   Users,
   X,
-  Play,
-  ClipboardList,
   Award,
-  BarChart3,
-  Save,
   Mail,
   Phone,
   Briefcase,
-  GraduationCap,
-  Sparkles
+  Sparkles,
+  Clock,
+  XCircle,
+  Calendar,
 } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest, ResumeParsedData, ScoringSettings } from '../lib/supabase';
 import { FilterDropdown } from './FilterDropdown';
@@ -153,6 +146,11 @@ function calculateOverallScore(resumeScore: number, videoScore: number, profileF
   return Math.round((resumeScore * 0.5) + (videoScore * 0.4) + (profileFit * 0.1));
 }
 
+function getDaysInStage(applicant: { created_at: string; screened_at?: string }): number {
+  const ref = applicant.screened_at || applicant.created_at;
+  return Math.floor((Date.now() - new Date(ref).getTime()) / (1000 * 60 * 60 * 24));
+}
+
 // ============================================================================
 // Sub-Components
 // ============================================================================
@@ -195,15 +193,92 @@ interface QuickProfilePanelProps {
   isOpen: boolean;
   onClose: () => void;
   onStatusChange: (id: string, status: string) => void;
-  onAddNote: (id: string, note: string) => void;
+  onScheduleInterview?: (id: string) => void;
 }
 
-function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNote }: QuickProfilePanelProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'resume' | 'video' | 'notes'>('overview');
-  const [newNote, setNewNote] = useState('');
-  const [showVideoModal, setShowVideoModal] = useState(false);
-  const [showTranscriptModal, setShowTranscriptModal] = useState(false);
-  const [showFullResumeModal, setShowFullResumeModal] = useState(false);
+function buildAISummary(candidate: ApplicantWithDetails, parsedResume: ResumeParsedData | null, topSkills: string[]): string {
+  const name = candidate.name.split(' ')[0];
+  const resumeScore = candidate.resumeScore || 0;
+  const videoScore = candidate.videoScore || 0;
+  const profileFit = candidate.profileFit || 0;
+  const overall = candidate.overall || 0;
+
+  const expCount = parsedResume?.experience?.length || 0;
+  const eduList = parsedResume?.education || [];
+  const highestEdu = eduList[0]?.course_or_strand || eduList[0]?.school || null;
+
+  const strengthTier = overall >= 80 ? 'a strong' : overall >= 65 ? 'a solid' : 'a developing';
+  const resumeTier = resumeScore >= 80 ? 'excellent' : resumeScore >= 65 ? 'good' : 'moderate';
+  const videoNote = videoScore >= 70
+    ? 'Video assessment reflects strong communication and articulation.'
+    : videoScore >= 50
+    ? 'Video assessment shows adequate communication skills.'
+    : '';
+  const profileNote = profileFit >= 70
+    ? `Work style profile aligns well with the ${candidate.position} role.`
+    : profileFit >= 50
+    ? `Work style profile shows partial alignment with the ${candidate.position} role.`
+    : '';
+
+  const expNote = expCount >= 3
+    ? `${expCount} work experience entries on record.`
+    : expCount === 1
+    ? '1 work experience entry on record.'
+    : 'No prior work experience listed.';
+
+  const eduNote = highestEdu ? `Educational background includes ${highestEdu}.` : '';
+  const skillNote = topSkills.length > 0
+    ? `Key skills include ${topSkills.slice(0, 3).join(', ')}.`
+    : '';
+
+  return [
+    `${name} presents ${strengthTier} overall profile with a score of ${overall}/100.`,
+    `Resume match is ${resumeTier} at ${resumeScore}/100. ${expNote}`,
+    eduNote,
+    skillNote,
+    videoNote,
+    profileNote,
+  ].filter(Boolean).join(' ');
+}
+
+function RejectConfirmDialog({ name, onConfirm, onCancel }: { name: string; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+            <XCircle className="w-5 h-5 text-red-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">Reject Candidate</h3>
+            <p className="text-sm text-gray-500">This action cannot be undone</p>
+          </div>
+        </div>
+        <p className="text-sm text-gray-700 mb-6">
+          Are you sure you want to reject <span className="font-medium">{name}</span>? They will be removed from the shortlist.
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+          >
+            Yes, Reject
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onScheduleInterview }: QuickProfilePanelProps) {
+  const [activeTab] = useState<'overview'>('overview');
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
 
   if (!candidate || !isOpen) return null;
 
@@ -227,15 +302,22 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
     }
   }
 
-  const handleAddNote = () => {
-    if (newNote.trim()) {
-      onAddNote(candidate.id, newNote.trim());
-      setNewNote('');
-    }
-  };
+  const aiSummary = buildAISummary(candidate, parsedResume, topSkills);
+  // Days since shortlisted: use screened_at if available, otherwise created_at
+  const stageRef = candidate.screened_at || candidate.created_at;
+  const daysInStage = Math.floor((Date.now() - new Date(stageRef).getTime()) / (1000 * 60 * 60 * 24));
+  const stageLabel = candidate.screened_at ? 'days since screened' : 'days since applied';
 
   return (
-    <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto flex flex-col">
+    <>
+      {showRejectConfirm && (
+        <RejectConfirmDialog
+          name={candidate.name}
+          onConfirm={() => { setShowRejectConfirm(false); onStatusChange(candidate.id, 'rejected'); }}
+          onCancel={() => setShowRejectConfirm(false)}
+        />
+      )}
+      <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-3">
@@ -275,27 +357,6 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200 px-6">
-        {[
-          { id: 'overview', label: 'Overview', icon: User },
-          { id: 'resume', label: 'Resume', icon: FileText },
-          { id: 'video', label: 'Interview', icon: Video },
-          { id: 'notes', label: 'Notes', icon: MessageSquare },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as typeof activeTab)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         {activeTab === 'overview' && (
@@ -305,11 +366,7 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
                 <Sparkles className="w-5 h-5 text-blue-600" />
                 <h3 className="font-semibold text-blue-900">AI-Generated Summary</h3>
               </div>
-              <p className="text-sm text-blue-800 leading-relaxed">
-                {candidate.name} demonstrates strong qualifications with a solid foundation in {topSkills.slice(0, 3).join(', ')}.
-                Their profile shows {(candidate.resumeScore || 0) >= 75 ? 'exceptional' : 'good'} alignment with the role requirements,
-                scoring {candidate.resumeScore || 0}/100 on resume match.{(candidate.videoScore || 0) >= 70 ? ' Video assessment indicates strong communication skills.' : ''}
-              </p>
+              <p className="text-sm text-blue-800 leading-relaxed">{aiSummary}</p>
             </div>
 
             <div>
@@ -327,15 +384,23 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
 
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                <Mail className="w-4 h-4 text-gray-400" />
-                <span className="text-sm text-gray-700 truncate">{candidate.email}</span>
+                <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <a href={`mailto:${candidate.email}`} className="text-sm text-blue-600 hover:underline truncate">{candidate.email}</a>
               </div>
               {parsedResume?.phone && (
                 <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                  <Phone className="w-4 h-4 text-gray-400" />
+                  <Phone className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   <span className="text-sm text-gray-700">{parsedResume.phone}</span>
                 </div>
               )}
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <span className="text-sm text-gray-700">Applied {new Date(candidate.created_at).toLocaleDateString()}</span>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <span className="text-sm text-gray-700">{daysInStage}d {stageLabel}</span>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -355,418 +420,47 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onAddNo
           </div>
         )}
 
-        {activeTab === 'resume' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">Resume Highlights</h3>
-              <button
-                onClick={() => setShowFullResumeModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <FileText className="w-4 h-4" />
-                View Full Resume
-              </button>
-            </div>
-            {parsedResume && (
-              <div className="space-y-4">
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <h4 className="font-medium text-gray-900 mb-2">Education</h4>
-                  {parsedResume.education?.map((edu, idx) => (
-                    <div key={idx} className="text-sm text-gray-600 mb-1">{edu.school} - {edu.course_or_strand}</div>
-                  ))}
-                </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <h4 className="font-medium text-gray-900 mb-2">Skills</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {parsedResume.skills && typeof parsedResume.skills === 'object' && (
-                      <>
-                        {parsedResume.skills.hard_skills?.map((skill: string, idx: number) => (
-                          <span key={`hard-${idx}`} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">{skill}</span>
-                        ))}
-                        {parsedResume.skills.all?.map((skill: string, idx: number) => (
-                          <span key={`all-${idx}`} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">{skill}</span>
-                        ))}
-                        {!parsedResume.skills.hard_skills && !parsedResume.skills.all &&
-                          Object.entries(parsedResume.skills).flatMap(([category, skills]) =>
-                            typeof skills === 'string'
-                              ? (skills as string).split(',').map((skill: string, idx: number) => (
-                                  <span key={`${category}-${idx}`} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">{skill.trim()}</span>
-                                ))
-                              : Array.isArray(skills)
-                                ? (skills as string[]).map((skill: string, idx: number) => (
-                                    <span key={`${category}-${idx}`} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">{skill}</span>
-                                  ))
-                                : []
-                          )
-                        }
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'video' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">Video Interview Assessment</h3>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowVideoModal(true)}
-                  disabled={!candidate.video?.video_url}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Play className="w-4 h-4" />
-                  Watch Video
-                </button>
-                <button
-                  onClick={() => setShowTranscriptModal(true)}
-                  disabled={!candidate.video?.transcription}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ClipboardList className="w-4 h-4" />
-                  Transcript
-                </button>
-              </div>
-            </div>
-            {candidate.video ? (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-                    <div className="text-sm text-blue-600 mb-1">Communication Score</div>
-                    <div className="text-3xl font-bold text-blue-900">{candidate.videoScore ? Math.round(candidate.videoScore * 0.9) : '-'}</div>
-                    <div className="text-xs text-blue-500 mt-1">Based on clarity and articulation</div>
-                  </div>
-                  <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-100">
-                    <div className="text-sm text-emerald-600 mb-1">Answer Relevance</div>
-                    <div className="text-3xl font-bold text-emerald-900">{candidate.videoScore ? Math.round(candidate.videoScore * 0.95) : '-'}</div>
-                    <div className="text-xs text-emerald-500 mt-1">Alignment with questions</div>
-                  </div>
-                </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm font-medium text-gray-700">Status:</span>
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      candidate.video.status === 'completed' ? 'bg-green-100 text-green-700' :
-                      candidate.video.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
-                      'bg-gray-100 text-gray-700'
-                    }`}>
-                      {candidate.video.status || 'Not started'}
-                    </span>
-                  </div>
-                  {candidate.video.submitted_at && (
-                    <p className="text-xs text-gray-500">Submitted: {new Date(candidate.video.submitted_at).toLocaleString()}</p>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="p-8 text-center text-gray-500">
-                <Video className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p>No video assessment available</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Video Modal */}
-        {showVideoModal && candidate.video?.video_url && (
-          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setShowVideoModal(false)}>
-            <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-4 py-3 border-b">
-                <h3 className="font-semibold text-gray-900">Video Interview</h3>
-                <button onClick={() => setShowVideoModal(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-5 h-5" /></button>
-              </div>
-              <div className="aspect-video bg-black">
-                <video src={candidate.video.video_url} controls className="w-full h-full" autoPlay />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Transcript Modal */}
-        {showTranscriptModal && candidate.video?.transcription && (
-          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowTranscriptModal(false)}>
-            <div className="bg-white rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-4 py-3 border-b">
-                <h3 className="font-semibold text-gray-900">Interview Transcript</h3>
-                <button onClick={() => setShowTranscriptModal(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-5 h-5" /></button>
-              </div>
-              <div className="p-4 overflow-y-auto max-h-[60vh]">
-                <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">{candidate.video.transcription}</pre>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Full Resume Modal */}
-        {showFullResumeModal && parsedResume && (
-          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowFullResumeModal(false)}>
-            <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
-                <div>
-                  <h3 className="font-semibold text-gray-900">Full Resume</h3>
-                  <p className="text-sm text-gray-500">{candidate.name} - {candidate.position}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {candidate.resume?.resume_url && (
-                    <a href={candidate.resume.resume_url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm">
-                      <Download className="w-4 h-4" />Download
-                    </a>
-                  )}
-                  <button onClick={() => setShowFullResumeModal(false)} className="p-2 hover:bg-gray-200 rounded-lg"><X className="w-5 h-5" /></button>
-                </div>
-              </div>
-              <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-                {(parsedResume.name || parsedResume.email || parsedResume.phone) && (
-                  <div className="mb-6">
-                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Personal Information</h4>
-                    <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
-                      {parsedResume.name && <div><span className="text-xs text-gray-500 uppercase">Name</span><p className="text-sm font-medium text-gray-900">{parsedResume.name}</p></div>}
-                      {parsedResume.email && <div><span className="text-xs text-gray-500 uppercase">Email</span><p className="text-sm font-medium text-gray-900">{parsedResume.email}</p></div>}
-                      {parsedResume.phone && <div><span className="text-xs text-gray-500 uppercase">Phone</span><p className="text-sm font-medium text-gray-900">{parsedResume.phone}</p></div>}
-                    </div>
-                  </div>
-                )}
-                {parsedResume.education && parsedResume.education.length > 0 && (
-                  <div className="mb-6">
-                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Education</h4>
-                    <div className="space-y-3">
-                      {parsedResume.education.map((edu, idx) => (
-                        <div key={idx} className="p-4 bg-gray-50 rounded-lg">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <p className="font-medium text-gray-900">{edu.school}</p>
-                              <p className="text-sm text-gray-600">{edu.course_or_strand}</p>
-                            </div>
-                            {edu.year_range && <span className="text-sm text-gray-500">{edu.year_range}</span>}
-                          </div>
-                          {edu.education_type && <p className="text-xs text-gray-500 mt-1">{edu.education_type}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {parsedResume.experience && parsedResume.experience.length > 0 && (
-                  <div className="mb-6">
-                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Work Experience</h4>
-                    <div className="space-y-4">
-                      {parsedResume.experience.map((exp, idx) => (
-                        <div key={idx} className="p-4 bg-gray-50 rounded-lg">
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <p className="font-medium text-gray-900">{exp.role}</p>
-                              <p className="text-sm text-gray-600">{exp.company}</p>
-                            </div>
-                            {exp.years && <span className="text-sm text-gray-500">{exp.years}</span>}
-                          </div>
-                          {exp.summary && <p className="text-sm text-gray-600 mt-2">{exp.summary}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {parsedResume.projects && parsedResume.projects.length > 0 && (
-                  <div className="mb-6">
-                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Projects</h4>
-                    <div className="space-y-3">
-                      {parsedResume.projects.map((project, idx) => (
-                        <div key={idx} className="p-4 bg-gray-50 rounded-lg">
-                          <p className="font-medium text-gray-900">{project.name}</p>
-                          {project.details && <p className="text-sm text-gray-600 mt-1">{project.details}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {parsedResume.trainings && parsedResume.trainings.length > 0 && (
-                  <div className="mb-6">
-                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Trainings & Certifications</h4>
-                    <div className="space-y-2">
-                      {parsedResume.trainings.map((training, idx) => (
-                        <div key={idx} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                          <GraduationCap className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm text-gray-700">{training.title}</span>
-                          {training.date && <span className="text-xs text-gray-400">({training.date})</span>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {candidate.resume?.raw_extracted_content && (
-                  <div className="mt-6">
-                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Raw Extracted Content</h4>
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                      <pre className="whitespace-pre-wrap text-xs text-gray-600 font-mono max-h-64 overflow-y-auto">
-                        {candidate.resume.raw_extracted_content}
-                      </pre>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'notes' && (
-          <div className="space-y-4">
-            <div>
-              <h3 className="font-semibold text-gray-900 mb-3">Add Private Note</h3>
-              <div className="flex gap-2">
-                <textarea
-                  value={newNote}
-                  onChange={(e) => setNewNote(e.target.value)}
-                  placeholder="Enter your notes about this candidate..."
-                  className="flex-1 px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                  rows={3}
-                />
-                <button
-                  onClick={handleAddNote}
-                  disabled={!newNote.trim()}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <Save className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <h3 className="font-semibold text-gray-900">Previous Notes</h3>
-              {candidate.notes?.length ? (
-                candidate.notes.map((note) => (
-                  <div key={note.id} className="p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-900">{note.author}</span>
-                      <span className="text-xs text-gray-400">{new Date(note.createdAt).toLocaleDateString()}</span>
-                    </div>
-                    <p className="text-sm text-gray-700">{note.text}</p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-gray-400 italic">No notes added yet</p>
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Action Footer */}
       <div className="border-t border-gray-200 p-4 bg-gray-50 flex gap-3">
-        <button
-          onClick={() => onStatusChange(candidate.id, 'final_interview')}
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
-        >
-          <CheckCircle className="w-4 h-4" />
-          Move to Final Interview
-        </button>
-        <button
-          onClick={() => onStatusChange(candidate.id, 'shortlisted')}
-          className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-        >
-          Keep in Shortlist
-        </button>
+        {candidate.status === 'final_interview' ? (
+          <>
+            <button
+              onClick={() => onScheduleInterview?.(candidate.id)}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              <Calendar className="w-4 h-4" />
+              Schedule Interview
+            </button>
+            <button
+              onClick={() => onStatusChange(candidate.id, 'shortlisted')}
+              className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
+            >
+              Move Back
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => onStatusChange(candidate.id, 'final_interview')}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
+            >
+              <CheckCircle className="w-4 h-4" />
+              Move to Final Interview
+            </button>
+            <button
+              onClick={() => setShowRejectConfirm(true)}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors font-medium"
+            >
+              <XCircle className="w-4 h-4" />
+              Reject
+            </button>
+          </>
+        )}
       </div>
     </div>
-  );
-}
-
-// ============================================================================
-// Comparison Modal Component
-// ============================================================================
-
-interface ComparisonModalProps {
-  candidates: ApplicantWithDetails[];
-  isOpen: boolean;
-  onClose: () => void;
-}
-
-function ComparisonModal({ candidates, isOpen, onClose }: ComparisonModalProps) {
-  if (!isOpen || candidates.length < 2) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <Users className="w-6 h-6 text-blue-600" />
-            <h2 className="text-xl font-bold text-gray-900">Candidate Comparison</h2>
-            <span className="px-2.5 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">{candidates.length} candidates</span>
-          </div>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
-        </div>
-
-        <div className="flex-1 overflow-auto p-6">
-          <div className={`grid gap-4 ${candidates.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-            {candidates.map((candidate) => (
-              <div key={candidate.id} className="bg-gray-50 rounded-xl p-4 space-y-4">
-                <div className="text-center pb-4 border-b border-gray-200">
-                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <User className="w-8 h-8 text-blue-600" />
-                  </div>
-                  <h3 className="font-bold text-gray-900">{candidate.name}</h3>
-                  <p className="text-sm text-gray-500">{candidate.position}</p>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg">
-                    <span className="text-sm text-gray-600">Resume Match</span>
-                    <ScoreBadge score={candidate.resumeScore || 0} size="sm" />
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg">
-                    <span className="text-sm text-gray-600">Video Score</span>
-                    <ScoreBadge score={candidate.videoScore || 0} size="sm" />
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg">
-                    <span className="text-sm text-gray-600">Profile Fit</span>
-                    <ScoreBadge score={candidate.profileFit || 0} size="sm" />
-                  </div>
-                </div>
-                <div className="pt-4 border-t border-gray-200 flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">Overall Score</span>
-                  <span className="text-2xl font-bold text-blue-600">{candidate.overall}</span>
-                </div>
-                <StatusBadge status={candidate.status || 'shortlisted'} />
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-blue-600" />
-              Score Breakdown Comparison
-            </h3>
-            <div className="space-y-4">
-              {['Resume Match', 'Video Score', 'Profile Fit', 'Overall'].map((metric, idx) => {
-                const keys: ('resume' | 'video' | 'profile' | 'overall')[] = ['resume', 'video', 'profile', 'overall'];
-                const key = keys[idx];
-                return (
-                  <div key={metric} className="space-y-2">
-                    <span className="text-sm text-gray-600">{metric}</span>
-                    <div className={`grid gap-2 ${candidates.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                      {candidates.map((candidate) => {
-                        let score = 0;
-                        if (key === 'resume') score = candidate.resumeScore || 0;
-                        else if (key === 'video') score = candidate.videoScore || 0;
-                        else if (key === 'profile') score = candidate.profileFit || 0;
-                        else score = candidate.overall || 0;
-                        return (
-                          <div key={candidate.id} className="relative h-8 bg-gray-200 rounded-full overflow-hidden">
-                            <div className="absolute inset-y-0 left-0 bg-blue-500 transition-all duration-500" style={{ width: `${score}%` }} />
-                            <div className="absolute inset-0 flex items-center justify-center text-xs font-medium text-gray-700">
-                              {candidate.name.split(' ')[0]}: {score}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -838,7 +532,6 @@ interface ShortlistedCandidatesProps {
 export function ShortlistedCandidates({ applicants: externalApplicants, onNavigateToInterview, onApplicantStatusChanged }: ShortlistedCandidatesProps) {
   const [applicants, setApplicants] = useState<ApplicantWithDetails[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>('overall');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   // Pipeline stage filter: 'all' | 'shortlisted' | 'final_interview'
@@ -847,7 +540,6 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCandidate, setSelectedCandidate] = useState<ApplicantWithDetails | null>(null);
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(false);
-  const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [scoringSettings, setScoringSettings] = useState<ScoringSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -954,12 +646,17 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
       result = result.filter(a => a.status === statusFilter);
     }
 
-    // Department filter — resolve applicant.position to a department via job_postings lookup
-    // e.g. position "Data Engineer" → department "MIS / IT"
+    // Department filter — match applicant.position against department via job_postings lookup
+    // Uses partial matching so "Data Engineer" matches even if casing differs
     if (departmentFilter !== 'all') {
       result = result.filter(a => {
-        const dept = jobDepartmentMap[a.position?.toLowerCase() || ''];
-        return dept === departmentFilter;
+        const pos = a.position?.toLowerCase() || '';
+        // exact match first
+        if (jobDepartmentMap[pos] === departmentFilter) return true;
+        // partial match: check if any job title that belongs to this dept is contained in the position
+        return Object.entries(jobDepartmentMap).some(
+          ([title, dept]) => dept === departmentFilter && pos.includes(title)
+        );
       });
     }
 
@@ -989,19 +686,7 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
     setCurrentPage(1);
   };
 
-  const toggleSelection = (id: string) => {
-    const next = new Set(selectedCandidates);
-    next.has(id) ? next.delete(id) : next.add(id);
-    setSelectedCandidates(next);
-  };
-
-  const toggleAllSelection = () => {
-    if (selectedCandidates.size === paginatedApplicants.length) setSelectedCandidates(new Set());
-    else setSelectedCandidates(new Set(paginatedApplicants.map(a => a.id)));
-  };
-
   // Update applicant pipeline stage (shortlisted → final_interview)
-  // Rejected/hired transitions happen in InterviewScheduling, not here
   const handleStatusChange = useCallback(async (id: string, newStatus: string) => {
     try {
       const { error } = await supabase
@@ -1017,32 +702,15 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
 
       onApplicantStatusChanged?.();
 
-      // Navigate to Interview Scheduling when moving to final interview
-      if (newStatus === 'final_interview' && onNavigateToInterview) {
-        onNavigateToInterview(id);
-      }
+      // Don't navigate away — HR stays in the list to continue reviewing
+      // onNavigateToInterview is only called if HR explicitly wants to go schedule
     } catch (err) {
       console.error('Error updating status:', err);
     }
-  }, [selectedCandidate, onNavigateToInterview, onApplicantStatusChanged]);
-
-  const handleAddNote = useCallback((id: string, noteText: string) => {
-    const newNote: CandidateNote = {
-      id: Date.now().toString(),
-      text: noteText,
-      createdAt: new Date().toISOString(),
-      author: 'HR Manager',
-    };
-    setApplicants(prev => prev.map(a => a.id === id ? { ...a, notes: [...(a.notes || []), newNote] } : a));
-    if (selectedCandidate?.id === id) {
-      setSelectedCandidate(prev => prev ? { ...prev, notes: [...(prev.notes || []), newNote] } : null);
-    }
-  }, [selectedCandidate]);
+  }, [selectedCandidate, onApplicantStatusChanged]);
 
   const handleExport = (format: ExportFormat) => {
-    const data = selectedCandidates.size > 0
-      ? filteredApplicants.filter(a => selectedCandidates.has(a.id))
-      : filteredApplicants;
+    const data = filteredApplicants;
     if (format === 'csv') exportToCSV(data);
     else if (format === 'excel') exportToExcel(data);
     else exportToPDF(data);
@@ -1050,18 +718,27 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
   };
 
   const exportToCSV = (data: ApplicantWithDetails[]) => {
-    const headers = ['Name', 'Email', 'Position', 'Resume Score', 'Video Score', 'Profile Fit', 'Overall', 'Status'];
-    const rows = data.map(a => [a.name, a.email, a.position, a.resumeScore, a.videoScore, a.profileFit, a.overall, a.status]);
+    const headers = ['Name', 'Email', 'Position', 'Education', 'Resume Score', 'Video Score', 'Profile Fit', 'Overall', 'Status', 'Applied', 'Days in Stage'];
+    const rows = data.map(a => {
+      const edu = getParsedResumeData(a.resume)?.education?.[0]?.course_or_strand || '';
+      return [a.name, a.email, a.position, edu, a.resumeScore, a.videoScore, a.profileFit, a.overall, a.status, new Date(a.created_at).toLocaleDateString(), getDaysInStage(a)];
+    });
     downloadFile([headers.join(','), ...rows.map(r => r.join(','))].join('\n'), 'shortlisted-candidates.csv', 'text/csv');
   };
 
   const exportToExcel = (data: ApplicantWithDetails[]) => {
-    const html = `<table><tr><th>Name</th><th>Email</th><th>Position</th><th>Resume</th><th>Video</th><th>Overall</th><th>Status</th></tr>${data.map(a => `<tr><td>${a.name}</td><td>${a.email}</td><td>${a.position}</td><td>${a.resumeScore}</td><td>${a.videoScore}</td><td>${a.overall}</td><td>${a.status}</td></tr>`).join('')}</table>`;
+    const html = `<table><tr><th>Name</th><th>Email</th><th>Position</th><th>Education</th><th>Resume</th><th>Video</th><th>Profile Fit</th><th>Overall</th><th>Status</th><th>Applied</th><th>Days in Stage</th></tr>${data.map(a => {
+      const edu = getParsedResumeData(a.resume)?.education?.[0]?.course_or_strand || '';
+      return `<tr><td>${a.name}</td><td>${a.email}</td><td>${a.position}</td><td>${edu}</td><td>${a.resumeScore}</td><td>${a.videoScore}</td><td>${a.profileFit}</td><td>${a.overall}</td><td>${a.status}</td><td>${new Date(a.created_at).toLocaleDateString()}</td><td>${getDaysInStage(a)}</td></tr>`;
+    }).join('')}</table>`;
     downloadFile(html, 'shortlisted-candidates.xls', 'application/vnd.ms-excel');
   };
 
   const exportToPDF = (data: ApplicantWithDetails[]) => {
-    const html = `<!DOCTYPE html><html><head><title>Shortlisted Candidates</title></head><body><h1>Shortlisted Candidates Report</h1><p>Generated on ${new Date().toLocaleDateString()}</p><table border="1" cellpadding="8"><tr><th>Name</th><th>Position</th><th>Overall Score</th><th>Status</th></tr>${data.map(a => `<tr><td>${a.name}</td><td>${a.position}</td><td>${a.overall}</td><td>${a.status}</td></tr>`).join('')}</table></body></html>`;
+    const html = `<!DOCTYPE html><html><head><title>Shortlisted Candidates</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}th{background:#f3f4f6}</style></head><body><h1>Shortlisted Candidates Report</h1><p>Generated on ${new Date().toLocaleDateString()}</p><table><tr><th>Name</th><th>Position</th><th>Education</th><th>Overall</th><th>Status</th><th>Applied</th><th>Days in Stage</th></tr>${data.map(a => {
+      const edu = getParsedResumeData(a.resume)?.education?.[0]?.course_or_strand || '-';
+      return `<tr><td>${a.name}</td><td>${a.position}</td><td>${edu}</td><td>${a.overall}</td><td>${a.status}</td><td>${new Date(a.created_at).toLocaleDateString()}</td><td>${getDaysInStage(a)}</td></tr>`;
+    }).join('')}</table></body></html>`;
     const w = window.open('', '_blank');
     if (w) { w.document.write(html); w.document.close(); w.print(); }
   };
@@ -1075,15 +752,14 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
     document.body.removeChild(link); URL.revokeObjectURL(url);
   };
 
+  // Track which candidates HR has already opened this session
+  const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
+
   const openProfilePanel = (candidate: ApplicantWithDetails) => {
     setSelectedCandidate(candidate);
     setIsProfilePanelOpen(true);
+    setReviewedIds(prev => new Set(prev).add(candidate.id));
   };
-
-  const comparisonCandidates = useMemo(
-    () => filteredApplicants.filter(a => selectedCandidates.has(a.id)),
-    [filteredApplicants, selectedCandidates]
-  );
 
   if (loading) {
     return (
@@ -1115,15 +791,6 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
               <Download className="w-4 h-4" />
               Export
             </button>
-            {selectedCandidates.size >= 2 && (
-              <button
-                onClick={() => setIsComparisonOpen(true)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-              >
-                <Users className="w-4 h-4" />
-                Compare ({selectedCandidates.size})
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -1221,13 +888,6 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 w-10">
-                  <button onClick={toggleAllSelection} className="text-gray-400 hover:text-gray-600">
-                    {selectedCandidates.size === paginatedApplicants.length && paginatedApplicants.length > 0
-                      ? <CheckSquare className="w-5 h-5 text-blue-600" />
-                      : <Square className="w-5 h-5" />}
-                  </button>
-                </th>
                 <th onClick={() => handleSort('name')} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                   <div className="flex items-center gap-1">Candidate <SortIcon field="name" /></div>
                 </th>
@@ -1244,32 +904,42 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
                   <div className="flex items-center justify-center gap-1">Overall <SortIcon field="overall" /></div>
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th onClick={() => handleSort('date')} className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                  <div className="flex items-center justify-center gap-1">Applied <SortIcon field="date" /></div>
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {paginatedApplicants.map((applicant) => (
                 <tr
                   key={applicant.id}
-                  className="hover:bg-blue-50 cursor-pointer transition-colors"
+                  className={`cursor-pointer transition-colors ${
+                    reviewedIds.has(applicant.id) ? 'bg-gray-50 hover:bg-blue-50' : 'hover:bg-blue-50'
+                  }`}
                   onClick={() => openProfilePanel(applicant)}
                 >
-                  <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => toggleSelection(applicant.id)} className="text-gray-400 hover:text-gray-600">
-                      {selectedCandidates.has(applicant.id)
-                        ? <CheckSquare className="w-5 h-5 text-blue-600" />
-                        : <Square className="w-5 h-5" />}
-                    </button>
-                  </td>
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                        {applicant.photo_url
-                          ? <img src={applicant.photo_url} alt={applicant.name} className="w-10 h-10 rounded-full object-cover" />
-                          : <User className="w-5 h-5 text-blue-600" />}
+                      <div className="relative w-10 h-10 flex-shrink-0">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                          {applicant.photo_url
+                            ? <img src={applicant.photo_url} alt={applicant.name} className="w-10 h-10 rounded-full object-cover" />
+                            : <User className="w-5 h-5 text-blue-600" />}
+                        </div>
+                        {reviewedIds.has(applicant.id) && (
+                          <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-400 border-2 border-white rounded-full" title="Reviewed" />
+                        )}
                       </div>
                       <div>
                         <div className="font-medium text-gray-900">{applicant.name}</div>
                         <div className="text-sm text-gray-500">{applicant.position}</div>
+                        {(() => {
+                          const parsed = getParsedResumeData(applicant.resume);
+                          const edu = parsed?.education?.[0];
+                          return edu?.course_or_strand
+                            ? <div className="text-xs text-gray-400 mt-0.5">{edu.course_or_strand}</div>
+                            : null;
+                        })()}
                       </div>
                     </div>
                   </td>
@@ -1280,7 +950,22 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
                     <span className="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold">{applicant.overall}</span>
                   </td>
                   <td className="px-4 py-4 text-center">
-                    <StatusBadge status={applicant.status || 'shortlisted'} />
+                    <div className="flex flex-col items-center gap-1">
+                      <StatusBadge status={applicant.status || 'shortlisted'} />
+                      {applicant.status === 'final_interview' && (
+                        <span className="text-xs text-blue-500 flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          Ready to schedule
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    <div className="text-sm text-gray-600">{new Date(applicant.created_at).toLocaleDateString()}</div>
+                    <div className="text-xs text-gray-400 flex items-center justify-center gap-1 mt-0.5">
+                      <Clock className="w-3 h-3" />
+                      {getDaysInStage(applicant)}d in stage
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -1331,21 +1016,15 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
           isOpen={isProfilePanelOpen}
           onClose={() => setIsProfilePanelOpen(false)}
           onStatusChange={handleStatusChange}
-          onAddNote={handleAddNote}
+          onScheduleInterview={(id) => { setIsProfilePanelOpen(false); onNavigateToInterview?.(id); }}
         />
       )}
-
-      <ComparisonModal
-        candidates={comparisonCandidates}
-        isOpen={isComparisonOpen}
-        onClose={() => setIsComparisonOpen(false)}
-      />
 
       <ExportModal
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
         onExport={handleExport}
-        candidateCount={selectedCandidates.size || filteredApplicants.length}
+        candidateCount={filteredApplicants.length}
       />
 
       {isProfilePanelOpen && (
