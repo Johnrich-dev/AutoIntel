@@ -533,16 +533,16 @@ export function NeedsReview() {
         {/* Filters and Search Bar */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6">
           {/* Top Row */}
-          <div className="p-4 flex flex-wrap items-center gap-4">
+          <div className="p-4 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
             {/* Search */}
-            <div className="flex-1 min-w-[240px] relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <div className="flex-1 min-w-0 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by name or email..."
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                placeholder="Search candidate name or email..."
+                className="w-full h-10 pl-9 pr-4 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all"
               />
             </div>
 
@@ -554,13 +554,13 @@ export function NeedsReview() {
                 value: job.id,
                 label: `${job.title}${job.count > 0 ? ` (${job.count})` : ''}`
               }))}
-              className="min-w-[200px]"
+              width="w-full sm:w-52"
             />
 
             {/* Filter Toggle */}
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm font-medium transition-colors ${
+              className={`flex items-center justify-center gap-2 h-10 px-4 border rounded-lg text-sm font-medium transition-colors flex-shrink-0 ${
                 showFilters ? 'bg-amber-50 border-amber-200 text-amber-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
             >

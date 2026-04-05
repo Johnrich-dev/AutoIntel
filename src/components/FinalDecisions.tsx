@@ -359,16 +359,16 @@ export function FinalDecisions() {
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           {/* Search */}
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search by name, email, or position..."
+              placeholder="Search candidate name, email, or position..."
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              className="w-full h-10 pl-9 pr-4 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
             />
           </div>
 
@@ -377,7 +377,7 @@ export function FinalDecisions() {
             value={departmentFilter}
             onChange={(v) => { setDepartmentFilter(v); setCurrentPage(1); }}
             options={departments.map(d => ({ value: d, label: d === 'all' ? 'All Departments' : d }))}
-            icon={<Briefcase className="w-4 h-4" />}
+            width="w-full sm:w-52"
           />
 
           {/* Status */}
@@ -389,7 +389,7 @@ export function FinalDecisions() {
               { value: 'hired', label: 'Hired' },
               { value: 'rejected', label: 'Rejected' },
             ]}
-            icon={<CheckCircle className="w-4 h-4" />}
+            width="w-full sm:w-44"
           />
         </div>
       </div>

@@ -1177,16 +1177,16 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
 
       {/* Filters Bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-        <div className="flex flex-col lg:flex-row gap-3">
-          {/* Search — ~45% width */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Search */}
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search by name, email, or position..."
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Search candidate name, email, or position..."
+              className="w-full h-10 pl-9 pr-4 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
             />
           </div>
 
@@ -1198,9 +1198,10 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
               { value: 'all', label: 'All Departments' },
               ...departments.map(dept => ({ value: dept, label: dept }))
             ]}
+            width="w-full sm:w-52"
           />
 
-          {/* Status dropdown (mirrors filter chips) */}
+          {/* Status filter */}
           <FilterDropdown
             value={statusFilter}
             onChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}
@@ -1209,6 +1210,7 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
               { value: 'shortlisted', label: 'Shortlisted' },
               { value: 'final_interview', label: 'Final Interview' },
             ]}
+            width="w-full sm:w-48"
           />
         </div>
       </div>

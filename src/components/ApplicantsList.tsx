@@ -9,7 +9,6 @@ import {
   CheckCircle,
   XCircle,
   ExternalLink,
-  Briefcase,
   Users,
   Loader2
 } from 'lucide-react';
@@ -446,53 +445,39 @@ export function ApplicantsList() {
         </div>
 
         {/* Filters Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Job Selector */}
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Briefcase className="w-4 h-4 inline mr-1.5 text-gray-400" />
-                Job Position
-              </label>
-              <FilterDropdown
-                value={selectedJobId || ''}
-                onChange={(v) => setSelectedJobId(v === '' ? null : v)}
-                options={[
-                  { value: '', label: 'All Jobs' },
-                  ...positions.map(pos => ({ value: pos.position, label: `${pos.position} (${pos.count})` }))
-                ]}
-                className={isFetchingJobs ? 'opacity-50 pointer-events-none' : ''}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Search — takes most space */}
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search applicant name or email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-10 pl-9 pr-10 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
               />
+              <button
+                onClick={() => fetchApplicantsList()}
+                disabled={isLoading}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50"
+                title="Refresh list"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
             </div>
 
-            {/* Search */}
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Search className="w-4 h-4 inline mr-1.5 text-gray-400" />
-                Search
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by name or email..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 hover:bg-gray-100 transition-colors"
-                />
-                <button
-                  onClick={() => fetchApplicantsList()}
-                  disabled={isLoading}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50"
-                  title="Refresh list"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
-            </div>
+            {/* Job Position filter */}
+            <FilterDropdown
+              value={selectedJobId || ''}
+              onChange={(v) => setSelectedJobId(v === '' ? null : v)}
+              options={[
+                { value: '', label: 'All Positions' },
+                ...positions.map(pos => ({ value: pos.position, label: `${pos.position} (${pos.count})` }))
+              ]}
+              width={`w-full sm:w-56 ${isFetchingJobs ? 'opacity-50 pointer-events-none' : ''}`}
+            />
           </div>
-
-
         </div>
 
         {/* Table Card */}

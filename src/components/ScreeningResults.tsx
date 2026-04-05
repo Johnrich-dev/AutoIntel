@@ -450,27 +450,28 @@ export function ScreeningResults() {
       {/* Filters */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
         {/* Primary row: search + job + filters button */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
-              type="text" placeholder="Search by name or job..." value={searchQuery}
+              type="text" placeholder="Search candidate name or position..." value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              className="w-full h-10 pl-9 pr-4 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
             />
           </div>
           <FilterDropdown
             value={selectedJob}
             onChange={(v) => setSelectedJob(v)}
             options={[
-              { value: 'all', label: 'All Jobs' },
+              { value: 'all', label: 'All Positions' },
               ...jobs.map(j => ({ value: j.title, label: `${j.title} (${j.count})` }))
             ]}
+            width="w-full sm:w-52"
           />
           {/* Filters toggle */}
           <button
             onClick={() => setShowFilters(f => !f)}
-            className={`relative flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm font-medium transition-colors ${
+            className={`relative flex items-center justify-center gap-2 h-10 px-4 border rounded-lg text-sm font-medium transition-colors flex-shrink-0 ${
               showFilters || hasActiveFilters
                 ? 'bg-blue-50 border-blue-200 text-blue-700'
                 : 'border-gray-200 text-gray-600 hover:bg-gray-50'

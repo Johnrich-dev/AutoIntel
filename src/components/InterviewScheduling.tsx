@@ -900,7 +900,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [calendarView, setCalendarView] = useState<CalendarView>('week');
   const [interviews, setInterviews] = useState<ScheduledInterview[]>([]);
-  const [selectedJob, setSelectedJob] = useState<string>('all');
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [dateFilter, setDateFilter] = useState<string>('');
@@ -1060,15 +1060,18 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
   // Filter interviews
   const filteredInterviews = useMemo(() => {
     return interviews.filter((interview) => {
-      // Job filter
-      if (selectedJob !== 'all' && interview.jobTitle !== selectedJob) {
-        return false;
+      // Department filter — match via jobs lookup
+      if (selectedDepartment !== 'all') {
+        const job = jobs.find(j => j.title === interview.jobTitle);
+        if (!job || job.department !== selectedDepartment) return false;
       }
 
       // Search filter
       if (
         searchQuery &&
-        !interview.applicantName.toLowerCase().includes(searchQuery.toLowerCase())
+        !interview.applicantName.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !interview.applicantEmail.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !interview.jobTitle.toLowerCase().includes(searchQuery.toLowerCase())
       ) {
         return false;
       }
@@ -1085,7 +1088,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
 
       return true;
     });
-  }, [interviews, selectedJob, searchQuery, statusFilter, dateFilter]);
+  }, [interviews, selectedDepartment, searchQuery, statusFilter, dateFilter, jobs]);
 
   // Pagination
   const totalPages = Math.ceil(filteredInterviews.length / itemsPerPage);
@@ -1369,66 +1372,62 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
 
       {/* Top Section: Filters and Actions */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
-        <div className="flex flex-col lg:flex-row gap-4">
-          {/* Left side: Filters */}
-          <div className="flex-1 flex flex-col sm:flex-row gap-3">
-            {/* Job Selector */}
-            <FilterDropdown
-              value={selectedJob}
-              onChange={(v) => setSelectedJob(v)}
-              options={[
-                { value: 'all', label: 'All Jobs' },
-                ...jobs.map(job => ({ value: job.title, label: job.title }))
-              ]}
-              className="w-full sm:w-48"
-            />
-
-            {/* Search Bar */}
-            <div className="relative flex-1 max-w-xs">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <div className="flex flex-col xl:flex-row gap-3">
+          {/* Filters row */}
+          <div className="flex flex-1 flex-col sm:flex-row gap-3">
+            {/* Search — takes most space */}
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search by applicant name..."
+                placeholder="Search candidate name, email, or position..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full h-10 pl-9 pr-4 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
               />
             </div>
 
-            {/* Status Filter */}
+            {/* Department filter */}
+            <FilterDropdown
+              value={selectedDepartment}
+              onChange={(v) => { setSelectedDepartment(v); setCurrentPage(1); }}
+              options={[
+                { value: 'all', label: 'All Departments' },
+                ...Array.from(new Set(jobs.map(j => j.department).filter(Boolean))).sort().map(d => ({ value: d!, label: d! }))
+              ]}
+              width="w-full sm:w-48"
+            />
+
+            {/* Status filter */}
             <FilterDropdown
               value={statusFilter}
-              onChange={(v) => setStatusFilter(v as StatusFilter)}
+              onChange={(v) => { setStatusFilter(v as StatusFilter); setCurrentPage(1); }}
               options={[
-                { value: 'all', label: 'All Status' },
+                { value: 'all', label: 'All Statuses' },
                 { value: 'scheduled', label: 'Scheduled' },
                 { value: 'completed', label: 'Completed' },
                 { value: 'cancelled', label: 'Cancelled' },
               ]}
-              className="w-full sm:w-40"
+              width="w-full sm:w-44"
             />
 
-            {/* Date Filter */}
-            <div className="w-full sm:w-40">
-              <input
-                type="date"
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
+            {/* Date filter */}
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="h-10 px-3 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 w-full sm:w-44"
+            />
           </div>
 
-          {/* Right side: Actions */}
-          <div className="flex items-center gap-3">
+          {/* Actions */}
+          <div className="flex items-center gap-3 flex-shrink-0">
             {/* View Toggle */}
-            <div className="flex bg-gray-100 rounded-lg p-1">
+            <div className="flex bg-gray-100 rounded-lg p-1 h-10">
               <button
                 onClick={() => setViewMode('table')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  viewMode === 'table'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                className={`flex items-center gap-1.5 px-3 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'table' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <List className="w-4 h-4" />
@@ -1436,10 +1435,8 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
               </button>
               <button
                 onClick={() => setViewMode('calendar')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  viewMode === 'calendar'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                className={`flex items-center gap-1.5 px-3 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'calendar' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <CalendarDays className="w-4 h-4" />
@@ -1449,11 +1446,8 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
 
             {/* Schedule Interview Button */}
             <button
-              onClick={() => {
-                setEditingInterview(null);
-                setShowScheduleModal(true);
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              onClick={() => { setEditingInterview(null); setShowScheduleModal(true); }}
+              className="flex items-center gap-2 h-10 px-4 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors whitespace-nowrap"
             >
               <Plus className="w-4 h-4" />
               Schedule Interview
