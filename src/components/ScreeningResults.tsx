@@ -245,19 +245,34 @@ export function ScreeningResults() {
         }
 
         if (parsedData) {
-          // Parser stores skills as a flat array under parsedData.skills (not hard_skills)
+          // Collect ALL skills from parsed_data — no cap
+          const allResumeSkills: string[] = [];
           if (Array.isArray(parsedData.skills)) {
-            matchedSkills = parsedData.skills.slice(0, 12);
+            allResumeSkills.push(...parsedData.skills);
           } else if (parsedData.skills?.hard_skills && Array.isArray(parsedData.skills.hard_skills)) {
-            matchedSkills = parsedData.skills.hard_skills.slice(0, 12);
+            allResumeSkills.push(...parsedData.skills.hard_skills);
           } else if (parsedData.skills && typeof parsedData.skills === 'object') {
-            const allSkills: string[] = [];
             Object.values(parsedData.skills).forEach((v: any) => {
-              if (Array.isArray(v)) allSkills.push(...v);
-              else if (typeof v === 'string') allSkills.push(v);
+              if (Array.isArray(v)) allResumeSkills.push(...v);
+              else if (typeof v === 'string') allResumeSkills.push(v);
             });
-            matchedSkills = allSkills.slice(0, 12);
           }
+          // Also pull tech keywords mentioned in experience descriptions
+          if (Array.isArray(parsedData.experience)) {
+            parsedData.experience.forEach((exp: any) => {
+              const desc = [exp.description, exp.role, exp.company].filter(Boolean).join(' ');
+              const techMatches = desc.match(/\b(ETL|AWS|GCP|Azure|Spark|Hadoop|Airflow|Kafka|Docker|Kubernetes|MongoDB|Redis|Linux|Scala|Terraform|Ansible|Jenkins|CI\/CD|n8n|Talend|SAP|Flask|Django|FastAPI|React|Angular|Vue|TypeScript|PostgreSQL|MySQL|MSSQL|Git|GitHub)\b/gi) || [];
+              allResumeSkills.push(...techMatches);
+            });
+          }
+          // Deduplicate and display up to 20 for the UI
+          const seen = new Set<string>();
+          const deduped: string[] = [];
+          for (const s of allResumeSkills) {
+            const key = s.toLowerCase();
+            if (!seen.has(key)) { seen.add(key); deduped.push(s); }
+          }
+          matchedSkills = deduped.slice(0, 20);
 
           // Compute sub-scores from parsed data only if not already set from resume_scores
           if (skillsScore === null && experienceScore === null && educationScore === null) {
@@ -293,9 +308,68 @@ export function ScreeningResults() {
               else if (pos.includes('ml') || pos.includes('machine learning')) requiredSkills = ['Python', 'TensorFlow', 'PyTorch', 'Machine Learning', 'SQL'];
               else requiredSkills = ['Python', 'SQL', 'JavaScript', 'Git'];
             }
-            const matchedLower = matchedSkills.map(s => s.toLowerCase());
-            missingSkills = requiredSkills.filter(s =>
-              !matchedLower.some(ms => ms.includes(s.toLowerCase()) || s.toLowerCase().includes(ms)));
+            // Aliases: maps abbreviation ↔ full name so "aws" matches "amazon web services", etc.
+            const SKILL_ALIASES: Record<string, string[]> = {
+              'aws':        ['amazon web services', 'aws cloud', 'aws s3', 'aws ec2', 'aws lambda', 'aws rds', 'aws automation', 'aws databases'],
+              'gcp':        ['google cloud', 'google cloud platform', 'google cloud platforms'],
+              'azure':      ['microsoft azure', 'azure fundamentals', 'azure basics'],
+              'etl':        ['etl pipelines', 'etl pipeline', 'etl tools', 'extract transform load'],
+              'spark':      ['apache spark', 'pyspark', 'spark sql'],
+              'airflow':    ['apache airflow'],
+              'hadoop':     ['apache hadoop', 'hdfs', 'mapreduce'],
+              'kafka':      ['apache kafka'],
+              'sql':        ['mysql', 'postgresql', 'postgres', 'mssql', 'ms sql server', 'sqlite', 'supabase'],
+              'nosql':      ['mongodb', 'cassandra', 'dynamodb', 'redis', 'firebase'],
+              'mongodb':    ['mongo'],
+              'linux':      ['unix', 'bash', 'shell scripting'],
+              'python':     ['py', 'django', 'flask', 'fastapi'],
+              'javascript': ['js', 'node.js', 'nodejs', 'react', 'vue', 'angular', 'typescript'],
+              'docker':     ['containerization', 'containers'],
+              'kubernetes': ['k8s'],
+              'git':        ['github', 'gitlab', 'version control', 'git/github'],
+              'dotnet':     ['.net', '.net framework', 'asp.net', 'asp.net core', 'asp.net mvc', 'dotnet core'],
+              'csharp':     ['c#', 'c sharp'],
+              'vb.net':     ['visual basic', 'vb'],
+              'mssql':      ['ms sql', 'ms sql server', 'microsoft sql server', 'mssql server'],
+              'entity framework': ['ef core', 'entity framework core'],
+              'unit testing': ['nunit', 'xunit', 'mstest', 'jest', 'pytest'],
+              'data modeling': ['data models', 'schema design', 'database design'],
+              'data structures': ['algorithms', 'data structure'],
+              'analytical thinking': ['analytical skills', 'data analysis', 'eda', 'exploratory data analysis'],
+              'scala':      ['scala basics'],
+            };
+
+            // Build a flat lookup: every alias → canonical key
+            const aliasToCanon: Record<string, string> = {};
+            for (const [canon, aliases] of Object.entries(SKILL_ALIASES)) {
+              aliasToCanon[canon] = canon;
+              for (const a of aliases) aliasToCanon[a] = canon;
+            }
+
+            // Strip qualifier suffixes: "airflow basics" → "airflow"
+            const stripQualifiers = (s: string) =>
+              s.toLowerCase()
+               .replace(/\b(basics?|fundamentals?|introduction|intro|beginner|advanced|essentials?|overview|tools?|cloud)\b/g, '')
+               .replace(/\s+/g, ' ')
+               .trim();
+
+            const canonicalize = (s: string): string => {
+              const stripped = stripQualifiers(s);
+              return aliasToCanon[stripped] ?? aliasToCanon[s.toLowerCase()] ?? stripped;
+            };
+
+            // Use ALL resume skills (deduped) for gap comparison, not the display-capped list
+            const matchedCanon = deduped.map(canonicalize);
+
+            missingSkills = requiredSkills.filter(req => {
+              const reqCanon = canonicalize(req);
+              const reqStripped = stripQualifiers(req);
+              return !matchedCanon.some(mc =>
+                mc === reqCanon ||
+                mc.includes(reqStripped) || reqStripped.includes(mc) ||
+                mc.includes(reqCanon)    || reqCanon.includes(mc)
+              );
+            });
           }
         }
 

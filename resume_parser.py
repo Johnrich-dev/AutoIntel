@@ -642,6 +642,67 @@ def parse_trainings_section(text: str) -> list[dict[str, str | None]]:
     return trainings
 
 
+def _fix_pdf_spacing(text: str) -> str:
+    """
+    Fix character-spacing artifacts produced by some PDF extractors.
+    Kept in sync with clean_extracted_text() in resume_collector.py.
+    """
+    import unicodedata
+    text = unicodedata.normalize('NFKC', text)
+
+    def collapse_line(line: str) -> str:
+        tokens = line.split(' ')
+        result = []
+        i = 0
+        while i < len(tokens):
+            tok = tokens[i]
+            tok_alpha = tok.rstrip('.,;:!?)')
+            tok_punct = tok[len(tok_alpha):]
+            if len(tok_alpha) == 1 and tok_alpha.isalpha():
+                run = [tok_alpha]
+                run_punct = [tok_punct]
+                j = i + 1
+                seen_lower = tok_alpha.islower()
+                while j < len(tokens):
+                    nt = tokens[j]
+                    nt_alpha = nt.rstrip('.,;:!?)')
+                    nt_punct = nt[len(nt_alpha):]
+                    if len(nt_alpha) == 1 and nt_alpha.isalpha():
+                        if nt_alpha.isupper() and seen_lower:
+                            break
+                        run.append(nt_alpha)
+                        run_punct.append(nt_punct)
+                        if nt_alpha.islower():
+                            seen_lower = True
+                        j += 1
+                    else:
+                        break
+                suffix_punct = ''
+                if j < len(tokens) and len(tokens[j]) >= 2 and len(run) <= 2:
+                    nt = tokens[j]
+                    nt_alpha = nt.rstrip('.,;:!?)')
+                    nt_punct = nt[len(nt_alpha):]
+                    if nt_alpha.isalpha():
+                        run.append(nt_alpha)
+                        suffix_punct = nt_punct
+                        j += 1
+                if len(run) >= 3:
+                    last_punct = suffix_punct or run_punct[-1]
+                    result.append(''.join(run) + last_punct)
+                    i = j
+                else:
+                    result.append(tok)
+                    i += 1
+            else:
+                result.append(tok)
+                i += 1
+        return ' '.join(result)
+
+    text = '\n'.join(collapse_line(line) for line in text.splitlines())
+    text = re.sub(r'\b([A-Z]) ([A-Z])\b', lambda m: m.group(1) + m.group(2), text)
+    return text
+
+
 def parse_resume(raw_text: str) -> dict[str, Any]:
     if not raw_text or len(raw_text.strip()) < 50:
         return {
@@ -659,6 +720,9 @@ def parse_resume(raw_text: str) -> dict[str, Any]:
             "cleaned_resume_text": None,
             "error": "Insufficient content to parse",
         }
+
+    # Fix PDF spacing artifacts before any further processing
+    raw_text = _fix_pdf_spacing(raw_text)
 
     if not GPT_CLEANER_AVAILABLE:
         raise RuntimeError("GPT cleaner (gpt_extractor.py) is required.")
