@@ -1770,6 +1770,119 @@ def hr_decision():
         }), 500
 
 
+@app.route('/api/send-offer-email', methods=['POST'])
+def send_offer_email_endpoint():
+    """
+    Send a job offer email to a hired candidate with an attachment.
+
+    Accepts multipart/form-data:
+      - applicant_name, applicant_email, job_title, department
+      - email_subject, email_body, cc (optional)
+      - attachment_url (Supabase public URL, optional)
+      - attachment (file upload, optional)
+
+    IMAP SAFETY: Subject must NOT start with "Applicant -"
+    """
+    import tempfile
+    import email_service
+
+    try:
+        applicant_name  = request.form.get('applicant_name', '')
+        applicant_email = request.form.get('applicant_email', '')
+        job_title       = request.form.get('job_title', '')
+        department      = request.form.get('department', '')
+        email_subject   = request.form.get('email_subject', f'Job Offer – {job_title}')
+        email_body      = request.form.get('email_body', '')
+        cc              = request.form.get('cc', '') or None
+
+        if not applicant_email or not email_subject:
+            return jsonify({"success": False, "error": "applicant_email and email_subject are required"}), 400
+
+        # IMAP safety guard
+        if email_subject.strip().lower().startswith('applicant -'):
+            return jsonify({"success": False, "error": "Subject must not start with 'Applicant -'"}), 400
+
+        attachment_path = None
+        attachment_filename = None
+        tmp_file = None
+
+        uploaded_file = request.files.get('attachment')
+        if uploaded_file and uploaded_file.filename:
+            suffix = '.' + uploaded_file.filename.rsplit('.', 1)[-1] if '.' in uploaded_file.filename else ''
+            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            uploaded_file.save(tmp_file.name)
+            attachment_path = tmp_file.name
+            attachment_filename = uploaded_file.filename
+
+        sent = email_service.send_offer_email(
+            applicant_name=applicant_name,
+            applicant_email=applicant_email,
+            job_title=job_title,
+            department=department,
+            email_subject=email_subject,
+            email_body=email_body,
+            attachment_path=attachment_path,
+            attachment_filename=attachment_filename,
+            cc=cc,
+        )
+
+        if tmp_file:
+            import os as _os
+            try: _os.unlink(tmp_file.name)
+            except Exception: pass
+
+        if sent:
+            return jsonify({"success": True, "message": f"Offer email sent to {applicant_email}"}), 200
+        return jsonify({"success": False, "error": "Failed to send offer email"}), 500
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/send-rejection-email', methods=['POST'])
+def send_rejection_email_endpoint():
+    """
+    Send a post-interview rejection email to a candidate.
+
+    Request body (JSON):
+      - applicant_name, applicant_email
+      - email_subject, email_body
+      - cc (optional)
+
+    IMAP SAFETY: Subject must NOT start with "Applicant -"
+    """
+    import email_service
+
+    try:
+        data = request.get_json(force=True) or {}
+        applicant_name  = data.get('applicant_name', '')
+        applicant_email = data.get('applicant_email', '')
+        email_subject   = data.get('email_subject', '')
+        email_body      = data.get('email_body', '')
+        cc              = data.get('cc', '') or None
+
+        if not applicant_email or not email_subject:
+            return jsonify({"success": False, "error": "applicant_email and email_subject are required"}), 400
+
+        if email_subject.strip().lower().startswith('applicant -'):
+            return jsonify({"success": False, "error": "Subject must not start with 'Applicant -'"}), 400
+
+        sent = email_service.send_rejection_email(
+            applicant_name=applicant_name,
+            applicant_email=applicant_email,
+            email_subject=email_subject,
+            email_body=email_body,
+            cc=cc,
+        )
+
+        if sent:
+            return jsonify({"success": True, "message": f"Rejection email sent to {applicant_email}"}), 200
+        return jsonify({"success": False, "error": "Failed to send rejection email"}), 500
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("AutoIntel Scoring API")

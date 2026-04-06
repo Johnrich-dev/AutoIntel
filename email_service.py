@@ -1192,6 +1192,155 @@ def send_interviewer_notification(
     return send_email(to_email=interviewer_email, subject=subject, body=body_html)
 
 
+def send_offer_email(
+    applicant_name: str,
+    applicant_email: str,
+    job_title: str,
+    department: str,
+    email_subject: str,
+    email_body: str,
+    attachment_path: Optional[str] = None,
+    attachment_filename: Optional[str] = None,
+    cc: Optional[str] = None,
+    reply_to: Optional[str] = None,
+) -> bool:
+    """
+    Send a job offer email to a hired candidate.
+
+    IMAP SAFETY: Subject must NOT start with "Applicant -" to avoid
+    being parsed by the resume intake system.
+    Recommended prefix: "Job Offer –"
+
+    Args:
+        applicant_name: Candidate's full name
+        applicant_email: Candidate's email address
+        job_title: Position offered
+        department: Department name
+        email_subject: Editable subject (e.g. "Job Offer – Data Engineer")
+        email_body: HTML or plain-text body (HR-authored)
+        attachment_path: Local path to offer letter file (optional)
+        attachment_filename: Display filename for attachment (optional)
+        cc: CC email address (optional)
+        reply_to: Reply-To address (defaults to FROM_EMAIL)
+
+    Returns:
+        True if sent successfully
+    """
+    import base64
+    from email.mime.base import MIMEBase
+    from email import encoders
+
+    if not SMTP_HOST or not SMTP_USER:
+        print("Email configuration missing.")
+        return False
+
+    # IMAP safety guard
+    if email_subject.strip().lower().startswith("applicant -"):
+        print("ERROR: Offer email subject must not start with 'Applicant -' (IMAP parser conflict).")
+        return False
+
+    try:
+        msg = MIMEMultipart('mixed')
+        msg['From'] = f"{FROM_NAME} <{FROM_EMAIL}>"
+        msg['To'] = applicant_email
+        msg['Subject'] = email_subject
+        msg['Reply-To'] = reply_to or FROM_EMAIL
+        if cc:
+            msg['Cc'] = cc
+
+        # Body
+        alt = MIMEMultipart('alternative')
+        alt.attach(MIMEText(email_body, 'plain', 'utf-8'))
+        alt.attach(MIMEText(email_body, 'html', 'utf-8'))
+        msg.attach(alt)
+
+        # Attachment
+        if attachment_path:
+            with open(attachment_path, 'rb') as f:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(f.read())
+            encoders.encode_base64(part)
+            fname = attachment_filename or attachment_path.split('/')[-1]
+            part.add_header('Content-Disposition', 'attachment', filename=fname)
+            msg.attach(part)
+
+        recipients = [applicant_email] + ([cc] if cc else [])
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.sendmail(FROM_EMAIL, recipients, msg.as_string())
+        server.quit()
+
+        print(f"Offer email sent to {applicant_email}")
+        return True
+
+    except Exception as e:
+        print(f"Failed to send offer email: {str(e)}")
+        return False
+
+
+def send_rejection_email(
+    applicant_name: str,
+    applicant_email: str,
+    email_subject: str,
+    email_body: str,
+    cc: Optional[str] = None,
+    reply_to: Optional[str] = None,
+) -> bool:
+    """
+    Send a post-interview rejection email to a candidate.
+
+    IMAP SAFETY: Subject must NOT start with "Applicant -" to avoid
+    being parsed by the resume intake system.
+    Recommended prefix: "Application Update –"
+
+    Args:
+        applicant_name: Candidate's full name
+        applicant_email: Candidate's email address
+        email_subject: Editable subject (e.g. "Application Update – Marketing Assistant")
+        email_body: HTML or plain-text body (HR-authored)
+        cc: CC email address (optional)
+        reply_to: Reply-To address (defaults to FROM_EMAIL)
+
+    Returns:
+        True if sent successfully
+    """
+    if not SMTP_HOST or not SMTP_USER:
+        print("Email configuration missing.")
+        return False
+
+    # IMAP safety guard
+    if email_subject.strip().lower().startswith("applicant -"):
+        print("ERROR: Rejection email subject must not start with 'Applicant -' (IMAP parser conflict).")
+        return False
+
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['From'] = f"{FROM_NAME} <{FROM_EMAIL}>"
+        msg['To'] = applicant_email
+        msg['Subject'] = email_subject
+        msg['Reply-To'] = reply_to or FROM_EMAIL
+        if cc:
+            msg['Cc'] = cc
+
+        msg.attach(MIMEText(email_body, 'plain', 'utf-8'))
+        msg.attach(MIMEText(email_body, 'html', 'utf-8'))
+
+        recipients = [applicant_email] + ([cc] if cc else [])
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.sendmail(FROM_EMAIL, recipients, msg.as_string())
+        server.quit()
+
+        print(f"Rejection email sent to {applicant_email}")
+        return True
+
+    except Exception as e:
+        print(f"Failed to send rejection email: {str(e)}")
+        return False
+
+
 if __name__ == "__main__":
     # Test email sending (requires SMTP configuration in .env)
     print("Email Service for AutoIntel")

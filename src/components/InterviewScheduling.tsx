@@ -1009,11 +1009,12 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
       }
 
       // Load scheduled interviews from the database only
+      // Join applicant status so we can exclude hired/rejected candidates
       const { data: scheduledData, error: scheduledError } = await adminClient
         .from('scheduled_interviews')
         .select(`
           *,
-          applicant:applicant_id(name, email, position),
+          applicant:applicant_id(name, email, position, status),
           interviewer:interviewer_id(name, email),
           job:job_id(title)
         `)
@@ -1024,6 +1025,10 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
 
       if (scheduledData && scheduledData.length > 0) {
         for (const record of scheduledData) {
+          // Skip candidates who have already been hired or rejected
+          const applicantStatus = record.applicant?.status;
+          if (applicantStatus === 'hired' || applicantStatus === 'rejected') continue;
+
           combinedInterviews.push({
             id: record.id,
             applicantId: record.applicant_id,
@@ -1256,35 +1261,21 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
   };
 
   const handleMarkHired = async (applicantId: string) => {
-    if (!confirm('Are you sure you want to mark this applicant as HIRED? This will update their status and send a confirmation email.')) {
+    if (!confirm('Mark this applicant as HIRED? They will move to Final Decisions where you can send the offer email.')) {
       return;
     }
-    
+
     setNotification(null);
-    
+
     try {
       const adminClient = getSupabaseAdminClient();
-      
-      // Update applicant's status to hired and record decision date
       const now = new Date().toISOString();
       await adminClient
         .from('applicants')
-        .update({ status: 'hired', decision_date: now, updated_at: now })
+        .update({ status: 'hired', decision_date: now })
         .eq('id', applicantId);
-      
-      // Optionally notify the applicant via API
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      try {
-        await fetch(`${apiUrl}/api/send-hired-notification`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ applicant_id: applicantId })
-        });
-      } catch (apiError) {
-        console.log('Could not send hired notification email:', apiError);
-      }
-      
-      setNotification({ type: 'success', message: 'Applicant marked as HIRED! Confirmation email sent.' });
+
+      setNotification({ type: 'success', message: 'Applicant marked as Hired. Send the offer email from Final Decisions.' });
       setViewingInterview(null);
       loadData();
     } catch (error) {
