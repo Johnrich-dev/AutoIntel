@@ -264,6 +264,7 @@ export function ScreeningResults() {
             if (matchedSkills.length > 0 || parsedData.experience?.length > 0 || parsedData.education?.length > 0) {
               skillsScore = Math.min(Math.round((matchedSkills.length / 15) * 100), 100);
               experienceScore = Math.min(Math.round(((parsedData.experience?.length || 0) / 5) * 100), 100);
+              // Fallback: count-based education score (used only when no requirement-match data available)
               educationScore = Math.min(Math.round(((parsedData.education?.length || 0) / 3) * 100), 100);
             }
           }

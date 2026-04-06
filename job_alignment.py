@@ -792,74 +792,174 @@ def calculate_projects_keyword_match(
     return round(match_percentage, 2)
 
 
+def _normalize_degree(text: str) -> str:
+    """Normalize degree abbreviations and common variants to a canonical form."""
+    t = text.lower().strip()
+    # Degree level normalization
+    t = re.sub(r'\bb\.?\s*s\.?\b', 'bachelor of science', t)
+    t = re.sub(r'\bb\.?\s*a\.?\b', 'bachelor of arts', t)
+    t = re.sub(r'\bb\.?\s*e\.?\b', 'bachelor of engineering', t)
+    t = re.sub(r'\bb\.?\s*tech\.?\b', 'bachelor of technology', t)
+    t = re.sub(r'\bm\.?\s*s\.?\b', 'master of science', t)
+    t = re.sub(r'\bm\.?\s*a\.?\b', 'master of arts', t)
+    t = re.sub(r'\bm\.?\s*e\.?\b', 'master of engineering', t)
+    t = re.sub(r'\bm\.?\s*tech\.?\b', 'master of technology', t)
+    t = re.sub(r'\bm\.?\s*b\.?\s*a\.?\b', 'master of business administration', t)
+    t = re.sub(r'\bph\.?\s*d\.?\b', 'doctor of philosophy', t)
+    return t
+
+
+def _degree_level(text: str) -> str:
+    """Return a canonical degree level string from text."""
+    t = text.lower()
+    if any(w in t for w in ['doctor', 'phd', 'ph.d']):
+        return 'doctorate'
+    if any(w in t for w in ['master', 'msc', 'm.sc', 'mba', 'm.b.a']):
+        return 'master'
+    if any(w in t for w in ['bachelor', 'bsc', 'b.sc', 'bscs', 'bsit', 'bsece', 'bsee',
+                             'bsme', 'bsie', 'bsba', 'bsn', 'bsed', 'bsmath', 'bsstat',
+                             'bsphysics', 'bschem', 'bsacct', 'bsfinance', 'bshrm',
+                             'bscs', 'bsit', 'bsis', 'bsece', 'bsee', 'bsme', 'bsie',
+                             'b.s.', 'b.a.', 'b.e.', 'b.tech', 'ab ', 'a.b.']):
+        return 'bachelor'
+    if any(w in t for w in ['associate', 'a.a.', 'a.s.']):
+        return 'associate'
+    if any(w in t for w in ['diploma', 'certificate', 'vocational', 'tesda', 'nc ii', 'nc ii']):
+        return 'diploma'
+    return ''
+
+
+def _extract_major(text: str) -> str:
+    """Extract the field/major from an education requirement or degree string."""
+    t = text.lower()
+    # Strip common degree prefixes to isolate the major
+    for prefix in [
+        'bachelor of science in', 'bachelor of arts in', 'bachelor of engineering in',
+        'bachelor of technology in', 'bachelor of business administration in',
+        'master of science in', 'master of arts in', 'master of engineering in',
+        'master of technology in', 'master of business administration',
+        'doctor of philosophy in', 'bachelor in', 'master in',
+        'bs ', 'ba ', 'ms ', 'ma ', 'mba', 'phd',
+    ]:
+        if prefix in t:
+            t = t.replace(prefix, '').strip()
+    return t.strip()
+
+
 def calculate_education_keyword_match(
     resume_education: List[Dict],
     required_education: List[str]
 ) -> float:
     """
-    Calculate education relevance using keyword matching.
-    
+    Calculate education relevance using keyword matching with exact-degree detection.
+
+    Returns 100.0 when the applicant's parsed education contains an exact (or
+    strongly equivalent) match for ANY of the required/accepted degrees.
+    Falls back to partial keyword scoring when no exact match is found.
+
     Args:
         resume_education: List of education entries from resume
-        required_education: List of required education from job
-    
+        required_education: List of required education strings from job posting
+
     Returns:
-        Match score from 0-100
+        Match score from 0-100 (100 = full match)
     """
     if not required_education:
         return 50.0  # No requirements, give half credit
-    
+
     if not resume_education:
         return 0.0
-    
-    # Extract education texts and check each entry
-    matched_edu = set()
-    
+
+    # ------------------------------------------------------------------ #
+    # Build a flat list of normalised strings from the applicant's resume  #
+    # ------------------------------------------------------------------ #
+    resume_edu_texts = []
     for edu in resume_education:
-        # Get all fields from education entry - handle both field name variations and None values
         school = str(edu.get('school') or '').lower()
-        # Handle both 'course' and 'course_or_strand' field names
-        course = edu.get('course') or edu.get('course_or_strand') or ''
-        course = course.lower() if course else ''
+        course = (edu.get('course') or edu.get('course_or_strand') or '').lower()
         degree = str(edu.get('degree') or '').lower()
-        # Combine all fields for matching
-        edu_text = f"{school} {course} {degree}"
-        
+        edu_type = str(edu.get('education_type') or '').lower()
+        combined = f"{school} {course} {degree} {edu_type}".strip()
+        resume_edu_texts.append({
+            'raw': combined,
+            'normalized': _normalize_degree(combined),
+            'degree_level': _degree_level(combined),
+            'major': _extract_major(course or degree),
+        })
+
+    # ------------------------------------------------------------------ #
+    # Phase 1 – Exact / full match check (returns 100 immediately)        #
+    # ------------------------------------------------------------------ #
+    for req in required_education:
+        req_norm = _normalize_degree(req)
+        req_level = _degree_level(req)
+        req_major = _extract_major(req)
+
+        for edu in resume_edu_texts:
+            # 1a. The full normalised requirement string appears in the resume text
+            if req_norm and req_norm in edu['normalized']:
+                print(f"[EDUCATION] Full match (substring): '{req}' found in '{edu['raw']}'")
+                return 100.0
+
+            # 1b. Degree level AND major both match
+            if req_level and req_major:
+                level_match = (req_level == edu['degree_level'])
+                major_match = req_major and edu['major'] and (
+                    req_major in edu['major'] or edu['major'] in req_major
+                )
+                if level_match and major_match:
+                    print(f"[EDUCATION] Full match (level+major): level='{req_level}' major='{req_major}'")
+                    return 100.0
+
+            # 1c. Degree level matches and requirement has no specific major
+            if req_level and not req_major and edu['degree_level'] == req_level:
+                print(f"[EDUCATION] Full match (level only, no major required): '{req_level}'")
+                return 100.0
+
+    # ------------------------------------------------------------------ #
+    # Phase 2 – Partial / keyword fallback (original logic)               #
+    # ------------------------------------------------------------------ #
+    matched_edu = set()
+
+    for edu in resume_edu_texts:
+        edu_text = edu['raw']
+        degree = edu['degree_level']
+
         for req in required_education:
             req_normalized = req.lower()
-            
-            # Check if requirement is mentioned anywhere in the education text
-            # 1. Direct match (e.g., "Computer Science" appears in course)
+
+            # Direct substring match
             if req_normalized in edu_text:
                 matched_edu.add(req_normalized)
                 continue
-            
-            # 2. Check for degree type matches
+
+            # Degree-type keyword fallback
             if 'bachelor' in req_normalized:
-                if 'bachelor' in degree or 'bs' in degree or 'ba' in degree or 'b.s' in degree or 'b.a' in degree:
+                if any(k in edu_text for k in ['bachelor', 'bs ', 'ba ', 'b.s', 'b.a']):
                     matched_edu.add(req_normalized)
             elif 'master' in req_normalized:
-                if 'master' in degree or 'ms' in degree or 'ma' in degree or 'm.s' in degree or 'm.a' in degree:
+                if any(k in edu_text for k in ['master', 'ms ', 'ma ', 'm.s', 'm.a']):
                     matched_edu.add(req_normalized)
-            # 3. Check if major field matches (e.g., "Computer Science" course matches "Computer Science" requirement)
             elif 'computer' in req_normalized:
-                if 'computer' in course:
+                if 'computer' in edu_text:
                     matched_edu.add(req_normalized)
             elif 'science' in req_normalized:
-                if 'science' in course:
+                if 'science' in edu_text:
                     matched_edu.add(req_normalized)
             elif 'engineering' in req_normalized:
-                if 'engineering' in course:
+                if 'engineering' in edu_text:
                     matched_edu.add(req_normalized)
-    
-    # Calculate percentage
+            elif 'information technology' in req_normalized or ' it' in req_normalized:
+                if any(k in edu_text for k in ['information technology', 'bsit', 'bs it']):
+                    matched_edu.add(req_normalized)
+
     match_percentage = (len(matched_edu) / len(required_education)) * 100 if required_education else 0
-    
+
     print(f"[DEBUG] Education match: {len(matched_edu)}/{len(required_education)} = {match_percentage:.1f}%")
     print(f"[DEBUG]   Required: {required_education}")
     print(f"[DEBUG]   Matched: {matched_edu}")
     print(f"[DEBUG]   Resume edu: {resume_education}")
-    
+
     return round(match_percentage, 2)
 
 

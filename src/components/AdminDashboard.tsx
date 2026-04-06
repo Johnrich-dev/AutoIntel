@@ -111,7 +111,7 @@ export function AdminDashboard() {
         .select('screening_status, status');
       if (!data) return;
       const inReviewCount = data.filter(a => 
-        (a.screening_status === 'passed' || a.screening_status === 'in_review') && 
+        a.screening_status === 'in_review' && 
         a.status !== 'shortlisted' && a.status !== 'rejected' && a.status !== 'hired'
       ).length;
       const shortlistedCount = data.filter(a => a.status === 'shortlisted').length;

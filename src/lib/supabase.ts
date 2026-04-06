@@ -103,6 +103,13 @@ export interface Applicant {
   screening_status?: 'passed' | 'in_review' | 'failed' | 'not_scored';
   screening_stage?: string;
   screened_at?: string;
+  // Component scores (from resume_scores table, joined or fetched separately)
+  skills_score?: number | null;
+  experience_score?: number | null;
+  education_score?: number | null;
+  projects_score?: number | null;
+  traincert_score?: number | null;
+  achievements_score?: number | null;
 }
 
 export interface Resume {

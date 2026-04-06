@@ -107,7 +107,10 @@ function calculateResumeScore(applicant?: ApplicantWithDetails, settings?: Scori
   const totalSkills = parsed.skills?.hard_skills?.length || 0;
   const skillsScore = Math.min((totalSkills / 20) * 100, 100);
   const experienceScore = Math.min(((parsed.experience?.length || 0) / 5) * 100, 100);
-  const educationScore = Math.min(((parsed.education?.length || 0) / 3) * 100, 100);
+  // Prefer the stored education_score (requirement-match based) over count-based fallback
+  const educationScore = (applicant?.education_score != null && applicant.education_score > 0)
+    ? applicant.education_score
+    : Math.min(((parsed.education?.length || 0) / 3) * 100, 100);
   const projectCount = parsed.projects?.length || 0;
   const projectsScore = projectCount >= config.baseline_projects
     ? Math.min((projectCount / config.baseline_projects) * 100, 100)
