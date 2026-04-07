@@ -29,8 +29,8 @@ export function RulesAndTerms({ onAccept }: RulesAndTermsProps) {
 
       if (error) throw error;
 
-      // Save to localStorage for reliable tracking
-      localStorage.setItem('rules_accepted', 'true');
+      // Save to localStorage keyed to this specific access token
+      localStorage.setItem(`rules_accepted_${applicant.access_token}`, 'true');
       
       updateApplicant({
         rules_accepted: true,

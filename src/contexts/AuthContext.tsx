@@ -222,6 +222,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    // Clean up token-keyed rules acceptance from localStorage
+    if (applicant?.access_token) {
+      localStorage.removeItem(`rules_accepted_${applicant.access_token}`);
+    }
     setApplicant(null);
     setAccessToken(null);
     localStorage.removeItem('sentinel_access_token');

@@ -39,7 +39,10 @@ function ApplicantApp() {
 
   useEffect(() => {
     if (loading || !applicant) return;
-    const localRulesAccepted = localStorage.getItem('rules_accepted') === 'true';
+    // Key acceptance to the specific access token so re-created applicants
+    // with the same email always see the rules screen on their new token.
+    const tokenKey = `rules_accepted_${applicant.access_token}`;
+    const localRulesAccepted = localStorage.getItem(tokenKey) === 'true';
     const rulesAccepted = localRulesAccepted || applicant.rules_accepted === true;
     setView(rulesAccepted ? 'dashboard' : 'rules');
   }, [applicant, loading]);
