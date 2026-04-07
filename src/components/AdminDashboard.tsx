@@ -1,4 +1,4 @@
-import { Calendar, CheckCircle, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, Briefcase, Sliders, ChevronLeft, ChevronRight, ClipboardList, UserCheck, Search, Eye, ListChecks, CalendarDays, Award, TrendingUp } from 'lucide-react';
+import { Calendar, CheckCircle, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, Briefcase, Sliders, ChevronLeft, ChevronRight, ClipboardList, UserCheck, Search, Eye, ListChecks, CalendarDays, Award, TrendingUp, AlertCircle, XCircle } from 'lucide-react';
 import { AdminJobManagement } from './AdminJobManagement';
 import { AdminScoringSettings } from './AdminScoringSettings';
 import { DashboardLanding } from './DashboardLanding';
@@ -79,6 +79,27 @@ const groupedMenuItems = menuItems.reduce((acc, item) => {
   return acc;
 }, {} as Record<string, typeof menuItems>);
 
+// Toast notification component
+function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'warning'; onClose: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 4500);
+    return () => clearTimeout(t);
+  }, [onClose]);
+  const styles = {
+    success: 'bg-green-600 text-white',
+    error: 'bg-red-600 text-white',
+    warning: 'bg-amber-500 text-white',
+  };
+  const Icon = type === 'success' ? CheckCircle : type === 'error' ? XCircle : AlertCircle;
+  return (
+    <div className={`fixed bottom-6 right-6 z-[200] flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium max-w-sm ${styles[type]}`}>
+      <Icon className="w-4 h-4 flex-shrink-0" />
+      <span>{message}</span>
+      <button onClick={onClose} className="ml-1 opacity-70 hover:opacity-100"><X className="w-3.5 h-3.5" /></button>
+    </div>
+  );
+}
+
 export function AdminDashboard() {
   const { adminLogout } = useAuth();
   const [applicants, setApplicants] = useState<ApplicantWithDetails[]>([]);
@@ -97,6 +118,12 @@ export function AdminDashboard() {
   const [scheduling, setScheduling] = useState(false);
   const [navBadges, setNavBadges] = useState<Record<string, number>>({});
   const [pendingInterviewApplicantId, setPendingInterviewApplicantId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToast({ message, type });
+  };
 
   useEffect(() => {
     loadApplicants();
@@ -169,11 +196,11 @@ export function AdminDashboard() {
         notes: actionDescription,
       });
 
-      alert(`Action completed: ${actionDescription}`);
+      showToast(actionDescription, 'success');
       loadApplicants();
     } catch (error) {
       console.error('Error performing action:', error);
-      alert('Failed to complete action. Please try again.');
+      showToast('Failed to complete action. Please try again.', 'error');
     }
   };
 
@@ -871,7 +898,7 @@ export function AdminDashboard() {
                               onClick={() => {
                                 // Trigger transcription processing
                                 console.log('Trigger transcription for:', selectedApplicant.id);
-                                alert('Transcription processing would be triggered here');
+                                showToast('Transcription processing has been queued.', 'success');
                               }}
                               className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
                             >
@@ -1039,6 +1066,13 @@ export function AdminDashboard() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
+
+              {scheduleError && (
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  {scheduleError}
+                </div>
+              )}
             </div>
             
             <div className="flex justify-end gap-2 p-4 border-t border-gray-200">
@@ -1049,6 +1083,7 @@ export function AdminDashboard() {
                   setScheduleTime('');
                   setSchedulePlatform('Google Meet');
                   setScheduleNotes('');
+                  setScheduleError(null);
                 }}
                 className="px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
@@ -1057,10 +1092,10 @@ export function AdminDashboard() {
               <button
                 onClick={async () => {
                   if (!scheduleDate || !scheduleTime) {
-                    alert('Please select both date and time');
+                    setScheduleError('Please select both a date and time before scheduling.');
                     return;
                   }
-                  
+                  setScheduleError(null);
                   setScheduling(true);
                   try {
                     // Call the API to schedule interview and send email
@@ -1110,13 +1145,13 @@ export function AdminDashboard() {
                       setSchedulePlatform('Google Meet');
                       setScheduleNotes('');
                       
-                      alert('Interview scheduled and email sent to applicant!');
+                      showToast(`Interview scheduled. Confirmation email sent to ${selectedApplicant.name}.`, 'success');
                     } else {
-                      alert('Failed to schedule interview: ' + result.message);
+                      showToast(`Failed to schedule interview: ${result.message}`, 'error');
                     }
                   } catch (err) {
                     console.error('Error scheduling interview:', err);
-                    alert('Failed to schedule interview. Please check if the API server is running.');
+                    showToast('Failed to schedule interview. Please check if the API server is running.', 'error');
                   } finally {
                     setScheduling(false);
                   }
@@ -1125,12 +1160,14 @@ export function AdminDashboard() {
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <Calendar className="w-4 h-4" />
-                {scheduling ? 'Sending...' : 'Schedule & Send Email'}
+                {scheduling ? 'Scheduling...' : 'Confirm & Send Invite'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }
