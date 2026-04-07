@@ -1008,8 +1008,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
         setJobs(jobsData);
       }
 
-      // Load scheduled interviews from the database only
-      // Join applicant status so we can exclude hired/rejected candidates
+      // Load scheduled interviews — exclude applicants who have already been hired/rejected
       const { data: scheduledData, error: scheduledError } = await adminClient
         .from('scheduled_interviews')
         .select(`
@@ -1025,7 +1024,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
 
       if (scheduledData && scheduledData.length > 0) {
         for (const record of scheduledData) {
-          // Skip candidates who have already been hired or rejected
+          // Skip interviews where the applicant has already been hired or rejected
           const applicantStatus = record.applicant?.status;
           if (applicantStatus === 'hired' || applicantStatus === 'rejected') continue;
 
@@ -1275,6 +1274,12 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
         .update({ status: 'hired', decision_date: now })
         .eq('id', applicantId);
 
+      // Mark the interview as completed so it reflects the outcome in DB
+      await adminClient
+        .from('scheduled_interviews')
+        .update({ status: 'completed' })
+        .eq('applicant_id', applicantId);
+
       setNotification({ type: 'success', message: 'Applicant marked as Hired. Send the offer email from Final Decisions.' });
       setViewingInterview(null);
       loadData();
@@ -1288,20 +1293,24 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
     if (!confirm('Are you sure you want to mark this applicant as REJECTED?')) {
       return;
     }
-    
+
     setNotification(null);
-    
+
     try {
       const adminClient = getSupabaseAdminClient();
-      
-      // Update applicant's status to rejected and record decision date
       const now = new Date().toISOString();
       await adminClient
         .from('applicants')
-        .update({ status: 'rejected', decision_date: now, updated_at: now })
+        .update({ status: 'rejected', decision_date: now })
         .eq('id', applicantId);
-      
-      setNotification({ type: 'success', message: 'Applicant marked as REJECTED.' });
+
+      // Mark the interview as completed so it reflects the outcome in DB
+      await adminClient
+        .from('scheduled_interviews')
+        .update({ status: 'completed' })
+        .eq('applicant_id', applicantId);
+
+      setNotification({ type: 'success', message: 'Applicant marked as Rejected.' });
       setViewingInterview(null);
       loadData();
     } catch (error) {
