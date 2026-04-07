@@ -222,13 +222,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    // Clean up token-keyed rules acceptance from localStorage
-    if (applicant?.access_token) {
-      localStorage.removeItem(`rules_accepted_${applicant.access_token}`);
-    }
     setApplicant(null);
     setAccessToken(null);
     localStorage.removeItem('sentinel_access_token');
+    // Note: intentionally keep rules_accepted_<token> in localStorage
+    // so returning applicants on the same token don't see rules again
+    // even if the DB update was blocked by RLS.
   };
 
   const adminLogout = () => {

@@ -44,7 +44,13 @@ function ApplicantApp() {
     const tokenKey = `rules_accepted_${applicant.access_token}`;
     const localRulesAccepted = localStorage.getItem(tokenKey) === 'true';
     const rulesAccepted = localRulesAccepted || applicant.rules_accepted === true;
-    setView(rulesAccepted ? 'dashboard' : 'rules');
+    // Only set view when first determining it — don't override if already past rules
+    setView(prev => {
+      if (prev === 'rules' || prev === 'dashboard') {
+        return rulesAccepted ? 'dashboard' : 'rules';
+      }
+      return prev; // keep video/test view intact
+    });
   }, [applicant, loading]);
 
   if (loading) {
