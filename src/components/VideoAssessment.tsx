@@ -22,7 +22,9 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
   const [isVideoMuted, setIsVideoMuted] = useState<boolean>(false);
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
-  
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
   const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     setToast({ message, type });
   };
@@ -312,13 +314,16 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
 
   const handleSubmit = async (): Promise<void> => {
     if (!applicant || !videoFile) {
-      console.error('Submit failed: Missing applicant or video file', { applicant, videoFile });
       showToast('Please record or upload a video before submitting.', 'warning');
       return;
     }
+    setShowConfirmModal(true);
+  };
 
+  const confirmSubmit = async (): Promise<void> => {
+    if (!applicant || !videoFile) return;
+    setShowConfirmModal(false);
     setUploading(true);
-    console.log('Starting video submission for applicant:', applicant.id);
 
     try {
       // Use admin client to bypass RLS for storage upload
@@ -427,7 +432,7 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
       }
 
       showToast('Video assessment submitted. Transcription will begin shortly.', 'success');
-      onComplete();
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Error submitting video:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -440,7 +445,7 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Top Navigation Bar */}
-      <nav className="bg-white border-b border-gray-200 shadow-sm">
+      <nav className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Back to Dashboard Link */}
@@ -767,6 +772,61 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
           </div>
         </div>
       </div>
+
+      {/* Confirm Submit Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <Save className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Submit Video Assessment?</h2>
+                <p className="text-sm text-gray-500">This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-gray-600 text-sm mb-6">
+              Are you sure you want to submit your video assessment? Once submitted, you will not be able to re-record or replace your video.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="px-5 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmSubmit}
+                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+              >
+                Yes, Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 text-center">
+            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-green-600" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Video Submitted!</h2>
+            <p className="text-gray-500 text-sm mb-6">
+              Your video assessment has been submitted successfully. Transcription will begin shortly. Our team will review your submission and contact you within 5-7 business days.
+            </p>
+            <button
+              onClick={onComplete}
+              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition-colors"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Toast notification */}
       {toast && (

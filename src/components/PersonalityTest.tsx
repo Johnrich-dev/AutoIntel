@@ -22,6 +22,7 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
   const [essay, setEssay] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [scoringInProgress, setScoringInProgress] = useState(false);
+  const [modal, setModal] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const questions = WORK_STYLE_QUESTIONS;
   const totalQuestions = questions.length + 1; // +1 for essay
@@ -45,13 +46,12 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
 
   const handleSubmit = async () => {
     if (!applicant) {
-      alert('Applicant information not found. Please log in again.');
+      setModal({ type: 'error', message: 'Applicant information not found. Please log in again.' });
       return;
     }
 
-    // Check all Likert questions are answered
     if (Object.keys(answers).length !== questions.length) {
-      alert('Please answer all questions before submitting.');
+      setModal({ type: 'error', message: 'Please answer all questions before submitting.' });
       return;
     }
 
@@ -123,7 +123,7 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
       if (accessToken && (formattedAnswers.length > 0 || essay.trim())) {
         try {
           // Get the job title from applicant data
-          const applicantJobTitle = applicant.position || applicant.applied_position || '';
+          const applicantJobTitle = applicant.position || '';
 
           const scoringResponse = await fetch('http://localhost:5000/api/workstyle/score', {
             method: 'POST',
@@ -162,25 +162,21 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
               console.log('Scoring completed:', scoringResult);
             } else {
               console.error('Scoring API returned error:', scoringResult.error);
-              alert('Your assessment was submitted, but scoring failed. Please contact support.');
             }
           } else {
             const errorText = await scoringResponse.text();
             console.error('Scoring API error:', errorText);
-            alert('Your assessment was submitted, but scoring failed. Please contact support.');
           }
         } catch (scoringError) {
           console.error('Error calling scoring API:', scoringError);
-          alert('Your assessment was submitted, but scoring failed. Please contact support.');
           // Continue even if scoring fails - the raw answers are saved
         }
       }
 
-      alert('Your assessment has been submitted successfully!');
-      onComplete();
+      setModal({ type: 'success', message: 'Your assessment has been submitted successfully!' });
     } catch (error) {
       console.error('Error submitting test:', error);
-      alert('Failed to submit test. Please try again.');
+      setModal({ type: 'error', message: 'Failed to submit assessment. Please try again.' });
     } finally {
       setSubmitting(false);
       setScoringInProgress(false);
@@ -193,7 +189,7 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Top Navigation Bar */}
-      <nav className="bg-white border-b border-gray-200 shadow-sm">
+      <nav className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Back to Dashboard Link */}
@@ -444,6 +440,44 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
           </div>
         </div>
       </div>
+
+      {/* Result Modal */}
+      {modal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 text-center">
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+              modal.type === 'success' ? 'bg-green-100' : 'bg-red-100'
+            }`}>
+              {modal.type === 'success' ? (
+                <Send className="w-8 h-8 text-green-600" />
+              ) : (
+                <ArrowLeft className="w-8 h-8 text-red-600" />
+              )}
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">
+              {modal.type === 'success' ? 'Assessment Submitted!' : 'Something went wrong'}
+            </h2>
+            <p className="text-gray-500 text-sm mb-6">{modal.message}</p>
+            <button
+              onClick={() => {
+                if (modal.type === 'success') {
+                  setModal(null);
+                  onComplete();
+                } else {
+                  setModal(null);
+                }
+              }}
+              className={`w-full font-semibold py-3 rounded-lg transition-colors ${
+                modal.type === 'success'
+                  ? 'bg-green-600 hover:bg-green-700 text-white'
+                  : 'bg-red-600 hover:bg-red-700 text-white'
+              }`}
+            >
+              {modal.type === 'success' ? 'Back to Dashboard' : 'Close'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
