@@ -22,6 +22,7 @@ import {
   Clock,
   XCircle,
   Calendar,
+  RefreshCw,
 } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest, ResumeParsedData, ScoringSettings } from '../lib/supabase';
 import { FilterDropdown } from './FilterDropdown';
@@ -126,7 +127,13 @@ function calculateVideoScore(video?: VideoAssessment): number {
 }
 
 function calculateProfileFit(test?: PersonalityTest, jobRole?: string): number {
-  if (!test || test.status !== 'submitted') return 0;
+  if (!test) return 0;
+  // Accept both 'submitted' (saved but not yet scored) and 'completed' (scored by API)
+  if (test.status !== 'submitted' && test.status !== 'completed') return 0;
+  // Prefer the pre-computed semantic score stored by the scoring API
+  if (typeof test.semantic_score === 'number' && test.semantic_score > 0) {
+    return Math.round(test.semantic_score);
+  }
   if (!test.answers || !Array.isArray(test.answers) || test.answers.length === 0) return 0;
   const answers: WorkStyleAnswer[] = test.answers.map((a) => ({
     question: a.question,
@@ -566,75 +573,78 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [scoringSettings, setScoringSettings] = useState<ScoringSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   // Departments fetched from job_postings
   const [departments, setDepartments] = useState<string[]>([]);
   // Maps job title → department for filtering (e.g. "Data Engineer" → "MIS / IT")
   const [jobDepartmentMap, setJobDepartmentMap] = useState<Record<string, string>>({});
   const itemsPerPage = 10;
 
-  useEffect(() => {
-    async function initialize() {
-      try {
-        const { data: settingsData } = await supabase
-          .from('scoring_settings')
-          .select('*')
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .single();
-        if (settingsData) setScoringSettings(settingsData);
+  const fetchData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const { data: settingsData } = await supabase
+        .from('scoring_settings')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .single();
+      if (settingsData) setScoringSettings(settingsData);
 
-        // Fetch job_postings to build a title → department map for filtering
-        const { data: jobsData } = await supabase
-          .from('job_postings')
-          .select('title, department')
-          .eq('is_active', true);
-        if (jobsData) {
-          const depts = Array.from(new Set(jobsData.map((j) => j.department).filter(Boolean))) as string[];
-          setDepartments(depts.sort());
-          const map: Record<string, string> = {};
-          jobsData.forEach((j) => {
-            if (j.title && j.department) map[j.title.toLowerCase()] = j.department;
-          });
-          setJobDepartmentMap(map);
-        }
-
-        if (externalApplicants) {
-          setApplicants(externalApplicants);
-        } else {
-          // Fetch only active pipeline candidates (shortlisted + final_interview)
-          const { data: applicantsData } = await supabase
-            .from('applicants')
-            .select('*')
-            .in('status', ['shortlisted', 'final_interview'])
-            .order('created_at', { ascending: false });
-
-          if (applicantsData) {
-            const applicantsWithDetails = await Promise.all(
-              applicantsData.map(async (applicant) => {
-                const [resumeResult, videoResult, testResult] = await Promise.all([
-                  supabase.from('resumes').select('*').eq('applicant_id', applicant.id).maybeSingle(),
-                  supabase.from('video_assessments').select('*').eq('applicant_id', applicant.id).maybeSingle(),
-                  supabase.from('work_style_assessments').select('*').eq('applicant_id', applicant.id).maybeSingle(),
-                ]);
-                return {
-                  ...applicant,
-                  resume: resumeResult.data || undefined,
-                  video: videoResult.data || undefined,
-                  test: testResult.data || undefined,
-                };
-              })
-            );
-            setApplicants(applicantsWithDetails);
-          }
-        }
-      } catch (err) {
-        console.error('Error initializing:', err);
-      } finally {
-        setLoading(false);
+      const { data: jobsData } = await supabase
+        .from('job_postings')
+        .select('title, department')
+        .eq('is_active', true);
+      if (jobsData) {
+        const depts = Array.from(new Set(jobsData.map((j) => j.department).filter(Boolean))) as string[];
+        setDepartments(depts.sort());
+        const map: Record<string, string> = {};
+        jobsData.forEach((j) => {
+          if (j.title && j.department) map[j.title.toLowerCase()] = j.department;
+        });
+        setJobDepartmentMap(map);
       }
+
+      if (externalApplicants) {
+        setApplicants(externalApplicants);
+      } else {
+        const { data: applicantsData } = await supabase
+          .from('applicants')
+          .select('*')
+          .in('status', ['shortlisted', 'final_interview'])
+          .order('created_at', { ascending: false });
+
+        if (applicantsData) {
+          const applicantsWithDetails = await Promise.all(
+            applicantsData.map(async (applicant) => {
+              const [resumeResult, videoResult, testResult] = await Promise.all([
+                supabase.from('resumes').select('*').eq('applicant_id', applicant.id).maybeSingle(),
+                supabase.from('video_assessments').select('*').eq('applicant_id', applicant.id).maybeSingle(),
+                supabase.from('work_style_assessments').select('*').eq('applicant_id', applicant.id).maybeSingle(),
+              ]);
+              return {
+                ...applicant,
+                resume: resumeResult.data || undefined,
+                video: videoResult.data || undefined,
+                test: testResult.data || undefined,
+              };
+            })
+          );
+          setApplicants(applicantsWithDetails);
+        }
+      }
+    } catch (err) {
+      console.error('Error initializing:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    initialize();
   }, [externalApplicants]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Compute scores for each applicant
   const processedApplicants = useMemo(() => {
@@ -806,6 +816,15 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
             <p className="text-gray-600 mt-1">Review and manage top candidates for final interview selection</p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => fetchData(true)}
+              disabled={refreshing}
+              className="flex items-center gap-2 px-3 py-2.5 sm:px-4 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-60"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 flex-shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
             <button
               onClick={() => setIsExportOpen(true)}
               className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
