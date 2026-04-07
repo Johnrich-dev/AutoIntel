@@ -825,39 +825,126 @@ def score_work_style(answers: List[Dict[str, Any]],
 
 
 if __name__ == "__main__":
-    # Example usage
-    test_answers = [
-        {"question": 1, "answer": 5},  # Strongly agree collaboration
-        {"question": 2, "answer": 1},  # Strongly disagree (reverse -> 5)
-        {"question": 3, "answer": 4},
-        {"question": 4, "answer": 2},  # Reverse -> 4
-        {"question": 5, "answer": 4},
-        {"question": 6, "answer": 5},
-        {"question": 7, "answer": 2},   # Reverse -> 4
-        {"question": 8, "answer": 4},
-        {"question": 9, "answer": 1},   # Reverse -> 5
-        {"question": 10, "answer": 5},
-        {"question": 11, "answer": 4},
-        {"question": 12, "answer": 2},  # Reverse -> 4
-        {"question": 13, "answer": 4},
-        {"question": 14, "answer": 2},  # Reverse -> 4
-        {"question": 15, "answer": 5},
-        {"question": 16, "answer": 4},
-        {"question": 17, "answer": 5},
-        {"question": 18, "answer": 4},
-        {"question": 19, "answer": 5},
-        {"question": 20, "answer": 1},   # Reverse -> 5
-    ]
-    
-    test_essay = """
-    During my internship at a tech startup, our team faced a major project deadline 
-    that seemed impossible to meet. The original plan had fallen apart due to unexpected 
-    technical issues. I took the initiative to reorganize our tasks, communicated clearly 
-    with each team member about their responsibilities, and we managed to deliver a 
-    working product on time. Through this experience, I learned the importance of 
-    adaptability and clear communication under pressure.
-    """
-    
-    print("Testing Work Style Scorer...")
-    result = score_work_style(test_answers, test_essay, "Software Developer")
-    print(json.dumps(result, indent=2))
+    import argparse
+    import sys
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    parser = argparse.ArgumentParser(
+        description="Score work style assessments from Supabase"
+    )
+    parser.add_argument(
+        "--all", action="store_true",
+        help="Re-score ALL submitted/completed assessments, not just unscored ones"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Run scoring but do not write results back to Supabase"
+    )
+    parser.add_argument(
+        "--applicant-id",
+        help="Score a single applicant by their UUID"
+    )
+    args = parser.parse_args()
+
+    # ── Supabase client ──────────────────────────────────────────────────────
+    try:
+        from supabase import create_client
+    except ImportError:
+        print("ERROR: supabase-py not installed. Run: pip install supabase")
+        sys.exit(1)
+
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_KEY")
+    if not url or not key:
+        print("ERROR: SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in .env")
+        sys.exit(1)
+
+    db = create_client(url, key)
+
+    # ── Fetch assessments ────────────────────────────────────────────────────
+    query = (
+        db.table("work_style_assessments")
+        .select("id, applicant_id, answers, essay, status, semantic_score")
+        .in_("status", ["submitted", "completed"])
+    )
+
+    if args.applicant_id:
+        query = query.eq("applicant_id", args.applicant_id)
+    elif not args.all:
+        # Default: only rows where semantic_score is null
+        query = query.is_("semantic_score", "null")
+
+    response = query.execute()
+    assessments = response.data or []
+
+    if not assessments:
+        print("No assessments to score.")
+        sys.exit(0)
+
+    print(f"Found {len(assessments)} assessment(s) to score.\n")
+
+    # ── Fetch applicant positions for role detection ─────────────────────────
+    applicant_ids = list({a["applicant_id"] for a in assessments})
+    pos_resp = (
+        db.table("applicants")
+        .select("id, position")
+        .in_("id", applicant_ids)
+        .execute()
+    )
+    position_map: Dict[str, str] = {
+        r["id"]: r.get("position", "Software Developer")
+        for r in (pos_resp.data or [])
+    }
+
+    # ── Score each assessment ────────────────────────────────────────────────
+    scorer = WorkStyleScorer()
+    success = 0
+    failed = 0
+
+    for assessment in assessments:
+        aid = assessment["id"]
+        applicant_id = assessment["applicant_id"]
+        answers = assessment.get("answers") or []
+        essay = assessment.get("essay") or ""
+        job_title = position_map.get(applicant_id, "Software Developer")
+
+        if not answers:
+            print(f"  [SKIP] {aid} — no answers recorded")
+            failed += 1
+            continue
+
+        try:
+            result = scorer.score_assessment(answers, essay or None, job_title)
+            data = result.to_dict()
+
+            print(
+                f"  [OK]   {aid} | {job_title[:30]:<30} | "
+                f"score={data['overall_alignment_score']:.1f} | "
+                f"method={data['scoring_method']}"
+            )
+
+            if not args.dry_run:
+                db.table("work_style_assessments").update({
+                    "semantic_score": data["overall_alignment_score"],
+                    "dimension_scores": data["dimension_scores"],
+                    "role_family": data["matched_role_family"],
+                    "strong_areas": data["strong_areas"],
+                    "moderate_areas": data["moderate_areas"],
+                    "development_areas": data["development_areas"],
+                    "essay_insights": data.get("essay_insights", ""),
+                    "scoring_method": data["scoring_method"],
+                    "scored_at": datetime.now().isoformat(),
+                    "status": "completed",
+                }).eq("id", aid).execute()
+
+            success += 1
+
+        except Exception as e:
+            print(f"  [FAIL] {aid} — {e}")
+            failed += 1
+
+    print(f"\nDone. {success} scored, {failed} failed/skipped.")
+    if args.dry_run:
+        print("(dry-run mode — no changes written to Supabase)")
