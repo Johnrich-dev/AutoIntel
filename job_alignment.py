@@ -58,12 +58,14 @@ DEFAULT_HYBRID_BASELINES = {
 }
 
 # Unified scoring profile - used for ALL applicants (no special treatment)
+# These are the fallback defaults when the database is unavailable.
+# The actual thresholds/weights are loaded from the scoring_settings table at runtime.
 UNIFIED_SCORING_PROFILE = {
     'weights': DEFAULT_HYBRID_WEIGHTS.copy(),
     'baselines': DEFAULT_HYBRID_BASELINES.copy(),
     'thresholds': {
-        'qualified_threshold': 78,
-        'review_threshold': 65
+        'qualified_threshold': 65,
+        'review_threshold': 55
     }
 }
 
@@ -1600,36 +1602,27 @@ def calculate_experience_keyword_match(
 
 def calculate_projects_keyword_match(
     resume_projects: List[Dict],
-    expected_projects: List[str]
+    expected_projects: List[str],
+    resume_experience: Optional[List[Dict]] = None,
+    raw_resume_text: Optional[str] = None,
 ) -> float:
     """
     Calculate projects relevance using tighter keyword matching.
 
-    Fix: requires ALL significant words in an expected project type to appear
-    in the project text (AND logic), not just any single word (OR logic).
-    This prevents "API Development" from matching a project that only mentions
-    "development" without any API context.
-
-    Significant words = words longer than 3 chars that are not stop words.
-    Falls back to single-word match only when the requirement is a single word.
-
-    Returns:
-        Match score from 0-100
+    Scans projects section, experience descriptions/bullets, AND raw resume
+    text (fallback) so that project-type work described anywhere in the resume
+    is not missed regardless of which parser was used.
     """
     if not expected_projects:
-        return 50.0  # No requirements, give half credit
+        return 50.0
 
-    if not resume_projects:
-        return 0.0
-
-    # Common stop words to ignore when splitting requirement phrases
+    # Common stop words
     _STOP = {'and', 'the', 'for', 'with', 'using', 'based', 'related',
              'oriented', 'driven', 'focused', 'level', 'type', 'kind',
              'system', 'systems', 'application', 'applications', 'solution',
              'solutions', 'platform', 'service', 'services', 'tool', 'tools'}
 
     def significant_words(phrase: str) -> List[str]:
-        """Extract meaningful words from a requirement phrase, preserving acronyms."""
         words = []
         for token in phrase.split():
             w_lower = token.lower()
@@ -1638,28 +1631,46 @@ def calculate_projects_keyword_match(
                 words.append(w_lower)
         return words
 
-    # Build combined text for all projects
     all_project_texts = []
-    for proj in resume_projects:
+
+    # 1. Projects section
+    for proj in (resume_projects or []):
         name    = str(proj.get('name')    or '').lower()
-        details = str(proj.get('details') or '').lower()
+        details = str(proj.get('details') or proj.get('description') or '').lower()
         all_project_texts.append(f"{name} {details}")
+
+    # 2. Experience section — handles both NER (summary) and GPT (bullets) formats
+    for exp in (resume_experience or []):
+        role    = str(exp.get('role')    or exp.get('title')       or '').lower()
+        summary = str(exp.get('summary') or exp.get('description') or '').lower()
+        bullets = exp.get('bullets') or exp.get('responsibilities') or []
+        if isinstance(bullets, list):
+            bullets_text = ' '.join(str(b) for b in bullets).lower()
+        else:
+            bullets_text = str(bullets).lower()
+        all_project_texts.append(f"{role} {summary} {bullets_text}")
+
+    # 3. Raw resume text fallback — catches anything the parser missed
+    if raw_resume_text:
+        all_project_texts.append(raw_resume_text.lower())
+
+    if not any(t.strip() for t in all_project_texts):
+        return 0.0
+
     combined_text = ' '.join(all_project_texts)
 
     matched_project_types: set = set()
 
     for expected in expected_projects:
         exp_norm = expected.lower()
-        sig_words = significant_words(expected)  # pass original to preserve case for acronym detection
+        sig_words = significant_words(expected)
 
         if not sig_words:
-            # Requirement is very short — fall back to substring check
             if exp_norm.replace(' ', '') in combined_text.replace(' ', '').replace('-', ''):
                 matched_project_types.add(exp_norm)
             continue
 
         if len(sig_words) == 1:
-            # Single significant word — word-boundary match
             word = sig_words[0]
             try:
                 if re.search(r'\b' + re.escape(word) + r'\b', combined_text):
@@ -1668,16 +1679,12 @@ def calculate_projects_keyword_match(
                 if word in combined_text:
                     matched_project_types.add(exp_norm)
         else:
-            # Multiple significant words — ALL must appear (AND logic)
             if all(
                 re.search(r'\b' + re.escape(w) + r'\b', combined_text)
                 for w in sig_words
             ):
                 matched_project_types.add(exp_norm)
             else:
-                # Partial credit only when majority (>= 75%) of words match
-                # AND at least 2 words matched (avoids single-word false positives
-                # on multi-word requirements like "API Development")
                 matched_count = sum(
                     1 for w in sig_words
                     if re.search(r'\b' + re.escape(w) + r'\b', combined_text)
@@ -1924,9 +1931,27 @@ def calculate_component_scores(
     
     # Projects relevance - NOW USES KEYWORD MATCHING
     resume_projects = parsed_resume_json.get('projects', [])
+    # Build raw text fallback from summary + skills sections for parsers that
+    # don't populate experience bullets (e.g. BERT NER with unusual formatting)
+    raw_fallback_parts = []
+    if parsed_resume_json.get('summary'):
+        raw_fallback_parts.append(str(parsed_resume_json['summary']))
+    skills_raw = parsed_resume_json.get('skills', {})
+    if isinstance(skills_raw, dict):
+        for v in skills_raw.values():
+            if isinstance(v, list):
+                raw_fallback_parts.extend(str(s) for s in v)
+            elif isinstance(v, str):
+                raw_fallback_parts.append(v)
+    elif isinstance(skills_raw, list):
+        raw_fallback_parts.extend(str(s) for s in skills_raw)
+    raw_fallback = ' '.join(raw_fallback_parts) if raw_fallback_parts else None
+
     results['projects_relevance'] = calculate_projects_keyword_match(
         resume_projects=resume_projects,
-        expected_projects=job_projects_list
+        expected_projects=job_projects_list,
+        resume_experience=resume_experience,
+        raw_resume_text=raw_fallback
     )
     
     print(f"[DEBUG] Final component scores: {results}")
@@ -2680,7 +2705,26 @@ def calculate_requirement_match_score(
     )
     skills_match = skills_result['score']
     education_match = calculate_education_keyword_match(resume_education, job_education)
-    projects_match = calculate_projects_keyword_match(resume_projects, job_projects)
+
+    # Build raw text fallback from summary + skills for parsers that don't
+    # populate experience bullets (e.g. BERT NER with unusual section formatting)
+    _raw_parts = []
+    if parsed_resume_json.get('summary'):
+        _raw_parts.append(str(parsed_resume_json['summary']))
+    _skills_raw = parsed_resume_json.get('skills', {})
+    if isinstance(_skills_raw, dict):
+        for _v in _skills_raw.values():
+            if isinstance(_v, list):
+                _raw_parts.extend(str(s) for s in _v)
+            elif isinstance(_v, str):
+                _raw_parts.append(_v)
+    elif isinstance(_skills_raw, list):
+        _raw_parts.extend(str(s) for s in _skills_raw)
+    _raw_fallback = ' '.join(_raw_parts) if _raw_parts else None
+
+    projects_match = calculate_projects_keyword_match(
+        resume_projects, job_projects, resume_experience, _raw_fallback
+    )
     traincert_match = calculate_traincert_keyword_match(resume_traincerts, job_traincerts)
     achievement_match = calculate_achievement_keyword_match(resume_achievements, job_achievements)
 

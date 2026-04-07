@@ -122,8 +122,8 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
       // Now call the scoring API if we have an access token
       if (accessToken && (formattedAnswers.length > 0 || essay.trim())) {
         try {
-          // Get the job title from applicant data or use default
-          const applicantJobTitle = "Software Developer"; // This would come from applicant data
+          // Get the job title from applicant data
+          const applicantJobTitle = applicant.position || applicant.applied_position || '';
 
           const scoringResponse = await fetch('http://localhost:5000/api/workstyle/score', {
             method: 'POST',

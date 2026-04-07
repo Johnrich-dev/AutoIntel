@@ -67,7 +67,7 @@ function getParsedResumeData(resume: Resume | undefined): ResumeParsedData | nul
 
 const DEFAULT_SCORING_SETTINGS: ScoringSettings = {
   settings_id: 'default',
-  job_level: 'entry_level',
+  job_level: 'unified',
   experience_weight: 28,
   skills_weight: 30,
   education_weight: 18,
