@@ -247,31 +247,29 @@ function buildAISummary(candidate: ApplicantWithDetails, parsedResume: ResumePar
 function RejectConfirmDialog({ name, onConfirm, onCancel }: { name: string; onConfirm: () => void; onCancel: () => void }) {
   return (
     <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-            <XCircle className="w-5 h-5 text-red-600" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-900">Reject Candidate</h3>
-            <p className="text-sm text-gray-500">This action cannot be undone</p>
-          </div>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+        <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <XCircle className="w-6 h-6 text-red-600" />
         </div>
-        <p className="text-sm text-gray-700 mb-6">
-          Are you sure you want to reject <span className="font-medium">{name}</span>? They will be removed from the shortlist.
+        <h3 className="text-base font-semibold text-gray-900 text-center mb-1">Remove from Shortlist?</h3>
+        <p className="text-sm text-gray-500 text-center mb-1">
+          You are about to reject <span className="font-medium text-gray-700">{name}</span> from the shortlist.
+        </p>
+        <p className="text-xs text-gray-400 text-center mb-5">
+          This candidate will be marked as rejected and removed from the active pipeline. This action cannot be undone.
         </p>
         <div className="flex gap-3">
           <button
             onClick={onCancel}
-            className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+            className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+            className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 transition-colors"
           >
-            Yes, Reject
+            Reject Candidate
           </button>
         </div>
       </div>
@@ -282,6 +280,7 @@ function RejectConfirmDialog({ name, onConfirm, onCancel }: { name: string; onCo
 function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onScheduleInterview }: QuickProfilePanelProps) {
   const [activeTab] = useState<'overview'>('overview');
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+  const [showFinalInterviewConfirm, setShowFinalInterviewConfirm] = useState(false);
 
   if (!candidate || !isOpen) return null;
 
@@ -319,6 +318,38 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onSched
           onConfirm={() => { setShowRejectConfirm(false); onStatusChange(candidate.id, 'rejected'); }}
           onCancel={() => setShowRejectConfirm(false)}
         />
+      )}
+
+      {/* Final Interview Confirmation */}
+      {showFinalInterviewConfirm && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-6 h-6 text-emerald-600" />
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 text-center mb-1">Advance to Final Interview?</h3>
+            <p className="text-sm text-gray-500 text-center mb-1">
+              You are about to move <span className="font-medium text-gray-700">{candidate.name}</span> to the Final Interview stage.
+            </p>
+            <p className="text-xs text-gray-400 text-center mb-5">
+              This candidate will be marked as ready for final interview scheduling. Ensure all assessments have been reviewed before proceeding.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowFinalInterviewConfirm(false)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setShowFinalInterviewConfirm(false); onStatusChange(candidate.id, 'final_interview'); }}
+                className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors"
+              >
+                Advance to Final Interview
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto flex flex-col">
       {/* Header */}
@@ -446,7 +477,7 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onSched
         ) : (
           <>
             <button
-              onClick={() => onStatusChange(candidate.id, 'final_interview')}
+              onClick={() => setShowFinalInterviewConfirm(true)}
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
             >
               <CheckCircle className="w-4 h-4" />

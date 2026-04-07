@@ -133,16 +133,59 @@ export function AdminDashboard() {
   const loadNavBadges = async () => {
     try {
       const adminClient = getSupabaseAdminClient();
-      const { data } = await adminClient
+
+      // Get applicants in the pipeline (passed or in_review, not yet decided)
+      const { data: applicantsData } = await adminClient
         .from('applicants')
-        .select('screening_status, status');
-      if (!data) return;
-      const inReviewCount = data.filter(a => 
-        a.screening_status === 'in_review' && 
-        a.status !== 'shortlisted' && a.status !== 'rejected' && a.status !== 'hired'
+        .select('id, screening_status, status')
+        .in('screening_status', ['passed', 'in_review'])
+        .not('status', 'in', '("shortlisted","rejected","hired")');
+
+      if (!applicantsData || applicantsData.length === 0) {
+        setNavBadges({ 'needs-review': 0, 'shortlisted': 0 });
+        return;
+      }
+
+      const ids = applicantsData.map(a => a.id);
+
+      // Check which ones completed video assessment
+      const { data: videoData } = await adminClient
+        .from('video_assessments')
+        .select('applicant_id, status, submitted_at')
+        .in('applicant_id', ids);
+
+      const videoCompleted = new Set(
+        (videoData || [])
+          .filter(v => v.status === 'submitted' || v.status === 'completed' || !!v.submitted_at)
+          .map(v => v.applicant_id)
+      );
+
+      // Check which ones completed work style assessment
+      const { data: workData } = await adminClient
+        .from('work_style_assessments')
+        .select('applicant_id, status, submitted_at')
+        .in('applicant_id', ids);
+
+      const workCompleted = new Set(
+        (workData || [])
+          .filter(w => w.status === 'submitted' || w.status === 'completed' || !!w.submitted_at)
+          .map(w => w.applicant_id)
+      );
+
+      // Only count applicants who completed BOTH assessments — matches NeedsReview page logic
+      const needsReviewCount = applicantsData.filter(
+        a => videoCompleted.has(a.id) && workCompleted.has(a.id)
       ).length;
-      const shortlistedCount = data.filter(a => a.status === 'shortlisted').length;
-      setNavBadges({ 'needs-review': inReviewCount, 'shortlisted': shortlistedCount });
+
+      // Shortlisted badge
+      const { data: shortlistData } = await adminClient
+        .from('applicants')
+        .select('id')
+        .eq('status', 'shortlisted');
+
+      const shortlistedCount = shortlistData?.length ?? 0;
+
+      setNavBadges({ 'needs-review': needsReviewCount, 'shortlisted': shortlistedCount });
     } catch {
       // silently fail — badges are non-critical
     }

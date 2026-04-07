@@ -1582,8 +1582,8 @@ export function NeedsReviewDetailPanel({
 
       {/* Confirmation Dialog */}
       {confirmDialog && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${
               confirmDialog.type === 'verified' ? 'bg-green-100' : 'bg-red-100'
             }`}>
@@ -1592,12 +1592,19 @@ export function NeedsReviewDetailPanel({
                 : <UserX className="w-6 h-6 text-red-600" />}
             </div>
             <h3 className="text-base font-semibold text-gray-900 text-center mb-1">
-              {confirmDialog.type === 'verified' ? 'Shortlist this applicant?' : 'Reject this applicant?'}
-            </h3>
-            <p className="text-sm text-gray-500 text-center mb-5">
               {confirmDialog.type === 'verified'
-                ? `${applicant.name || 'This applicant'} will be moved to shortlisted candidates and notified by email.`
-                : `${applicant.name || 'This applicant'} will be rejected and notified by email. This cannot be undone.`}
+                ? 'Shortlist This Applicant?'
+                : 'Reject This Applicant?'}
+            </h3>
+            <p className="text-sm text-gray-500 text-center mb-1">
+              {confirmDialog.type === 'verified'
+                ? <>Are you certain <span className="font-medium text-gray-700">{applicant.name || 'this applicant'}</span> has been properly verified and is ready to be shortlisted?</>
+                : <>Are you sure you want to reject <span className="font-medium text-gray-700">{applicant.name || 'this applicant'}</span>?</>}
+            </p>
+            <p className="text-xs text-gray-400 text-center mb-5">
+              {confirmDialog.type === 'verified'
+                ? 'They will be moved to Shortlisted Candidates and notified by email. Ensure all assessments and identity verification have been reviewed.'
+                : 'A rejection notification will be sent by email. This decision cannot be undone. Please confirm you have thoroughly reviewed this applicant.'}
             </p>
             <div className="flex gap-3">
               <button
@@ -1614,7 +1621,7 @@ export function NeedsReviewDetailPanel({
                 }`}
               >
                 {verifyingVideo ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                {confirmDialog.type === 'verified' ? 'Yes, Shortlist' : 'Yes, Reject'}
+                {confirmDialog.type === 'verified' ? 'Confirm & Shortlist' : 'Confirm Rejection'}
               </button>
             </div>
           </div>
