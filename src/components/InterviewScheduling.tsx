@@ -855,6 +855,12 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
   const [loading, setLoading] = useState(true);
   const [isScheduling, setIsScheduling] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'cancel' | 'hire' | 'reject';
+    interviewId?: string;
+    applicantId?: string;
+    applicantName?: string;
+  } | null>(null);
   const [formData, setFormData] = useState<InterviewFormData>({
     applicantId: '',
     jobId: '',
@@ -1170,29 +1176,51 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
     }
   };
 
-  const handleMarkHired = async (applicantId: string) => {
-    if (!confirm('Mark this applicant as HIRED? They will move to Final Decisions where you can send the offer email.')) {
-      return;
+  const handleCancelInterview = async (interviewId: string) => {
+    const interview = interviews.find(i => i.id === interviewId);
+    setConfirmAction({ type: 'cancel', interviewId, applicantName: interview?.applicantName });
+  };
+
+  const executeCancelInterview = async (interviewId: string) => {
+    try {
+      const adminClient = getSupabaseAdminClient();
+      await adminClient
+        .from('scheduled_interviews')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('id', interviewId);
+    } catch (dbError) {
+      console.log('Could not update scheduled_interviews table:', dbError);
     }
+    setInterviews((prev) =>
+      prev.map((interview) =>
+        interview.id === interviewId ? { ...interview, status: 'cancelled' as const } : interview
+      )
+    );
+    setNotification({ type: 'success', message: 'Interview cancelled successfully.' });
+  };
 
+  const handleMarkCompleted = (interviewId: string) => {
+    setInterviews((prev) =>
+      prev.map((interview) =>
+        interview.id === interviewId ? { ...interview, status: 'completed' as const } : interview
+      )
+    );
+  };
+
+  const handleMarkHired = async (applicantId: string) => {
+    const interview = interviews.find(i => i.applicantId === applicantId);
+    setConfirmAction({ type: 'hire', applicantId, applicantName: interview?.applicantName });
+    setViewingInterview(null);
+  };
+
+  const executeMarkHired = async (applicantId: string) => {
     setNotification(null);
-
     try {
       const adminClient = getSupabaseAdminClient();
       const now = new Date().toISOString();
-      await adminClient
-        .from('applicants')
-        .update({ status: 'hired', decision_date: now })
-        .eq('id', applicantId);
-
-      // Mark the interview as completed so it reflects the outcome in DB
-      await adminClient
-        .from('scheduled_interviews')
-        .update({ status: 'completed' })
-        .eq('applicant_id', applicantId);
-
+      await adminClient.from('applicants').update({ status: 'hired', decision_date: now }).eq('id', applicantId);
+      await adminClient.from('scheduled_interviews').update({ status: 'completed' }).eq('applicant_id', applicantId);
       setNotification({ type: 'success', message: 'Applicant marked as Hired. Send the offer email from Final Decisions.' });
-      setViewingInterview(null);
       loadData();
     } catch (error) {
       console.error('Error marking applicant as hired:', error);
@@ -1201,28 +1229,19 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
   };
 
   const handleMarkRejected = async (applicantId: string) => {
-    if (!confirm('Are you sure you want to mark this applicant as REJECTED?')) {
-      return;
-    }
+    const interview = interviews.find(i => i.applicantId === applicantId);
+    setConfirmAction({ type: 'reject', applicantId, applicantName: interview?.applicantName });
+    setViewingInterview(null);
+  };
 
+  const executeMarkRejected = async (applicantId: string) => {
     setNotification(null);
-
     try {
       const adminClient = getSupabaseAdminClient();
       const now = new Date().toISOString();
-      await adminClient
-        .from('applicants')
-        .update({ status: 'rejected', decision_date: now })
-        .eq('id', applicantId);
-
-      // Mark the interview as completed so it reflects the outcome in DB
-      await adminClient
-        .from('scheduled_interviews')
-        .update({ status: 'completed' })
-        .eq('applicant_id', applicantId);
-
+      await adminClient.from('applicants').update({ status: 'rejected', decision_date: now }).eq('id', applicantId);
+      await adminClient.from('scheduled_interviews').update({ status: 'completed' }).eq('applicant_id', applicantId);
       setNotification({ type: 'success', message: 'Applicant marked as Rejected.' });
-      setViewingInterview(null);
       loadData();
     } catch (error) {
       console.error('Error marking applicant as rejected:', error);
@@ -1252,27 +1271,18 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
 
       {/* Notification Banner */}
       {notification && (
-        <div className={`p-4 rounded-lg border ${
-          notification.type === 'success' 
-            ? 'bg-green-50 border-green-200 text-green-800' 
+        <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium ${
+          notification.type === 'success'
+            ? 'bg-green-50 border-green-200 text-green-800'
             : 'bg-red-50 border-red-200 text-red-800'
         }`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {notification.type === 'success' ? (
-                <CheckCircle className="w-5 h-5" />
-              ) : (
-                <X className="w-5 h-5" />
-              )}
-              <span>{notification.message}</span>
-            </div>
-            <button 
-              onClick={() => setNotification(null)}
-              className="text-sm hover:opacity-70"
-            >
-              Dismiss
-            </button>
-          </div>
+          {notification.type === 'success'
+            ? <CheckCircle className="w-4 h-4 flex-shrink-0" />
+            : <XCircle className="w-4 h-4 flex-shrink-0" />}
+          <span className="flex-1">{notification.message}</span>
+          <button onClick={() => setNotification(null)} className="opacity-60 hover:opacity-100 transition-opacity">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -1645,6 +1655,64 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
         onHire={viewingInterview ? () => handleMarkHired(viewingInterview.applicantId) : undefined}
         onReject={viewingInterview ? () => handleMarkRejected(viewingInterview.applicantId) : undefined}
       />
+
+      {/* Confirmation Modal */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${
+              confirmAction.type === 'hire' ? 'bg-green-100' :
+              confirmAction.type === 'reject' ? 'bg-red-100' : 'bg-amber-100'
+            }`}>
+              {confirmAction.type === 'hire' && <UserCheck className="w-6 h-6 text-green-600" />}
+              {confirmAction.type === 'reject' && <UserX className="w-6 h-6 text-red-600" />}
+              {confirmAction.type === 'cancel' && <AlertTriangle className="w-6 h-6 text-amber-600" />}
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 text-center mb-1">
+              {confirmAction.type === 'hire' && 'Mark as Hired?'}
+              {confirmAction.type === 'reject' && 'Reject Applicant?'}
+              {confirmAction.type === 'cancel' && 'Cancel Interview?'}
+            </h3>
+            <p className="text-sm text-gray-500 text-center mb-5">
+              {confirmAction.type === 'hire' && (
+                <>{confirmAction.applicantName ? <><span className="font-medium text-gray-700">{confirmAction.applicantName}</span> will be </> : 'Applicant will be '}marked as hired and moved to Final Decisions where you can send the offer email.</>
+              )}
+              {confirmAction.type === 'reject' && (
+                <>{confirmAction.applicantName ? <><span className="font-medium text-gray-700">{confirmAction.applicantName}</span> will be </> : 'Applicant will be '}marked as rejected. This action cannot be undone.</>
+              )}
+              {confirmAction.type === 'cancel' && (
+                <>The interview{confirmAction.applicantName ? <> for <span className="font-medium text-gray-700">{confirmAction.applicantName}</span></> : ''} will be cancelled. The candidate will not be automatically notified.</>
+              )}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmAction(null)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={() => {
+                  const action = confirmAction;
+                  setConfirmAction(null);
+                  if (action.type === 'hire' && action.applicantId) executeMarkHired(action.applicantId);
+                  if (action.type === 'reject' && action.applicantId) executeMarkRejected(action.applicantId);
+                  if (action.type === 'cancel' && action.interviewId) executeCancelInterview(action.interviewId);
+                }}
+                className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-colors ${
+                  confirmAction.type === 'hire' ? 'bg-green-600 hover:bg-green-700' :
+                  confirmAction.type === 'reject' ? 'bg-red-600 hover:bg-red-700' :
+                  'bg-amber-500 hover:bg-amber-600'
+                }`}
+              >
+                {confirmAction.type === 'hire' && 'Confirm Hire'}
+                {confirmAction.type === 'reject' && 'Reject Applicant'}
+                {confirmAction.type === 'cancel' && 'Cancel Interview'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

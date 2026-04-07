@@ -85,19 +85,20 @@ export function ScreeningDetailModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+  const [showGrantConfirm, setShowGrantConfirm] = useState(false);
 
-  useEffect(() => { setShowRejectConfirm(false); }, [applicant.id]);
+  useEffect(() => { setShowRejectConfirm(false); setShowGrantConfirm(false); }, [applicant.id]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (showRejectConfirm) return;
+      if (showRejectConfirm || showGrantConfirm) return;
       if (e.key === 'ArrowLeft') onPrev?.();
       if (e.key === 'ArrowRight') onNext?.();
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onPrev, onNext, onClose, showRejectConfirm]);
+  }, [onPrev, onNext, onClose, showRejectConfirm, showGrantConfirm]);
 
   const handleDecision = async (decision: 'approved' | 'rejected') => {
     if (!applicant.id || !applicant.email) return;
@@ -399,21 +400,26 @@ export function ScreeningDetailModal({
 
           {/* Reject confirm */}
           {showRejectConfirm && (
-            <div className="bg-red-50 rounded-xl p-4 border border-red-200">
-              <p className="text-sm font-semibold text-red-800 mb-1">Confirm rejection</p>
-              <p className="text-sm text-red-700 mb-3">
-                Reject <span className="font-medium">{applicant.name}</span> and send a rejection email. This cannot be undone.
-              </p>
-              <div className="flex gap-2">
-                <button onClick={() => setShowRejectConfirm(false)}
-                  className="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                  Cancel
-                </button>
-                <button onClick={() => handleDecision('rejected')} disabled={isProcessing}
-                  className="px-3 py-1.5 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50 flex items-center gap-1.5 transition-colors">
-                  {isProcessing && <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                  Yes, Reject
-                </button>
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <XCircle className="w-6 h-6 text-red-600" />
+                </div>
+                <h3 className="text-base font-semibold text-gray-900 text-center mb-1">Reject Application</h3>
+                <p className="text-sm text-gray-500 text-center mb-5">
+                  You are about to reject <span className="font-medium text-gray-700">{applicant.name}</span>. A rejection email will be sent automatically. This action cannot be undone.
+                </p>
+                <div className="flex gap-3">
+                  <button onClick={() => setShowRejectConfirm(false)}
+                    className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
+                    Cancel
+                  </button>
+                  <button onClick={() => handleDecision('rejected')} disabled={isProcessing}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl disabled:opacity-50 transition-colors">
+                    {isProcessing && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                    Reject Application
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -430,23 +436,78 @@ export function ScreeningDetailModal({
           </div>
 
           {/* Right: action buttons — only for in_review */}
-          {isInReview && !showRejectConfirm && (
+          {isInReview && !showRejectConfirm && !showGrantConfirm && (
             <div className="flex items-center gap-2">
               <button onClick={() => setShowRejectConfirm(true)} disabled={isProcessing}
                 className="px-4 py-2 text-sm font-medium text-red-700 bg-white hover:bg-red-50 border border-red-200 rounded-lg transition-colors disabled:opacity-50">
                 Reject
               </button>
-              <button onClick={() => handleDecision('approved')} disabled={isProcessing}
+              <button onClick={() => setShowGrantConfirm(true)} disabled={isProcessing}
                 className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2">
-                {isProcessing
-                  ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Processing...</>
-                  : <><CheckCircle className="w-4 h-4" />Grant Access</>
-                }
+                <CheckCircle className="w-4 h-4" />Grant Access
               </button>
             </div>
           )}
         </div>
       </div>
+
+      {/* Grant Access Confirmation */}
+      {showGrantConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-6 h-6 text-green-600" />
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 text-center mb-1">Grant Access to Applicant?</h3>
+            <p className="text-sm text-gray-500 text-center mb-1">
+              You are about to grant assessment access to <span className="font-medium text-gray-700">{applicant.name}</span>.
+            </p>
+            <p className="text-xs text-gray-400 text-center mb-5">
+              They will receive an email with login credentials to proceed with the video and work profiling assessments. Ensure this applicant has been properly reviewed before proceeding.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowGrantConfirm(false)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+              <button onClick={() => { setShowGrantConfirm(false); handleDecision('approved'); }} disabled={isProcessing}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-medium disabled:opacity-50 transition-colors">
+                {isProcessing && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                Grant Access
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Confirmation */}
+      {showRejectConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <XCircle className="w-6 h-6 text-red-600" />
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 text-center mb-1">Reject Application?</h3>
+            <p className="text-sm text-gray-500 text-center mb-1">
+              You are about to reject <span className="font-medium text-gray-700">{applicant.name}</span>'s application.
+            </p>
+            <p className="text-xs text-gray-400 text-center mb-5">
+              A rejection email will be sent automatically. This decision cannot be undone. Please confirm you have reviewed this applicant's profile before proceeding.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowRejectConfirm(false)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+              <button onClick={() => handleDecision('rejected')} disabled={isProcessing}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-medium disabled:opacity-50 transition-colors">
+                {isProcessing && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                Reject Application
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
     </>

@@ -21,6 +21,11 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
   const [activeTab, setActiveTab] = useState<'record' | 'upload'>('record');
   const [isVideoMuted, setIsVideoMuted] = useState<boolean>(false);
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
+  
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToast({ message, type });
+  };
   
   // New state for preview mode
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
@@ -308,7 +313,7 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
   const handleSubmit = async (): Promise<void> => {
     if (!applicant || !videoFile) {
       console.error('Submit failed: Missing applicant or video file', { applicant, videoFile });
-      alert('Missing required data. Please record or upload a video first.');
+      showToast('Please record or upload a video before submitting.', 'warning');
       return;
     }
 
@@ -421,12 +426,12 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
         }
       }
 
-      alert('Video assessment submitted successfully! Transcription will begin shortly.');
+      showToast('Video assessment submitted. Transcription will begin shortly.', 'success');
       onComplete();
     } catch (error) {
       console.error('Error submitting video:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Failed to submit video: ${errorMessage}`);
+      showToast(`Submission failed: ${errorMessage}`, 'error');
     } finally {
       setUploading(false);
     }
@@ -754,7 +759,7 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
                 ) : (
                   <>
                     <Save className="w-4 h-4" />
-                    Submit
+                    Submit Assessment
                   </>
                 )}
               </button>
@@ -762,6 +767,23 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
           </div>
         </div>
       </div>
+
+      {/* Toast notification */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-[200] flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium max-w-sm ${
+          toast.type === 'success' ? 'bg-green-600 text-white' :
+          toast.type === 'error' ? 'bg-red-600 text-white' :
+          'bg-amber-500 text-white'
+        }`}>
+          {toast.type === 'success' ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> :
+           toast.type === 'error' ? <XCircle className="w-4 h-4 flex-shrink-0" /> :
+           <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+          <span>{toast.message}</span>
+          <button onClick={() => setToast(null)} className="ml-1 opacity-70 hover:opacity-100">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

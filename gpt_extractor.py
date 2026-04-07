@@ -445,8 +445,34 @@ def _validate_and_normalize_extraction(data: dict) -> dict:
             data[arr_key] = []
     
     # Build skills.all as union of hard + soft (deduped)
-    hard_skills = data['skills'].get('hard_skills', [])
-    soft_skills = data['skills'].get('soft_skills', [])
+    # Also strip any category label strings that GPT sometimes includes
+    # e.g. "Languages", "Design & UI/UX", "Web Frameworks"
+    _SKILL_CATEGORY_LABELS = {
+        'languages', 'web frameworks', 'frameworks', 'databases', 'database',
+        'tools', 'tools & automation', 'tools and automation', 'automation',
+        'cloud platforms', 'cloud', 'design', 'design & ui/ux', 'ui/ux',
+        'soft skills', 'hard skills', 'data engineering', 'data', 'mobile',
+        'devops', 'backend', 'frontend', 'other', 'others', 'skills',
+        'technical skills', 'programming languages', 'platforms',
+        'operating systems', 'version control', 'methodologies',
+        'tools and technologies', 'technologies', 'certifications',
+    }
+
+    def _is_skill_label(s: str) -> bool:
+        if not isinstance(s, str):
+            return True
+        lower = s.strip().lower()
+        if lower in _SKILL_CATEGORY_LABELS:
+            return True
+        # Reject empty or whitespace-only
+        if not lower:
+            return True
+        return False
+
+    hard_skills = [s for s in data['skills'].get('hard_skills', []) if not _is_skill_label(s)]
+    soft_skills = [s for s in data['skills'].get('soft_skills', []) if not _is_skill_label(s)]
+    data['skills']['hard_skills'] = hard_skills
+    data['skills']['soft_skills'] = soft_skills
     all_skills = list(set(hard_skills + soft_skills))
     data['skills']['all'] = sorted(all_skills)
     

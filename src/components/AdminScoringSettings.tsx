@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Settings, Save, RotateCcw, AlertCircle, CheckCircle, Sliders, Target, GraduationCap, Briefcase, FolderGit2, Award, BookOpen } from 'lucide-react';
+import { Settings, Save, RotateCcw, AlertCircle, CheckCircle, Sliders, Target, GraduationCap, Briefcase, FolderGit2, Award, BookOpen, X, AlertTriangle } from 'lucide-react';
 import { getSupabaseAdminClient, ScoringSettings } from '../lib/supabase';
 
 const DEFAULT_SETTINGS = {
@@ -45,6 +45,7 @@ export function AdminScoringSettings() {
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const totalWeight =
     (formValues.experience_weight || 0) +
@@ -559,6 +560,35 @@ export function AdminScoringSettings() {
           </div>
         )}
       </div>
+
+      {/* Reset to Defaults Confirmation Modal */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="w-6 h-6 text-amber-600" />
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 text-center mb-1">Reset to Default Settings?</h3>
+            <p className="text-sm text-gray-500 text-center mb-5">
+              All scoring weights, thresholds, and baselines will be restored to their original default values. Any unsaved changes will be lost.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Keep Current Settings
+              </button>
+              <button
+                onClick={confirmResetToDefaults}
+                className="flex-1 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                Reset to Defaults
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

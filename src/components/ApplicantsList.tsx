@@ -10,7 +10,9 @@ import {
   XCircle,
   ExternalLink,
   Users,
-  Loader2
+  Loader2,
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest } from '../lib/supabase';
 import { getSupabaseAdminClient } from '../lib/supabase';
@@ -134,8 +136,12 @@ export function ApplicantsList() {
   const [selectedApplicantIndex, setSelectedApplicantIndex] = useState<number>(-1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [retryConfirmApplicant, setRetryConfirmApplicant] = useState<ApplicantWithResume | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
   
-  const itemsPerPage = 10;
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToast({ message, type });
+  };
 
   // Fetch distinct positions from applicants for dropdown
   useEffect(() => {
@@ -382,25 +388,26 @@ export function ApplicantsList() {
 
   const handleRetryParsing = async (applicant: ApplicantWithResume, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Retry parsing this resume?')) return;
-    
+    setRetryConfirmApplicant(applicant);
+  };
+
+  const confirmRetryParsing = async () => {
+    const applicant = retryConfirmApplicant;
+    if (!applicant) return;
+    setRetryConfirmApplicant(null);
     try {
       setRetryingId(applicant.id);
       const adminClient = getSupabaseAdminClient();
-      
-      // Call the retry endpoint or function
       const { error } = await adminClient
         .from('resumes')
         .update({ status: 'pending', parsed_data: null })
         .eq('id', applicant.resume?.id);
-
       if (error) throw error;
-      
-      // Refresh the list
       await fetchApplicantsList();
+      showToast('Resume re-queued for parsing.', 'success');
     } catch (err) {
       console.error('Error retrying parsing:', err);
-      alert('Failed to retry parsing. Please try again.');
+      showToast('Failed to retry parsing. Please try again.', 'error');
     } finally {
       setRetryingId(null);
     }
@@ -649,6 +656,52 @@ export function ApplicantsList() {
         currentIndex={selectedApplicantIndex}
         totalCount={filteredApplicants.length}
       />
+
+      {/* Retry Parsing Confirmation Modal */}
+      {retryConfirmApplicant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <RefreshCw className="w-6 h-6 text-amber-600" />
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 text-center mb-1">Retry Resume Parsing?</h3>
+            <p className="text-sm text-gray-500 text-center mb-5">
+              The resume for <span className="font-medium text-gray-700">{retryConfirmApplicant.name}</span> will be re-queued for AI parsing. Any existing parsed data will be cleared.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setRetryConfirmApplicant(null)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRetryParsing}
+                className="flex-1 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                Retry Parsing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-[200] flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium max-w-sm ${
+          toast.type === 'success' ? 'bg-green-600 text-white' :
+          toast.type === 'error' ? 'bg-red-600 text-white' :
+          'bg-amber-500 text-white'
+        }`}>
+          {toast.type === 'success' ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> :
+           toast.type === 'error' ? <XCircle className="w-4 h-4 flex-shrink-0" /> :
+           <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+          <span>{toast.message}</span>
+          <button onClick={() => setToast(null)} className="ml-1 opacity-70 hover:opacity-100">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

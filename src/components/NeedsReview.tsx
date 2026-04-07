@@ -770,7 +770,7 @@ export function NeedsReview() {
                 }`}
               >
                 {bulkProcessing && <Loader2 className="w-4 h-4 animate-spin" />}
-                Confirm
+                {bulkConfirm.type === 'shortlist' ? 'Shortlist Candidates' : 'Reject Applicants'}
               </button>
             </div>
           </div>
