@@ -21,8 +21,8 @@ import time
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from project root .env
-_project_root = Path(__file__).resolve().parent
+# Load environment variables from project root .env (one level up from backend/)
+_project_root = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=_project_root / ".env")
 
 # Check if running in test mode (disable GPT calls)

@@ -26,7 +26,7 @@ try:
     import job_alignment
 except ImportError as e:
     print(f"ERROR: Could not import job_alignment: {e}")
-    print("Make sure job_alignment.py is in the project root")
+    print("Make sure job_alignment.py is in the backend/ folder")
     sys.exit(1)
 
 # Initialize Flask app
