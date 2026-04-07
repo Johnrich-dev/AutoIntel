@@ -22,5 +22,12 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       exclude: ['lucide-react'],
     },
+    // SPA fallback: serve index.html for all routes (e.g. /applicant/login, /admin/login)
+    server: {
+      historyApiFallback: true,
+    },
+    preview: {
+      historyApiFallback: true,
+    },
   };
 });

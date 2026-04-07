@@ -6,23 +6,25 @@ import { AssessmentDashboard } from './components/AssessmentDashboard';
 import { VideoAssessment } from './components/VideoAssessment';
 import { PersonalityTest } from './components/PersonalityTest';
 import { AdminDashboard } from './components/AdminDashboard';
-import { RoleSelection } from './components/RoleSelection';
 import { AdminLogin } from './components/AdminLogin';
 import { getSupabaseConfigError } from './lib/supabase';
 
-type View =
-  | 'choice'
-  | 'login'
-  | 'rules'
-  | 'dashboard'
-  | 'video'
-  | 'test'
-  | 'admin-login'
-  | 'admin';
+type ApplicantView = 'rules' | 'dashboard' | 'video' | 'test';
 
-function AppContent() {
-  const { applicant, loading, isAdminAuthenticated, adminSession } = useAuth();
-  const [view, setView] = useState<View>('choice');
+// Determine the current route from the URL path
+function getRoute(): 'applicant-login' | 'admin-login' | 'applicant-app' | 'not-found' {
+  const path = window.location.pathname;
+  if (path === '/applicant/login') return 'applicant-login';
+  if (path === '/admin/login' || path === '/admin') return 'admin-login';
+  // Legacy /login path → redirect to applicant login
+  if (path === '/login' || path === '/') return 'applicant-login';
+  return 'not-found';
+}
+
+// ─── Applicant flow ───────────────────────────────────────────────────────────
+function ApplicantApp() {
+  const { applicant, loading, logout } = useAuth();
+  const [view, setView] = useState<ApplicantView>('dashboard');
 
   // Apply saved theme on mount
   useEffect(() => {
@@ -30,60 +32,17 @@ function AppContent() {
     if (savedSettings) {
       try {
         const settings = JSON.parse(savedSettings);
-        if (settings.theme === 'dark') {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
-      } catch (e) {
-        // Ignore parse errors
-      }
+        document.documentElement.classList.toggle('dark', settings.theme === 'dark');
+      } catch (_) { /* ignore */ }
     }
   }, []);
 
   useEffect(() => {
-    // Debug: log current state
-    console.log('[ViewEffect] loading:', loading, 'applicant:', !!applicant, 'view:', view);
-    
-    // Skip if still loading or no applicant yet
     if (loading || !applicant) return;
-    
-    const urlParams = new URLSearchParams(window.location.search);
-    const mode = urlParams.get('mode');
-
-    // If mode=admin in URL, go to admin-login view (will check auth)
-    if (mode === 'admin') {
-      setView('admin-login');
-      return;
-    }
-
-    // If admin is authenticated, show admin dashboard
-    if (isAdminAuthenticated) {
-      setView('admin');
-      return;
-    }
-
-    // Check localStorage first for rules acceptance (more reliable)
     const localRulesAccepted = localStorage.getItem('rules_accepted') === 'true';
-    
-    // Also check database value
-    const dbRulesAccepted = applicant.rules_accepted === true;
-    
-    // Use localStorage as the primary check, fallback to database
-    const rulesAccepted = localRulesAccepted || dbRulesAccepted;
-    
-    console.log('[ViewEffect] localStorage rules_accepted:', localRulesAccepted);
-    console.log('[ViewEffect] database rules_accepted:', dbRulesAccepted);
-    console.log('[ViewEffect] final rulesAccepted:', rulesAccepted);
-    
-    if (!rulesAccepted) {
-      console.log('[ViewEffect] Setting view to rules');
-      setView('rules');
-    } else {
-      console.log('[ViewEffect] Setting view to dashboard');
-      setView('dashboard');
-    }
-  }, [applicant, loading, isAdminAuthenticated]);
+    const rulesAccepted = localRulesAccepted || applicant.rules_accepted === true;
+    setView(rulesAccepted ? 'dashboard' : 'rules');
+  }, [applicant, loading]);
 
   if (loading) {
     return (
@@ -93,46 +52,11 @@ function AppContent() {
     );
   }
 
-  if (view === 'choice') {
-    return (
-      <RoleSelection
-        onSelectApplicant={() => setView('login')}
-        onSelectAdmin={() => setView('admin-login')}
-      />
-    );
-  }
-
-  if (view === 'admin-login') {
-    return (
-      <AdminLogin
-        onLoginSuccess={() => setView('admin')}
-        onCancel={() => setView('choice')}
-      />
-    );
-  }
-
-  if (view === 'admin') {
-    // Protect admin route - require authentication
-    if (!isAdminAuthenticated) {
-      return (
-        <AdminLogin
-          onLoginSuccess={() => setView('admin')}
-          onCancel={() => setView('choice')}
-        />
-      );
-    }
-    return <AdminDashboard />;
-  }
-
-  // Early return for unauthenticated state
+  // Not authenticated → show applicant login
   if (!applicant) {
-    return <ApplicantLogin onLoginSuccess={() => {
-      // Don't do anything here - the useEffect will detect the new applicant
-      // and set the correct view based on rules_accepted
-    }} />;
+    return <ApplicantLogin onLoginSuccess={() => { /* useEffect handles view */ }} />;
   }
 
-  // Handle specific views - only if applicant is authenticated
   if (view === 'rules') {
     return <RulesAndTerms onAccept={() => setView('dashboard')} />;
   }
@@ -155,7 +79,6 @@ function AppContent() {
     );
   }
 
-  // Default to assessment dashboard
   return (
     <AssessmentDashboard
       onStartVideo={() => setView('video')}
@@ -164,6 +87,70 @@ function AppContent() {
   );
 }
 
+// ─── Admin flow ───────────────────────────────────────────────────────────────
+function AdminApp() {
+  const { isAdminAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-white text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAdminAuthenticated) {
+    return (
+      <AdminLogin
+        onLoginSuccess={() => {
+          // Push to /admin so the route resolves to AdminDashboard on next render
+          window.history.pushState({}, '', '/admin');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }}
+        onCancel={() => {
+          window.history.pushState({}, '', '/applicant/login');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }}
+      />
+    );
+  }
+
+  return <AdminDashboard />;
+}
+
+// ─── Router ───────────────────────────────────────────────────────────────────
+function AppRouter() {
+  const [route, setRoute] = useState(getRoute);
+  const { userType, loading } = useAuth();
+
+  useEffect(() => {
+    const handlePop = () => setRoute(getRoute());
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, []);
+
+  // Route guard: authenticated applicant trying to access admin → redirect
+  useEffect(() => {
+    if (loading) return;
+    if (userType === 'applicant' && (route === 'admin-login')) {
+      window.history.replaceState({}, '', '/applicant/login');
+      setRoute('applicant-login');
+    }
+  }, [userType, route, loading]);
+
+  if (route === 'admin-login' || route === 'not-found') {
+    // Block applicants from reaching admin routes
+    if (!loading && userType === 'applicant') {
+      return <ApplicantApp />;
+    }
+    return <AdminApp />;
+  }
+
+  // applicant-login and default → applicant flow
+  return <ApplicantApp />;
+}
+
+// ─── Root ─────────────────────────────────────────────────────────────────────
 function App() {
   const configError = getSupabaseConfigError();
   if (configError) {
@@ -172,7 +159,7 @@ function App() {
         <div className="max-w-xl w-full bg-white rounded-2xl shadow-2xl p-8">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Frontend configuration required</h1>
           <p className="text-gray-700 mb-4">
-            The app can’t connect to Supabase yet, so nothing loads.
+            The app can't connect to Supabase yet, so nothing loads.
           </p>
           <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm mb-4">
             {configError}
@@ -186,9 +173,10 @@ VITE_SUPABASE_ANON_KEY=...
       </div>
     );
   }
+
   return (
     <AuthProvider>
-      <AppContent />
+      <AppRouter />
     </AuthProvider>
   );
 }

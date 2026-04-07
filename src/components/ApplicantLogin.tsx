@@ -1,5 +1,5 @@
-import { Lock, Mail } from 'lucide-react';
-import { useState } from 'react';
+import { Lock, Mail, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ApplicantLoginProps {
@@ -11,7 +11,18 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [tokenFromUrl, setTokenFromUrl] = useState(false);
   const { login } = useAuth();
+
+  // Auto-populate token from URL query param (?token=...)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token');
+    if (urlToken) {
+      setToken(urlToken);
+      setTokenFromUrl(true);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,6 +32,8 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
     const success = await login(token, email);
 
     if (success) {
+      // Clean token from URL after successful login
+      window.history.replaceState({}, '', window.location.pathname);
       onLoginSuccess();
     } else {
       setError('Invalid email or access token. Please check your email for the correct credentials.');
@@ -37,8 +50,14 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
               <Lock className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">AutoIntel</h1>
-            <p className="text-gray-600">Automated Hiring System</p>
+            <p className="text-gray-600">Applicant Assessment Portal</p>
           </div>
+
+          {tokenFromUrl && (
+            <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
+              Access token loaded from your email link. Enter your email to continue.
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
@@ -71,13 +90,16 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                 required
               />
-              <p className="mt-2 text-sm text-gray-500">
-                Check your email for the temporary access token
-              </p>
+              {!tokenFromUrl && (
+                <p className="mt-2 text-sm text-gray-500">
+                  Check your email for the temporary access token
+                </p>
+              )}
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                 {error}
               </div>
             )}
@@ -93,15 +115,9 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
 
           <div className="mt-6 pt-6 border-t border-gray-200">
             <p className="text-xs text-gray-500 text-center">
-              Access tokens are valid for 1-2 days from the time of issue.
+              Access tokens are valid for a limited time from the time of issue.
               <br />
-              <span className="font-medium">Test Tokens:</span>
-              <br />
-              <code className="bg-gray-100 px-2 py-1 rounded text-blue-600">token_john_123</code> (rules accepted)
-              <br />
-              <code className="bg-gray-100 px-2 py-1 rounded">token_jane_456</code> (needs to accept rules)
-              <br />
-              <code className="bg-gray-100 px-2 py-1 rounded">token_bob_789</code> (needs to accept rules)
+              If your link has expired, contact the recruitment team.
             </p>
           </div>
         </div>

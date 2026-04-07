@@ -27,6 +27,9 @@ FROM_NAME = os.getenv("FROM_NAME", "AutoIntel Recruitment")
 # Token configuration
 TOKEN_EXPIRY_HOURS = int(os.getenv("TOKEN_EXPIRY_HOURS", "24"))
 
+# App URL for generating applicant login links
+APP_URL = os.getenv("APP_URL", "http://localhost:5173")
+
 
 def generate_access_token() -> str:
     """Generate a unique access token for applicant."""
@@ -283,10 +286,16 @@ def send_pass_notification(
                     <h3>📋 NEXT STEPS:</h3>
                     <ol>
                         <li><strong>Access the System:</strong><br>
-                        Visit: <a href="https://autointel.example.com">https://autointel.example.com</a></li>
-                        <li><strong>Login Credentials:</strong><br>
-                        • Email: {applicant_email}<br>
-                        • Access Token: <div class="token-box">{access_token}</div></li>
+                        Click your personal login link:<br>
+                        <a href="{APP_URL}/applicant/login?token={access_token}" 
+                           style="display:inline-block; margin-top:8px; background:#4F46E5; color:white; 
+                                  padding:10px 20px; border-radius:6px; text-decoration:none; font-weight:bold;">
+                           🔗 Access My Assessment Portal
+                        </a><br>
+                        <small style="color:#666;">Or copy this link: {APP_URL}/applicant/login?token={access_token}</small>
+                        </li>
+                        <li><strong>Verify your identity:</strong><br>
+                        You will be asked to confirm your email: <strong>{applicant_email}</strong></li>
                         <li><strong>Complete Assessments:</strong><br>
                         • Video Introduction (record your response)<br>
                         • Work Profiling Exam (personality & skills assessment)</li>
@@ -294,14 +303,12 @@ def send_pass_notification(
                 </div>
                 
                 <div class="instructions">
-                    <h3>🔐 System Instructions:</h3>
-                    <ol>
-                        <li>Go to the login page</li>
-                        <li>Enter your email: <strong>{applicant_email}</strong></li>
-                        <li>Enter your access token: <strong>{access_token}</strong></li>
-                        <li>Complete the required assessments</li>
-                        <li>Submit your responses</li>
-                    </ol>
+                    <h3>🔐 Access Token (backup):</h3>
+                    <p>If the link above doesn't work, go to <a href="{APP_URL}/applicant/login">{APP_URL}/applicant/login</a> and enter:</p>
+                    <ul>
+                        <li>Email: <strong>{applicant_email}</strong></li>
+                        <li>Access Token: <div class="token-box">{access_token}</div></li>
+                    </ul>
                 </div>
                 
                 <p><strong>⏰ Important:</strong> Your access token expires on {expiry_str}. 

@@ -14,6 +14,7 @@ interface AuthContextType {
   isAdminAuthenticated: boolean;
   accessToken: string | null;
   loading: boolean;
+  userType: 'applicant' | 'admin' | null;
   login: (token: string, email: string) => Promise<boolean>;
   adminLogin: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -241,7 +242,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ applicant, adminSession, isAdminAuthenticated: !!adminSession, accessToken, loading, login, adminLogin, logout, adminLogout, updateApplicant }}>
+    <AuthContext.Provider value={{
+      applicant,
+      adminSession,
+      isAdminAuthenticated: !!adminSession,
+      accessToken,
+      loading,
+      userType: adminSession ? 'admin' : applicant ? 'applicant' : null,
+      login,
+      adminLogin,
+      logout,
+      adminLogout,
+      updateApplicant,
+    }}>
       {children}
     </AuthContext.Provider>
   );

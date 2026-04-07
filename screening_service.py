@@ -330,6 +330,7 @@ def process_applicant_screening(
             if access_token:
                 update_data["access_token"] = access_token
                 update_data["access_expires_at"] = token_expires.isoformat()
+                update_data["role"] = "applicant"  # Enforce role on token generation
             
             supabase_client.table("applicants").update(
                 update_data
@@ -459,7 +460,7 @@ def validate_access_token(
     """
     try:
         result = supabase_client.table("applicants").select(
-            "id, name, email, status, access_expires_at, applied_job_id"
+            "id, name, email, status, access_expires_at, applied_job_id, role"
         ).eq("access_token", token).execute()
         
         if not result.data or len(result.data) == 0:
@@ -467,10 +468,16 @@ def validate_access_token(
         
         applicant = result.data[0]
         
+        # Enforce role: only applicant tokens are valid here
+        # If the role column exists and is set, it must be 'applicant'
+        applicant_role = applicant.get("role")
+        if applicant_role and applicant_role != "applicant":
+            return False, {"error": f"Invalid role: {applicant_role}"}
+        
         # Check if token expired
         if applicant.get("access_expires_at"):
             expires_at = datetime.fromisoformat(applicant["access_expires_at"].replace("Z", "+00:00"))
-            if datetime.now() > expires_at:
+            if datetime.now(expires_at.tzinfo) > expires_at:
                 return False, {"error": "Token expired", "applicant": applicant}
         
         # Check if status allows login
