@@ -5,55 +5,165 @@ import {
   Users,
   Clock,
   Download,
-  Calendar,
-  Filter,
-  ChevronDown,
   FileText,
   Video,
   ClipboardCheck,
-  PieChart,
   ArrowUpRight,
   ArrowDownRight,
-  Target,
   Award,
   Briefcase,
-  Mail,
   CheckCircle,
   XCircle,
+  AlertTriangle,
+  Info,
+  Star,
+  Calendar,
+  TrendingDown,
   Printer,
-  Share2
 } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest } from '../lib/supabase';
+
+// ============================================================================
+// Types
+// ============================================================================
 
 interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
   video?: VideoAssessment;
   test?: PersonalityTest;
   screened_at?: string;
+  decision_date?: string | null;
+  interview_scheduled?: boolean;
 }
 
 interface ReportsDashboardProps {
   applicants: ApplicantWithDetails[];
 }
 
-// Calculate days between dates
+type DateRange = '7d' | '30d' | '90d' | 'all';
+type ReportTab = 'overview' | 'pipeline' | 'scores' | 'time';
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
 function daysBetween(date1: string, date2: string): number {
   const d1 = new Date(date1);
   const d2 = new Date(date2);
-  return Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.max(0, Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)));
 }
 
+function safeAvg(values: number[]): number {
+  if (values.length === 0) return 0;
+  return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+}
+
+function getVideoScore(video?: VideoAssessment): number | null {
+  if (!video) return null;
+  if (video.transcript_score != null) return Math.round(video.transcript_score * 10);
+  return null;
+}
+
+function getWorkStyleScore(test?: PersonalityTest): number | null {
+  if (!test || test.status !== 'completed') return null;
+  if (test.semantic_score != null) return Math.round(test.semantic_score);
+  return null;
+}
+
+function getResumeScore(a: ApplicantWithDetails): number | null {
+  if (a.screening_score != null) return Math.round(a.screening_score);
+  return null;
+}
+
+// ============================================================================
+// Sub-components
+// ============================================================================
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+        <Info className="w-6 h-6 text-gray-400" />
+      </div>
+      <p className="text-sm text-gray-500">{message}</p>
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  icon: Icon,
+  colorClass,
+  sub,
+  trend,
+  trendUp,
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ElementType;
+  colorClass: string;
+  sub?: string;
+  trend?: string;
+  trendUp?: boolean;
+}) {
+  return (
+    <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+      <div className="flex items-start justify-between mb-3">
+        <div className={`p-2.5 rounded-lg ${colorClass} bg-opacity-10`}>
+          <Icon className={`w-5 h-5 ${colorClass.replace('bg-', 'text-')}`} />
+        </div>
+        {trend && (
+          <span className={`flex items-center gap-0.5 text-xs font-medium ${trendUp ? 'text-green-600' : 'text-red-500'}`}>
+            {trendUp ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+            {trend}
+          </span>
+        )}
+      </div>
+      <p className="text-2xl font-bold text-gray-900">{value}</p>
+      <p className="text-sm text-gray-500 mt-0.5">{label}</p>
+      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+    </div>
+  );
+}
+
+function BarRow({
+  label,
+  count,
+  total,
+  colorClass,
+  sub,
+}: {
+  label: string;
+  count: number;
+  total: number;
+  colorClass: string;
+  sub?: string;
+}) {
+  const pct = total > 0 ? Math.max((count / total) * 100, count > 0 ? 4 : 0) : 0;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-sm font-medium text-gray-700">{label}</span>
+        <span className="text-sm text-gray-500">{count}{sub ? ` · ${sub}` : ''}</span>
+      </div>
+      <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className={`h-full ${colorClass} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Main Component
+// ============================================================================
+
 export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
-  const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d' | 'all'>('30d');
-  const [selectedReport, setSelectedReport] = useState<'overview' | 'pipeline' | 'scores' | 'time'>('overview');
-  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
-  const [showDepartmentDropdown, setShowDepartmentDropdown] = useState<boolean>(false);
+  const [dateRange, setDateRange] = useState<DateRange>('30d');
+  const [selectedReport, setSelectedReport] = useState<ReportTab>('overview');
 
-  // Mock departments (in production, fetch from job_postings table)
-  const departments = ['all', 'Engineering', 'MIS', 'Human Resources', 'Finance', 'Marketing', 'Operations'];
-
-  // Filter applicants by date range
-  const filteredApplicants = useMemo(() => {
+  // ── Date filter ──────────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
     if (dateRange === 'all') return applicants;
     const days = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90;
     const cutoff = new Date();
@@ -61,214 +171,285 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
     return applicants.filter(a => new Date(a.created_at) >= cutoff);
   }, [applicants, dateRange]);
 
-  // Calculate metrics
-  const metrics = useMemo(() => {
-    const total = filteredApplicants.length;
-    const forReview = filteredApplicants.filter(a => a.screening_status === 'in_review').length;
-    const inProgress = filteredApplicants.filter(a => a.screening_status === 'passed').length;
-    const videoCompleted = filteredApplicants.filter(a => a.video?.status === 'completed').length;
-    const assessmentCompleted = filteredApplicants.filter(a => a.test?.status === 'completed').length;
-    
-    // Time to hire calculations
-    const completedApplicants = filteredApplicants.filter(a => 
-      a.test?.status === 'completed' && a.test?.submitted_at
-    );
-    
-    const timeToHire = completedApplicants.length > 0
-      ? completedApplicants.reduce((sum, a) => {
-          const days = daysBetween(a.created_at, a.test?.submitted_at || a.created_at);
-          return sum + days;
-        }, 0) / completedApplicants.length
-      : 0;
+  // ── Core counts ──────────────────────────────────────────────────────────
+  const counts = useMemo(() => {
+    const total = filtered.length;
+    const resumePassed = filtered.filter(a =>
+      a.screening_status === 'passed' || a.screening_status === 'in_review'
+    ).length;
+    const needsReview = filtered.filter(a => a.screening_status === 'in_review').length;
+    const shortlisted = filtered.filter(a => a.status === 'shortlisted' || a.status === 'final_interview').length;
+    const hired = filtered.filter(a => a.status === 'hired').length;
+    const rejected = filtered.filter(a => a.status === 'rejected').length;
+    const videoCompleted = filtered.filter(a => a.video?.status === 'completed').length;
+    const assessmentCompleted = filtered.filter(a => a.test?.status === 'completed').length;
 
-    // Score averages - use screening_score from applicant level (not resume)
-    const avgResumeScore = filteredApplicants.length > 0
-      ? Math.round(filteredApplicants.reduce((sum, a) => sum + (a.screening_score ?? 0), 0) / total)
-      : 0;
+    const conversionRate = total > 0 ? Math.round((hired / total) * 100) : 0;
+    const assessmentRate = total > 0 ? Math.round((assessmentCompleted / total) * 100) : 0;
+
+    // Avg time to hire: created_at → decision_date (only for hired)
+    const hiredWithDate = filtered.filter(a => a.status === 'hired' && a.decision_date);
+    const avgTimeToHire = hiredWithDate.length > 0
+      ? safeAvg(hiredWithDate.map(a => daysBetween(a.created_at, a.decision_date!)))
+      : null;
 
     return {
-      total,
-      suitable: forReview,
-      notSuitable: inProgress,
-      needsReview: inProgress,
-      videoCompleted,
-      assessmentCompleted,
-      conversionRate: total > 0 ? Math.round((assessmentCompleted / total) * 100) : 0,
-      avgTimeToHire: Math.round(timeToHire),
-      avgResumeScore,
+      total, resumePassed, needsReview, shortlisted, hired, rejected,
+      videoCompleted, assessmentCompleted, conversionRate, assessmentRate, avgTimeToHire,
     };
-  }, [filteredApplicants]);
+  }, [filtered]);
 
-  // Pipeline data
-  const pipelineData = useMemo(() => {
-    const forReview = filteredApplicants.filter(a => a.screening_status === 'in_review').length;
-    const inProgress = filteredApplicants.filter(a => a.screening_status === 'passed').length;
-    
-    return [
-      { stage: 'Applied', count: filteredApplicants.length, color: 'bg-blue-500' },
-      { stage: 'Resume Review', count: forReview + inProgress, color: 'bg-emerald-500' },
-      { stage: 'Video Assessment', count: filteredApplicants.filter(a => a.video?.status === 'completed').length, color: 'bg-purple-500' },
-      { stage: 'Work Style Assessment', count: filteredApplicants.filter(a => a.test?.status === 'completed').length, color: 'bg-orange-500' },
-      { stage: 'Hired', count: Math.floor(filteredApplicants.filter(a => a.test?.status === 'completed').length * 0.3), color: 'bg-green-500' },
-    ];
-  }, [filteredApplicants]);
-
-  // Score distribution
-  const scoreDistribution = useMemo(() => {
-    const ranges = [
-      { range: '90-100', count: 0, label: 'Excellent' },
-      { range: '80-89', count: 0, label: 'Good' },
-      { range: '70-79', count: 0, label: 'Average' },
-      { range: '60-69', count: 0, label: 'Below Average' },
-      { range: 'Below 60', count: 0, label: 'Poor' },
+  // ── Pipeline funnel ───────────────────────────────────────────────────────
+  const funnel = useMemo(() => {
+    const stages = [
+      { label: 'Applied', count: filtered.length },
+      { label: 'Resume Screened', count: filtered.filter(a => a.screening_status && a.screening_status !== 'not_scored').length },
+      { label: 'Passed Screening', count: filtered.filter(a => a.screening_status === 'passed' || a.screening_status === 'in_review').length },
+      { label: 'Needs Review', count: filtered.filter(a => a.screening_status === 'in_review').length },
+      { label: 'Video Assessment', count: filtered.filter(a => a.video?.status === 'completed' || a.video?.status === 'submitted').length },
+      { label: 'Work Style Assessment', count: filtered.filter(a => a.test?.status === 'completed').length },
+      { label: 'Shortlisted', count: filtered.filter(a => a.status === 'shortlisted' || a.status === 'final_interview').length },
+      { label: 'Interview Scheduled', count: filtered.filter(a => a.status === 'final_interview' || a.interview_scheduled).length },
+      { label: 'Hired', count: filtered.filter(a => a.status === 'hired').length },
     ];
 
-    filteredApplicants.forEach(a => {
-      // Use actual scores from database, fall back to screening_status
-      const testScore = a.test?.semantic_score;
-      // transcript_score is 0-10, convert to 0-100 for comparison
-      const videoScore = a.video?.transcript_score != null ? Math.round(a.video.transcript_score * 10) : null;
-      const resumeScore = a.screening_score;
-      
-      // Calculate composite score: prioritize test > video > resume
-      let score: number;
-      if (testScore != null && testScore > 0) {
-        score = testScore;
-      } else if (videoScore != null && videoScore > 0) {
-        score = videoScore;
-      } else if (resumeScore != null && resumeScore > 0) {
-        score = resumeScore;
-      } else {
-        // Fallback: derive from screening status
-        score = a.screening_status === 'in_review' ? 80 : a.screening_status === 'passed' ? 60 : 40;
-      }
-      
-      if (score >= 90) ranges[0].count++;
-      else if (score >= 80) ranges[1].count++;
-      else if (score >= 70) ranges[2].count++;
-      else if (score >= 60) ranges[3].count++;
-      else ranges[4].count++;
+    return stages.map((s, i) => {
+      const prev = i > 0 ? stages[i - 1].count : s.count;
+      const convPct = prev > 0 ? Math.round((s.count / prev) * 100) : 0;
+      const dropPct = 100 - convPct;
+      return { ...s, convPct, dropPct };
+    });
+  }, [filtered]);
+
+  // Biggest drop-off stage
+  const biggestDropoff = useMemo(() => {
+    let maxDrop = 0;
+    let maxIdx = -1;
+    funnel.forEach((s, i) => {
+      if (i > 0 && s.dropPct > maxDrop) { maxDrop = s.dropPct; maxIdx = i; }
+    });
+    return maxIdx;
+  }, [funnel]);
+
+  // ── Score analytics ───────────────────────────────────────────────────────
+  const scoreAnalytics = useMemo(() => {
+    const groups = {
+      hired: filtered.filter(a => a.status === 'hired'),
+      rejected: filtered.filter(a => a.status === 'rejected'),
+      inReview: filtered.filter(a => a.screening_status === 'in_review'),
+    };
+
+    function avgScores(list: ApplicantWithDetails[]) {
+      const resumes = list.map(getResumeScore).filter((s): s is number => s !== null);
+      const videos = list.map(a => getVideoScore(a.video)).filter((s): s is number => s !== null);
+      const ws = list.map(a => getWorkStyleScore(a.test)).filter((s): s is number => s !== null);
+      return {
+        resume: resumes.length > 0 ? safeAvg(resumes) : null,
+        video: videos.length > 0 ? safeAvg(videos) : null,
+        workStyle: ws.length > 0 ? safeAvg(ws) : null,
+      };
+    }
+
+    // Score distribution buckets
+    const dist = [
+      { range: '90–100', label: 'Excellent', count: 0 },
+      { range: '80–89', label: 'Good', count: 0 },
+      { range: '70–79', label: 'Average', count: 0 },
+      { range: '60–69', label: 'Below Avg', count: 0 },
+      { range: 'Below 60', label: 'Poor', count: 0 },
+    ];
+    filtered.forEach(a => {
+      const s = getResumeScore(a) ?? getVideoScore(a.video) ?? getWorkStyleScore(a.test);
+      if (s == null) return;
+      if (s >= 90) dist[0].count++;
+      else if (s >= 80) dist[1].count++;
+      else if (s >= 70) dist[2].count++;
+      else if (s >= 60) dist[3].count++;
+      else dist[4].count++;
     });
 
-    return ranges;
-  }, [filteredApplicants]);
-
-  // Position breakdown
-  const positionBreakdown = useMemo(() => {
-    const positions: Record<string, number> = {};
-    filteredApplicants.forEach(a => {
-      positions[a.position] = (positions[a.position] || 0) + 1;
-    });
-    return Object.entries(positions)
-      .map(([position, count]) => ({ position, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  }, [filteredApplicants]);
-
-  // Calculate average days for each stage
-  const timelineAverages = useMemo(() => {
-    // Resume review: applicants who have been screened (screened_at timestamp)
-    const forReviewApplicants = filteredApplicants.filter(a => a.screening_status === 'in_review' && a.screened_at);
-    
-    // Video complete: video assessments with submitted_at timestamp
-    const videoCompleted = filteredApplicants.filter(a => a.video?.status === 'completed' && a.video?.submitted_at);
-    
-    // Assessment complete: work_style_assessments with submitted_at timestamp
-    const assessmentCompleted = filteredApplicants.filter(a => a.test?.status === 'completed' && a.test?.submitted_at);
-    
-    const avgForReviewDays = forReviewApplicants.length > 0
-      ? Math.round(forReviewApplicants.reduce((sum, a) => sum + daysBetween(a.created_at, a.screened_at || a.created_at), 0) / forReviewApplicants.length)
-      : 1;
-    
-    const avgVideoDays = videoCompleted.length > 0
-      ? Math.round(videoCompleted.reduce((sum, a) => sum + daysBetween(a.created_at, a.video?.submitted_at || a.created_at), 0) / videoCompleted.length)
-      : 2;
-    
-    // Use work_style_assessments.submitted_at for assessment completion timing
-    const avgAssessmentDays = assessmentCompleted.length > 0
-      ? Math.round(assessmentCompleted.reduce((sum, a) => sum + daysBetween(a.created_at, a.test?.submitted_at || a.created_at), 0) / assessmentCompleted.length)
-      : 2;
-    
     return {
-      resume: avgForReviewDays,
-      videoInvite: Math.max(1, avgForReviewDays),
-      videoComplete: avgVideoDays,
-      assessmentComplete: avgAssessmentDays,
+      byOutcome: {
+        hired: avgScores(groups.hired),
+        rejected: avgScores(groups.rejected),
+        inReview: avgScores(groups.inReview),
+      },
+      dist,
     };
-  }, [filteredApplicants]);
+  }, [filtered]);
 
-  const handleExport = (format: 'csv' | 'pdf') => {
-    alert(`Exporting report as ${format.toUpperCase()}...`);
+  // ── Job performance ───────────────────────────────────────────────────────
+  const jobPerformance = useMemo(() => {
+    const map: Record<string, ApplicantWithDetails[]> = {};
+    filtered.forEach(a => {
+      const key = a.position || 'Unknown';
+      if (!map[key]) map[key] = [];
+      map[key].push(a);
+    });
+    return Object.entries(map)
+      .map(([position, list]) => {
+        const total = list.length;
+        const passed = list.filter(a => a.screening_status === 'passed' || a.screening_status === 'in_review').length;
+        const completed = list.filter(a => a.test?.status === 'completed').length;
+        const shortlisted = list.filter(a => a.status === 'shortlisted' || a.status === 'final_interview').length;
+        const hired = list.filter(a => a.status === 'hired').length;
+        const hiredWithDate = list.filter(a => a.status === 'hired' && a.decision_date);
+        const timeToFill = hiredWithDate.length > 0
+          ? safeAvg(hiredWithDate.map(a => daysBetween(a.created_at, a.decision_date!)))
+          : null;
+        return {
+          position, total,
+          passRate: total > 0 ? Math.round((passed / total) * 100) : 0,
+          completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+          shortlisted, hired, timeToFill,
+        };
+      })
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8);
+  }, [filtered]);
+
+  // ── Insights / alerts ─────────────────────────────────────────────────────
+  const insights = useMemo(() => {
+    const msgs: { type: 'warn' | 'info' | 'ok'; text: string }[] = [];
+    const { total, resumePassed, assessmentCompleted, hired, videoCompleted } = counts;
+
+    if (total > 0) {
+      const dropAfterScreening = total > 0 ? Math.round(((total - resumePassed) / total) * 100) : 0;
+      if (dropAfterScreening > 60) msgs.push({ type: 'warn', text: `High drop-off after resume screening: ${dropAfterScreening}% of applicants did not pass.` });
+
+      const assessmentRate = resumePassed > 0 ? Math.round((assessmentCompleted / resumePassed) * 100) : 0;
+      if (assessmentRate < 30 && resumePassed > 0) msgs.push({ type: 'warn', text: `Low assessment completion: only ${assessmentRate}% of passed candidates completed the work style assessment.` });
+
+      if (videoCompleted > 0 && assessmentCompleted === 0) msgs.push({ type: 'info', text: 'Candidates have completed video assessments but none have completed the work style assessment yet.' });
+
+      if (hired === 0 && total > 0) msgs.push({ type: 'info', text: 'No hires recorded in the selected period.' });
+
+      if (total > 0 && hired > 0) msgs.push({ type: 'ok', text: `${hired} candidate${hired > 1 ? 's' : ''} hired in the selected period. Overall conversion: ${counts.conversionRate}%.` });
+    }
+
+    return msgs;
+  }, [counts]);
+
+  // ── Time analytics ────────────────────────────────────────────────────────
+  const timeAnalytics = useMemo(() => {
+    // Resume screening time: created_at → screened_at
+    const screened = filtered.filter(a => a.screened_at);
+    const resumeScreeningDays = screened.length > 0
+      ? safeAvg(screened.map(a => daysBetween(a.created_at, a.screened_at!)))
+      : null;
+
+    // Video completion time: created_at → video.submitted_at
+    const videoComp = filtered.filter(a => a.video?.submitted_at);
+    const videoCompDays = videoComp.length > 0
+      ? safeAvg(videoComp.map(a => daysBetween(a.created_at, a.video!.submitted_at!)))
+      : null;
+
+    // Assessment completion time: created_at → test.submitted_at
+    const testComp = filtered.filter(a => a.test?.submitted_at);
+    const assessmentDays = testComp.length > 0
+      ? safeAvg(testComp.map(a => daysBetween(a.created_at, a.test!.submitted_at!)))
+      : null;
+
+    // Time to hire: created_at → decision_date
+    const hiredWithDate = filtered.filter(a => a.status === 'hired' && a.decision_date);
+    const timeToHireDays = hiredWithDate.length > 0
+      ? safeAvg(hiredWithDate.map(a => daysBetween(a.created_at, a.decision_date!)))
+      : null;
+
+    const stages = [
+      { label: 'Resume Screening', days: resumeScreeningDays, count: screened.length, color: 'bg-blue-500' },
+      { label: 'Video Assessment', days: videoCompDays, count: videoComp.length, color: 'bg-purple-500' },
+      { label: 'Work Style Assessment', days: assessmentDays, count: testComp.length, color: 'bg-orange-500' },
+      { label: 'Time to Hire', days: timeToHireDays, count: hiredWithDate.length, color: 'bg-green-500' },
+    ];
+
+    // Bottleneck = stage with most days (excluding nulls)
+    const withData = stages.filter(s => s.days !== null);
+    const bottleneck = withData.length > 0
+      ? withData.reduce((a, b) => (a.days! > b.days! ? a : b)).label
+      : null;
+
+    return { stages, bottleneck };
+  }, [filtered]);
+
+  // ── Export CSV ────────────────────────────────────────────────────────────
+  const handleExport = () => {
+    const rows = [
+      ['Name', 'Email', 'Position', 'Status', 'Screening Status', 'Resume Score', 'Video Score', 'Work Style Score', 'Applied At'],
+      ...filtered.map(a => [
+        a.name, a.email, a.position,
+        a.status || '', a.screening_status || '',
+        getResumeScore(a) ?? '',
+        getVideoScore(a.video) ?? '',
+        getWorkStyleScore(a.test) ?? '',
+        new Date(a.created_at).toLocaleDateString(),
+      ]),
+    ];
+    const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `recruitment_report_${dateRange}.csv`; a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="p-8 lg:p-10 space-y-6 bg-slate-50 min-h-screen">
+    <div className="p-6 lg:p-8 space-y-6 bg-slate-50 min-h-screen">
+
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Reports & Analytics</h1>
-          <p className="text-gray-600 mt-1">Track recruitment metrics and performance</p>
+          <p className="text-sm text-gray-500 mt-0.5">Recruitment performance and hiring insights</p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Date Range Filter */}
-          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-            {[
-              { id: '7d', label: '7 Days' },
-              { id: '30d', label: '30 Days' },
-              { id: '90d', label: '90 Days' },
-              { id: 'all', label: 'All Time' },
-            ].map((range) => (
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Date range */}
+          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+            {(['7d', '30d', '90d', 'all'] as DateRange[]).map(r => (
               <button
-                key={range.id}
-                onClick={() => setDateRange(range.id as typeof dateRange)}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
-                  dateRange === range.id
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                key={r}
+                onClick={() => setDateRange(r)}
+                className={`px-3 py-2 text-sm font-medium transition-colors ${
+                  dateRange === r ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'
                 }`}
               >
-                {range.label}
+                {r === '7d' ? '7 Days' : r === '30d' ? '30 Days' : r === '90d' ? '90 Days' : 'All Time'}
               </button>
             ))}
           </div>
-          
-          {/* Export Actions */}
           <button
-            onClick={() => handleExport('csv')}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            onClick={handleExport}
+            className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-sm text-gray-700 transition-colors"
           >
-            <Download className="w-4 h-4" />
-            Export
+            <Download className="w-4 h-4" /> Export CSV
           </button>
           <button
-            onClick={handlePrint}
-            className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            onClick={() => window.print()}
+            className="p-2 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
+            title="Print"
           >
-            <Printer className="w-4 h-4" />
+            <Printer className="w-4 h-4 text-gray-600" />
           </button>
         </div>
       </div>
 
-      {/* Report Type Tabs */}
+      {/* Tabs */}
       <div className="border-b border-gray-200">
         <div className="flex gap-1">
-          {[
+          {([
             { id: 'overview', label: 'Overview', icon: BarChart3 },
             { id: 'pipeline', label: 'Pipeline', icon: TrendingUp },
             { id: 'scores', label: 'Scores', icon: Award },
             { id: 'time', label: 'Time Analytics', icon: Clock },
-          ].map((tab) => (
+          ] as { id: ReportTab; label: string; icon: React.ElementType }[]).map(tab => (
             <button
               key={tab.id}
-              onClick={() => setSelectedReport(tab.id as typeof selectedReport)}
+              onClick={() => setSelectedReport(tab.id)}
               className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                 selectedReport === tab.id
                   ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
+                  : 'border-transparent text-gray-500 hover:text-gray-800'
               }`}
             >
               <tab.icon className="w-4 h-4" />
@@ -278,418 +459,397 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
         </div>
       </div>
 
-      {/* Overview Report */}
+      {/* ── OVERVIEW TAB ─────────────────────────────────────────────────── */}
       {selectedReport === 'overview' && (
         <div className="space-y-6">
-          {/* Key Metrics Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { 
-                label: 'Total Applicants', 
-                value: metrics.total, 
-                icon: Users, 
-                color: 'bg-blue-500',
-                change: '+12%',
-                changeUp: true 
-              },
-              { 
-                label: 'Resume Suitable', 
-                value: metrics.suitable, 
-                icon: FileText, 
-                color: 'bg-emerald-500',
-                change: '+8%',
-                changeUp: true 
-              },
-              { 
-                label: 'Completed Assessments', 
-                value: metrics.assessmentCompleted, 
-                icon: CheckCircle, 
-                color: 'bg-purple-500',
-                change: '+15%',
-                changeUp: true 
-              },
-              { 
-                label: 'Avg. Time to Hire', 
-                value: `${metrics.avgTimeToHire} days`, 
-                icon: Clock, 
-                color: 'bg-orange-500',
-                change: '-2 days',
-                changeUp: false 
-              },
-            ].map((metric, idx) => (
-              <div key={idx} className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
-                <div className="flex items-start justify-between">
-                  <div className={`p-3 rounded-lg ${metric.color} bg-opacity-10`}>
-                    <metric.icon className={`w-6 h-6 ${metric.color.replace('bg-', 'text-')}`} />
-                  </div>
-                  <div className={`flex items-center gap-1 text-sm font-medium ${
-                    metric.changeUp ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {metric.changeUp ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
-                    {metric.change}
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <p className="text-3xl font-bold text-gray-900">{metric.value}</p>
-                  <p className="text-sm text-gray-500 mt-1">{metric.label}</p>
-                </div>
-              </div>
-            ))}
+
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            <MetricCard label="Total Applicants" value={counts.total} icon={Users} colorClass="bg-blue-500" />
+            <MetricCard label="Resume Passed" value={counts.resumePassed} icon={FileText} colorClass="bg-emerald-500"
+              sub={counts.total > 0 ? `${Math.round((counts.resumePassed / counts.total) * 100)}% pass rate` : undefined} />
+            <MetricCard label="Needs Review" value={counts.needsReview} icon={ClipboardCheck} colorClass="bg-yellow-500" />
+            <MetricCard label="Shortlisted" value={counts.shortlisted} icon={Star} colorClass="bg-purple-500" />
+            <MetricCard label="Hired" value={counts.hired} icon={CheckCircle} colorClass="bg-green-500" />
+            <MetricCard label="Rejected" value={counts.rejected} icon={XCircle} colorClass="bg-red-500" />
+            <MetricCard label="Assessment Completion" value={`${counts.assessmentRate}%`} icon={Award} colorClass="bg-orange-500"
+              sub={`${counts.assessmentCompleted} of ${counts.total} applicants`} />
+            {counts.avgTimeToHire !== null
+              ? <MetricCard label="Avg. Time to Hire" value={`${counts.avgTimeToHire}d`} icon={Clock} colorClass="bg-indigo-500"
+                  sub={`Based on ${filtered.filter(a => a.status === 'hired' && a.decision_date).length} hire(s)`} />
+              : <MetricCard label="Avg. Time to Hire" value="—" icon={Clock} colorClass="bg-indigo-500" sub="No hire data yet" />
+            }
           </div>
 
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Position Breakdown */}
-            <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Applications by Position</h3>
-              <div className="space-y-4">
-                {positionBreakdown.map((pos, idx) => (
-                  <div key={idx}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-700">{pos.position}</span>
-                      <span className="text-sm text-gray-500">{pos.count} applicants</span>
-                    </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                        style={{ width: `${metrics.total > 0 ? (pos.count / metrics.total) * 100 : 0}%` }}
-                      />
-                    </div>
+          {/* Insights panel */}
+          {insights.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <Info className="w-4 h-4 text-blue-500" /> Insights & Alerts
+              </h3>
+              <div className="space-y-2">
+                {insights.map((ins, i) => (
+                  <div key={i} className={`flex items-start gap-2.5 p-3 rounded-lg text-sm ${
+                    ins.type === 'warn' ? 'bg-amber-50 text-amber-800 border border-amber-100' :
+                    ins.type === 'ok' ? 'bg-green-50 text-green-800 border border-green-100' :
+                    'bg-blue-50 text-blue-800 border border-blue-100'
+                  }`}>
+                    {ins.type === 'warn' ? <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" /> :
+                     ins.type === 'ok' ? <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> :
+                     <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+                    {ins.text}
                   </div>
                 ))}
-                {positionBreakdown.length === 0 && (
-                  <p className="text-gray-400 text-center py-8">No data available</p>
-                )}
               </div>
             </div>
+          )}
 
-            {/* Conversion Funnel */}
-            <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Conversion Funnel</h3>
+          {/* Job Performance */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <h3 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Briefcase className="w-4 h-4 text-gray-500" /> Job Performance
+            </h3>
+            {jobPerformance.length === 0 ? (
+              <EmptyState message="No applicant data for the selected period." />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      {['Position', 'Applicants', 'Pass Rate', 'Completion Rate', 'Shortlisted', 'Hired', 'Time to Fill'].map(h => (
+                        <th key={h} className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {jobPerformance.map((row, i) => (
+                      <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                        <td className="py-3 px-3 font-medium text-gray-900 max-w-[180px] truncate">{row.position}</td>
+                        <td className="py-3 px-3 text-gray-700">{row.total}</td>
+                        <td className="py-3 px-3">
+                          <span className={`font-medium ${row.passRate >= 60 ? 'text-green-600' : row.passRate >= 30 ? 'text-yellow-600' : 'text-red-500'}`}>
+                            {row.passRate}%
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className={`font-medium ${row.completionRate >= 50 ? 'text-green-600' : row.completionRate >= 20 ? 'text-yellow-600' : 'text-gray-400'}`}>
+                            {row.completionRate}%
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-gray-700">{row.shortlisted}</td>
+                        <td className="py-3 px-3">
+                          <span className={`font-semibold ${row.hired > 0 ? 'text-green-600' : 'text-gray-400'}`}>{row.hired}</span>
+                        </td>
+                        <td className="py-3 px-3 text-gray-500">
+                          {row.timeToFill !== null ? `${row.timeToFill}d` : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── PIPELINE TAB ─────────────────────────────────────────────────── */}
+      {selectedReport === 'pipeline' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-base font-semibold text-gray-900">Recruitment Funnel</h3>
+              {biggestDropoff >= 0 && (
+                <span className="flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-full">
+                  <TrendingDown className="w-3.5 h-3.5" />
+                  Biggest drop-off: {funnel[biggestDropoff].label}
+                </span>
+              )}
+            </div>
+
+            {counts.total === 0 ? (
+              <EmptyState message="No applicants in the selected period." />
+            ) : (
               <div className="space-y-3">
-                {pipelineData.map((stage, idx) => {
-                  const prevCount = idx > 0 ? pipelineData[idx - 1].count : stage.count;
-                  const conversion = prevCount > 0 ? Math.round((stage.count / prevCount) * 100) : 100;
+                {funnel.map((stage, i) => {
+                  const widthPct = counts.total > 0
+                    ? Math.max((stage.count / counts.total) * 100, stage.count > 0 ? 3 : 0)
+                    : 0;
+                  const isBottleneck = i === biggestDropoff;
+                  const colors = [
+                    'bg-blue-500', 'bg-blue-400', 'bg-emerald-500', 'bg-yellow-500',
+                    'bg-purple-500', 'bg-orange-500', 'bg-pink-500', 'bg-indigo-500', 'bg-green-600',
+                  ];
                   return (
-                    <div key={idx} className="flex items-center gap-4">
-                      <div className="w-32 text-sm font-medium text-gray-700">{stage.stage}</div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-8 bg-gray-100 rounded-lg overflow-hidden">
-                            <div
-                              className={`h-full ${stage.color} rounded-lg transition-all duration-500 flex items-center justify-end px-2`}
-                              style={{ width: `${Math.max((stage.count / metrics.total) * 100, 5)}%` }}
-                            >
-                              <span className="text-white text-sm font-semibold">{stage.count}</span>
-                            </div>
-                          </div>
-                          {idx > 0 && (
-                            <span className="text-xs text-gray-500 w-12">{conversion}%</span>
-                          )}
-                        </div>
+                    <div key={i} className={`p-3 rounded-lg ${isBottleneck ? 'bg-amber-50 border border-amber-100' : 'bg-gray-50'}`}>
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="w-5 h-5 rounded-full bg-gray-200 text-gray-600 text-xs flex items-center justify-center font-semibold flex-shrink-0">{i + 1}</span>
+                        <span className="text-sm font-medium text-gray-800 flex-1">{stage.label}</span>
+                        <span className="text-sm font-bold text-gray-900 w-8 text-right">{stage.count}</span>
+                        {i > 0 && (
+                          <span className={`text-xs font-medium w-16 text-right ${stage.convPct >= 70 ? 'text-green-600' : stage.convPct >= 40 ? 'text-yellow-600' : 'text-red-500'}`}>
+                            {stage.convPct}% conv.
+                          </span>
+                        )}
                       </div>
+                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden ml-8">
+                        <div
+                          className={`h-full ${colors[i % colors.length]} rounded-full transition-all duration-500`}
+                          style={{ width: `${widthPct}%` }}
+                        />
+                      </div>
+                      {i > 0 && stage.dropPct > 30 && (
+                        <p className="text-xs text-amber-600 mt-1 ml-8">
+                          {stage.dropPct}% drop-off from previous stage
+                        </p>
+                      )}
                     </div>
                   );
                 })}
               </div>
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Overall Conversion</span>
-                  <span className="font-semibold text-blue-600">{metrics.conversionRate}%</span>
+            )}
+          </div>
+
+          {/* Stage summary cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            {[
+              { label: 'Awaiting Screening', count: filtered.filter(a => !a.screening_status || a.screening_status === 'not_scored').length, icon: FileText, color: 'bg-gray-500' },
+              { label: 'Needs Review', count: counts.needsReview, icon: ClipboardCheck, color: 'bg-yellow-500' },
+              { label: 'Video Submitted', count: filtered.filter(a => a.video?.status === 'submitted' || a.video?.status === 'completed').length, icon: Video, color: 'bg-purple-500' },
+              { label: 'Assessment Done', count: counts.assessmentCompleted, icon: Award, color: 'bg-orange-500' },
+              { label: 'Shortlisted', count: counts.shortlisted, icon: Star, color: 'bg-pink-500' },
+              { label: 'Hired', count: counts.hired, icon: CheckCircle, color: 'bg-green-500' },
+            ].map((item, i) => (
+              <div key={i} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-4">
+                <div className={`w-10 h-10 ${item.color} rounded-xl flex items-center justify-center flex-shrink-0`}>
+                  <item.icon className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-gray-900">{item.count}</p>
+                  <p className="text-xs text-gray-500">{item.label}</p>
                 </div>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Pipeline Report */}
-      {selectedReport === 'pipeline' && (
-        <div className="space-y-6">
-          <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 mb-6">Recruitment Pipeline Analysis</h3>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Stage Breakdown */}
-              <div className="lg:col-span-2">
-                <div className="space-y-4">
-                  {[
-                    { 
-                      stage: 'New Applications', 
-                      count: filteredApplicants.filter(a => !a.screening_status).length,
-                      desc: 'Awaiting screening',
-                      color: 'bg-yellow-500',
-                      icon: Mail
-                    },
-                    { 
-                      stage: 'For Review', 
-                      count: filteredApplicants.filter(a => a.screening_status === 'in_review').length,
-                      desc: 'Ready for review',
-                      color: 'bg-emerald-500',
-                      icon: FileText
-                    },
-                    { 
-                      stage: 'Video Assessment', 
-                      count: filteredApplicants.filter(a => a.video?.status === 'submitted' || a.video?.status === 'completed').length,
-                      desc: 'Video submitted or completed',
-                      color: 'bg-purple-500',
-                      icon: Video
-                    },
-                    { 
-                      stage: 'Work Style Assessment', 
-                      count: filteredApplicants.filter(a => a.test?.status === 'completed').length,
-                      desc: 'Assessment completed',
-                      color: 'bg-orange-500',
-                      icon: ClipboardCheck
-                    },
-                    { 
-                      stage: 'In Progress', 
-                      count: filteredApplicants.filter(a => a.screening_status === 'passed').length,
-                      desc: 'Screening in progress',
-                      color: 'bg-blue-500',
-                      icon: Clock
-                    },
-                  ].map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                      <div className={`w-12 h-12 ${item.color} rounded-xl flex items-center justify-center`}>
-                        <item.icon className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-semibold text-gray-900">{item.stage}</h4>
-                          <span className="text-2xl font-bold text-gray-900">{item.count}</span>
-                        </div>
-                        <p className="text-sm text-gray-500">{item.desc}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Summary Stats */}
-              <div className="space-y-4">
-                <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="w-5 h-5 text-blue-600" />
-                    <h4 className="font-semibold text-blue-900">Pass Rate</h4>
-                  </div>
-                  <p className="text-3xl font-bold text-blue-700">
-                    {metrics.total > 0 ? Math.round((metrics.suitable / metrics.total) * 100) : 0}%
-                  </p>
-                  <p className="text-sm text-blue-600">Resume to Suitable</p>
-                </div>
-
-                <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Video className="w-5 h-5 text-purple-600" />
-                    <h4 className="font-semibold text-purple-900">Video Completion</h4>
-                  </div>
-                  <p className="text-3xl font-bold text-purple-700">
-                    {metrics.suitable > 0 ? Math.round((metrics.videoCompleted / metrics.suitable) * 100) : 0}%
-                  </p>
-                  <p className="text-sm text-purple-600">Of suitable candidates</p>
-                </div>
-
-                <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
-                  <div className="flex items-center gap-2 mb-2">
-                    <ClipboardCheck className="w-5 h-5 text-orange-600" />
-                    <h4 className="font-semibold text-orange-900">Work Style Completion</h4>
-                  </div>
-                  <p className="text-3xl font-bold text-orange-700">
-                    {metrics.videoCompleted > 0 ? Math.round((metrics.assessmentCompleted / metrics.videoCompleted) * 100) : 0}%
-                  </p>
-                  <p className="text-sm text-orange-600">Of video completed</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Scores Report */}
+      {/* ── SCORES TAB ───────────────────────────────────────────────────── */}
       {selectedReport === 'scores' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Score Distribution */}
-            <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Score Distribution</h3>
-              <div className="space-y-4">
-                {scoreDistribution.map((range, idx) => (
-                  <div key={idx}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-700">{range.label}</span>
-                      <span className="text-sm text-gray-500">{range.range} ({range.count})</span>
-                    </div>
-                    <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          idx === 0 ? 'bg-green-500' :
-                          idx === 1 ? 'bg-blue-500' :
-                          idx === 2 ? 'bg-yellow-500' :
-                          idx === 3 ? 'bg-orange-500' :
-                          'bg-red-500'
-                        }`}
-                        style={{ width: `${metrics.total > 0 ? (range.count / metrics.total) * 100 : 0}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+
+          {/* Avg scores by outcome */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-5">Average Scores by Outcome</h3>
+            {counts.total === 0 ? (
+              <EmptyState message="No score data available for the selected period." />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Outcome</th>
+                      <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Count</th>
+                      <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Resume Score</th>
+                      <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Video Score</th>
+                      <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Work Style Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { label: 'Hired', key: 'hired' as const, color: 'text-green-600', count: counts.hired },
+                      { label: 'Rejected', key: 'rejected' as const, color: 'text-red-500', count: counts.rejected },
+                      { label: 'In Review', key: 'inReview' as const, color: 'text-yellow-600', count: counts.needsReview },
+                    ].map(row => {
+                      const scores = scoreAnalytics.byOutcome[row.key];
+                      return (
+                        <tr key={row.key} className="border-b border-gray-50 hover:bg-gray-50">
+                          <td className={`py-3 px-3 font-semibold ${row.color}`}>{row.label}</td>
+                          <td className="py-3 px-3 text-gray-600">{row.count}</td>
+                          <td className="py-3 px-3">
+                            {scores.resume !== null ? (
+                              <span className={`font-medium ${scores.resume >= 70 ? 'text-green-600' : scores.resume >= 50 ? 'text-yellow-600' : 'text-red-500'}`}>
+                                {scores.resume}
+                              </span>
+                            ) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="py-3 px-3">
+                            {scores.video !== null ? (
+                              <span className={`font-medium ${scores.video >= 70 ? 'text-green-600' : scores.video >= 50 ? 'text-yellow-600' : 'text-red-500'}`}>
+                                {scores.video}
+                              </span>
+                            ) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="py-3 px-3">
+                            {scores.workStyle !== null ? (
+                              <span className={`font-medium ${scores.workStyle >= 70 ? 'text-green-600' : scores.workStyle >= 50 ? 'text-yellow-600' : 'text-red-500'}`}>
+                                {scores.workStyle}
+                              </span>
+                            ) : <span className="text-gray-300">—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Score distribution */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+              <h3 className="text-base font-semibold text-gray-900 mb-4">Score Distribution (Resume)</h3>
+              {counts.total === 0 ? (
+                <EmptyState message="No score data available." />
+              ) : (
+                <div className="space-y-4">
+                  {scoreAnalytics.dist.map((d, i) => {
+                    const colors = ['bg-green-500', 'bg-blue-500', 'bg-yellow-500', 'bg-orange-500', 'bg-red-500'];
+                    return (
+                      <BarRow
+                        key={i}
+                        label={d.label}
+                        count={d.count}
+                        total={counts.total}
+                        colorClass={colors[i]}
+                        sub={d.range}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* Top Performers */}
-            <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Top Performers</h3>
-                {/* Custom Department Dropdown */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowDepartmentDropdown(!showDepartmentDropdown)}
-                    className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 py-2 px-4 rounded-xl text-sm font-medium hover:border-gray-300 transition-colors min-w-[160px] justify-between"
-                  >
-                    <span>{selectedDepartment === 'all' ? 'All Departments' : selectedDepartment}</span>
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showDepartmentDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showDepartmentDropdown && (
-                    <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-lg overflow-y-auto z-10 min-w-[160px] max-h-60">
-                      {departments.map((dept) => (
-                        <button
-                          key={dept}
-                          onClick={() => {
-                            setSelectedDepartment(dept);
-                            setShowDepartmentDropdown(false);
-                          }}
-                          className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors ${
-                            selectedDepartment === dept
-                              ? 'bg-blue-50 text-blue-700'
-                              : 'text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          {dept === 'all' ? 'All Departments' : dept}
-                        </button>
+            {/* Threshold effectiveness */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+              <h3 className="text-base font-semibold text-gray-900 mb-4">Threshold Effectiveness</h3>
+              {counts.total === 0 ? (
+                <EmptyState message="No data available." />
+              ) : (
+                <div className="space-y-5">
+                  {[
+                    {
+                      label: 'Above 80 (Qualified)',
+                      count: filtered.filter(a => (getResumeScore(a) ?? 0) >= 80).length,
+                      sub: 'Resume score ≥ 80',
+                      color: 'bg-green-500',
+                    },
+                    {
+                      label: 'Above 60 (For Review)',
+                      count: filtered.filter(a => { const s = getResumeScore(a); return s !== null && s >= 60 && s < 80; }).length,
+                      sub: 'Resume score 60–79',
+                      color: 'bg-yellow-500',
+                    },
+                    {
+                      label: 'Below 60 (Rejected)',
+                      count: filtered.filter(a => (getResumeScore(a) ?? 100) < 60).length,
+                      sub: 'Resume score < 60',
+                      color: 'bg-red-500',
+                    },
+                  ].map((item, i) => (
+                    <BarRow key={i} label={item.label} count={item.count} total={counts.total} colorClass={item.color} sub={item.sub} />
+                  ))}
+
+                  <div className="pt-3 border-t border-gray-100">
+                    <p className="text-xs text-gray-500 mb-2 font-medium">Component Weight Breakdown</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {[
+                        { label: 'Resume', pct: 50, color: 'bg-blue-500' },
+                        { label: 'Video', pct: 30, color: 'bg-purple-500' },
+                        { label: 'Work Style', pct: 20, color: 'bg-orange-500' },
+                      ].map(w => (
+                        <div key={w.label} className="flex items-center gap-1.5 text-xs text-gray-600">
+                          <span className={`w-2.5 h-2.5 rounded-full ${w.color}`} />
+                          {w.label} {w.pct}%
+                        </div>
                       ))}
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-3">
-                {filteredApplicants
-                  .filter(a => {
-                    // Filter by completion status
-                    const hasCompletedAssessment = a.test?.status === 'completed' || a.video?.status === 'completed' || a.screening_status === 'in_review';
-                    if (!hasCompletedAssessment) return false;
-                    
-                    // Filter by department (mock logic - in production, join with job_postings)
-                    if (selectedDepartment === 'all') return true;
-                    
-                    // Mock department assignment based on position keywords
-                    const positionLower = (a.position || '').toLowerCase();
-                    const dept = selectedDepartment.toLowerCase();
-                    
-                    if (dept === 'engineering') return positionLower.includes('engineer') || positionLower.includes('developer') || positionLower.includes('software');
-                    if (dept === 'mis') return positionLower.includes('it') || positionLower.includes('mis') || positionLower.includes('systems');
-                    if (dept === 'human resources') return positionLower.includes('hr') || positionLower.includes('human resources') || positionLower.includes('recruit');
-                    if (dept === 'finance') return positionLower.includes('finance') || positionLower.includes('accountant') || positionLower.includes('financial');
-                    if (dept === 'marketing') return positionLower.includes('marketing') || positionLower.includes('digital') || positionLower.includes('brand');
-                    if (dept === 'operations') return positionLower.includes('operations') || positionLower.includes('logistics') || positionLower.includes('coordinator');
-                    
-                    return true;
-                  })
-                  .slice(0, 5)
-                  .map((applicant, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold">
-                        {applicant.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{applicant.name}</p>
-                        <p className="text-sm text-gray-500">{applicant.position}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-lg font-bold text-blue-600">
-                          {applicant.test?.semantic_score ?? (applicant.video?.transcript_score != null ? Math.round(applicant.video.transcript_score * 10) : null) ?? applicant.screening_score ?? (applicant.screening_status === 'in_review' ? 80 : applicant.screening_status === 'passed' ? 60 : 0)}
-                        </p>
-                        <p className="text-xs text-gray-400">score</p>
-                      </div>
-                    </div>
-                  ))}
-                {filteredApplicants.filter(a => a.test?.status === 'completed').length === 0 && (
-                  <p className="text-gray-400 text-center py-8">No completed assessments yet</p>
-                )}
-              </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Time Analytics Report */}
+      {/* ── TIME ANALYTICS TAB ───────────────────────────────────────────── */}
       {selectedReport === 'time' && (
         <div className="space-y-6">
-          <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 mb-6">Time-to-Hire Analytics</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="text-center p-6 bg-blue-50 rounded-xl">
-                <Clock className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                <p className="text-4xl font-bold text-blue-700">{metrics.avgTimeToHire}</p>
-                <p className="text-sm text-blue-600">Average Days to Hire</p>
+
+          {/* Stage duration cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {timeAnalytics.stages.map((stage, i) => (
+              <div key={i} className={`bg-white rounded-xl border shadow-sm p-5 ${
+                stage.label === timeAnalytics.bottleneck ? 'border-amber-300 bg-amber-50' : 'border-gray-200'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${stage.color}`} />
+                  {stage.label === timeAnalytics.bottleneck && (
+                    <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">Bottleneck</span>
+                  )}
+                </div>
+                {stage.days !== null ? (
+                  <>
+                    <p className="text-3xl font-bold text-gray-900">{stage.days}d</p>
+                    <p className="text-sm text-gray-500 mt-0.5">{stage.label}</p>
+                    <p className="text-xs text-gray-400 mt-1">Based on {stage.count} record{stage.count !== 1 ? 's' : ''}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold text-gray-300">—</p>
+                    <p className="text-sm text-gray-500 mt-0.5">{stage.label}</p>
+                    <p className="text-xs text-gray-400 mt-1">No data available</p>
+                  </>
+                )}
               </div>
-              <div className="text-center p-6 bg-emerald-50 rounded-xl">
-                <Calendar className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-                <p className="text-4xl font-bold text-emerald-700">
-                  {filteredApplicants.length > 0 
-                    ? Math.round(
-                        filteredApplicants
-                          .filter(a => a.resume?.reviewed_at)
-                          .reduce((sum, a) => {
-                            const days = daysBetween(a.created_at, a.resume?.reviewed_at || a.created_at);
-                            return sum + days;
-                          }, 0) / filteredApplicants.filter(a => a.resume?.reviewed_at).length || 0)
-                    : 0}
+            ))}
+          </div>
+
+          {/* Bottleneck callout */}
+          {timeAnalytics.bottleneck && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Bottleneck Identified: {timeAnalytics.bottleneck}</p>
+                <p className="text-sm text-amber-700 mt-0.5">
+                  This stage has the longest average duration. Consider reviewing the process to reduce delays.
                 </p>
-                <p className="text-sm text-emerald-600">Avg. Resume Review (days)</p>
-              </div>
-              <div className="text-center p-6 bg-purple-50 rounded-xl">
-                <Video className="w-8 h-8 text-purple-600 mx-auto mb-2" />
-                <p className="text-4xl font-bold text-purple-700">
-                  {filteredApplicants.filter(a => a.video?.status === 'completed').length > 0
-                    ? Math.round(filteredApplicants.filter(a => a.video?.status === 'completed').reduce((sum, a) => {
-                        const days = daysBetween(a.created_at, a.video?.submitted_at || a.created_at);
-                        return sum + days;
-                      }, 0) / filteredApplicants.filter(a => a.video?.status === 'completed').length)
-                    : 0}
-                </p>
-                <p className="text-sm text-purple-600">Avg. Video Completion (days)</p>
               </div>
             </div>
+          )}
 
-            {/* Timeline Visualization */}
-            <div className="border-t border-gray-100 pt-6">
-              <h4 className="font-medium text-gray-900 mb-4">Typical Candidate Journey</h4>
+          {/* Timeline visualization */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-6">Candidate Journey Timeline</h3>
+            {timeAnalytics.stages.every(s => s.days === null) ? (
+              <EmptyState message="No timestamp data available to build the timeline. Timestamps are recorded as candidates progress through each stage." />
+            ) : (
               <div className="relative">
-                <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-200 -translate-y-1/2" />
+                <div className="absolute top-5 left-5 right-5 h-0.5 bg-gray-200" />
                 <div className="relative flex justify-between">
                   {[
-                    { label: 'Applied', day: 'Day 0', icon: Mail },
-                    { label: 'Resume Review', day: `Day ${timelineAverages.resume}`, icon: FileText },
-                    { label: 'Video Invite', day: `Day ${timelineAverages.videoInvite}`, icon: Video },
-                    { label: 'Video Complete', day: `Day ${timelineAverages.videoComplete}`, icon: CheckCircle },
-                    { label: 'Assessment Complete', day: `Day ${timelineAverages.assessmentComplete}`, icon: Award },
-                  ].map((step, idx) => (
-                    <div key={idx} className="flex flex-col items-center bg-white px-2">
-                      <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white mb-2">
-                        <step.icon className="w-5 h-5" />
+                    { label: 'Applied', day: 'Day 0', icon: Calendar },
+                    { label: 'Screened', day: timeAnalytics.stages[0].days !== null ? `~Day ${timeAnalytics.stages[0].days}` : '—', icon: FileText },
+                    { label: 'Video Done', day: timeAnalytics.stages[1].days !== null ? `~Day ${timeAnalytics.stages[1].days}` : '—', icon: Video },
+                    { label: 'Assessment', day: timeAnalytics.stages[2].days !== null ? `~Day ${timeAnalytics.stages[2].days}` : '—', icon: ClipboardCheck },
+                    { label: 'Hired', day: timeAnalytics.stages[3].days !== null ? `~Day ${timeAnalytics.stages[3].days}` : '—', icon: CheckCircle },
+                  ].map((step, i) => (
+                    <div key={i} className="flex flex-col items-center bg-white px-1 z-10">
+                      <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white mb-2 shadow-sm">
+                        <step.icon className="w-4 h-4" />
                       </div>
-                      <p className="text-sm font-medium text-gray-900">{step.label}</p>
-                      <p className="text-xs text-gray-500">{step.day}</p>
+                      <p className="text-xs font-medium text-gray-800 text-center">{step.label}</p>
+                      <p className="text-xs text-gray-400 text-center">{step.day}</p>
                     </div>
                   ))}
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
+
     </div>
   );
 }
