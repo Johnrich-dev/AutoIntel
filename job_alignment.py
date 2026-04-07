@@ -725,6 +725,8 @@ _SKILL_ALIASES: Dict[str, str] = {
     # ── .NET ──────────────────────────────────────────────────────────────────
     'c#': 'csharp', 'csharp': 'csharp',
     '.net': 'dotnet', 'dotnet': 'dotnet', 'asp.net': 'dotnet',
+    '.net framework': 'dotnet', '.net core': 'dotnet', 'asp.net core': 'dotnet',
+    'asp.net mvc': 'dotnet', 'asp.net core mvc': 'dotnet', 'dotnet core': 'dotnet',
     'blazor': 'blazor', 'xamarin': 'xamarin', 'maui': 'maui',
     # ── C / C++ ───────────────────────────────────────────────────────────────
     'c++': 'cpp', 'cpp': 'cpp',
@@ -746,7 +748,8 @@ _SKILL_ALIASES: Dict[str, str] = {
     'aws cloud': 'aws', 'aws automation': 'aws', 'aws databases': 'aws',
     'aws api gateway': 'aws', 'aws cloudfront': 'aws', 'aws route 53': 'aws',
     'aws codecommit': 'aws', 'aws cognito': 'aws', 'aws glue': 'aws',
-    'azure': 'azure', 'microsoft azure': 'azure',
+    'azure': 'azure', 'microsoft azure': 'azure', 'azure cloud': 'azure',
+    'azure devops': 'azure', 'azure services': 'azure',
     'gcp': 'gcp', 'google cloud': 'gcp', 'google cloud platform': 'gcp', 'google cloud platforms': 'gcp',
     'docker': 'docker', 'kubernetes': 'kubernetes', 'k8s': 'kubernetes',
     'terraform': 'terraform', 'ansible': 'ansible', 'puppet': 'puppet', 'chef': 'chef',
@@ -1102,28 +1105,28 @@ def _skills_match(resume_canon: str, req_canon: str) -> bool:
 
 def calculate_skills_keyword_match(
     resume_skills: Dict[str, List[str]],
-    job_skills: List[str]
-) -> float:
+    job_skills: List[str],
+    resume_experience: Optional[List[Dict]] = None
+) -> Dict[str, Any]:
     """
     Calculate skills match using canonical alias resolution + safe word-boundary matching.
 
-    Fixes:
-    - Java no longer matches JavaScript (alias map + word-boundary guard)
-    - ReactJS / React.js / React all resolve to the same canonical token
-    - ML matches Machine Learning via alias map
-    - Minimum token length prevents single-char false positives
-
     Returns:
-        Match score from 0-100 (percentage of job skills matched)
+        Dict with 'score' (0-100), 'matched' (list of raw job skill labels matched),
+        and 'missing' (list of raw job skill labels not matched).
     """
     if not job_skills:
-        return 50.0  # No requirements, give half credit
+        return {'score': 50.0, 'matched': [], 'missing': []}
 
     # Extract all resume skills
     all_resume_skills: List[str] = []
     if isinstance(resume_skills, dict):
-        all_resume_skills = resume_skills.get('hard_skills', []) + resume_skills.get('soft_skills', [])
-        # Also handle category-dict format (e.g. {'Languages': 'PHP, Python'})
+        # Prefer 'all' field (GPT extractor builds this as full deduped union of hard+soft)
+        if resume_skills.get('all') and isinstance(resume_skills['all'], list):
+            all_resume_skills = list(resume_skills['all'])
+        else:
+            all_resume_skills = resume_skills.get('hard_skills', []) + resume_skills.get('soft_skills', [])
+        # Fallback: flatten all values if still empty
         if not all_resume_skills:
             for v in resume_skills.values():
                 if isinstance(v, str):
@@ -1131,15 +1134,37 @@ def calculate_skills_keyword_match(
                 elif isinstance(v, list):
                     all_resume_skills.extend(v)
     elif isinstance(resume_skills, list):
-        all_resume_skills = resume_skills
+        all_resume_skills = list(resume_skills)
+
+    # Also extract tech keywords from experience text (catches skills only in experience bullets)
+    _TECH_PATTERN = re.compile(
+        r'\b(JavaScript|TypeScript|Python|Java|PHP|SQL|HTML|CSS|C#|C\+\+|Scala|Ruby|Go|Rust|'
+        r'React|Angular|Vue|Node\.js|Next\.js|ASP\.NET|Django|Flask|FastAPI|Spring|Laravel|'
+        r'MySQL|PostgreSQL|MSSQL|MongoDB|Redis|SQLite|Supabase|Firebase|DynamoDB|'
+        r'AWS|GCP|Azure|Docker|Kubernetes|Terraform|Ansible|Jenkins|Linux|Git|GitHub|'
+        r'Spark|Hadoop|Airflow|Kafka|ETL|n8n|Talend|SAP|Figma|Unity|LINQ|Razor|'
+        r'Entity\s+Framework|\.NET\s+Framework|ASP\.NET\s+Core|ASP\.NET\s+MVC|VB\.NET)\b',
+        re.IGNORECASE
+    )
+    if resume_experience:
+        for exp in resume_experience:
+            parts = []
+            if isinstance(exp.get('summary'), str):
+                parts.append(exp['summary'])
+            if isinstance(exp.get('description'), str):
+                parts.append(exp['description'])
+            if isinstance(exp.get('bullets'), list):
+                parts.extend(str(b) for b in exp['bullets'])
+            text = ' '.join(parts)
+            for m in _TECH_PATTERN.finditer(text):
+                all_resume_skills.append(m.group(0))
 
     if not all_resume_skills:
-        return 0.0
+        return {'score': 0.0, 'matched': [], 'missing': [raw for _, raw in []]}
 
     # Canonicalize both sides
     canon_resume = [_canonicalize_skill(s) for s in all_resume_skills if s]
     # Deduplicate job skills by canonical form to avoid inflating the denominator
-    # e.g. "airflow basics" and "airflow fundamentals" both → "airflow", count once
     seen_req: set = set()
     canon_job: list = []
     for s in job_skills:
@@ -1149,20 +1174,27 @@ def calculate_skills_keyword_match(
                 seen_req.add(canon)
                 canon_job.append((canon, s))
 
-    matched_skills: set = set()
+    matched_canons: set = set()
     for req_canon, req_raw in canon_job:
         for res_canon in canon_resume:
             if _skills_match(res_canon, req_canon):
-                matched_skills.add(req_canon)
-                break  # no need to check more resume skills for this requirement
+                matched_canons.add(req_canon)
+                break
 
-    match_percentage = (len(matched_skills) / len(canon_job)) * 100 if canon_job else 0
+    matched_raw = [raw for canon, raw in canon_job if canon in matched_canons]
+    missing_raw = [raw for canon, raw in canon_job if canon not in matched_canons]
 
-    print(f"[DEBUG] Skills match: {len(matched_skills)}/{len(canon_job)} = {match_percentage:.1f}%")
+    match_percentage = (len(matched_canons) / len(canon_job)) * 100 if canon_job else 0
+
+    print(f"[DEBUG] Skills match: {len(matched_canons)}/{len(canon_job)} = {match_percentage:.1f}%")
     print(f"[DEBUG]   Required (canon): {[c for c, _ in canon_job]}")
-    print(f"[DEBUG]   Matched (canon): {matched_skills}")
+    print(f"[DEBUG]   Matched (canon): {matched_canons}")
 
-    return round(match_percentage, 2)
+    return {
+        'score': round(match_percentage, 2),
+        'matched': matched_raw,
+        'missing': missing_raw,
+    }
 
 
 
@@ -1868,9 +1900,11 @@ def calculate_component_scores(
     
     # Skills relevance - NOW USES KEYWORD MATCHING
     resume_skills = parsed_resume_json.get('skills', {})
+    resume_experience_for_skills = parsed_resume_json.get('experience', [])
     results['skills_relevance'] = calculate_skills_keyword_match(
         resume_skills=resume_skills,
-        job_skills=job_skills_list
+        job_skills=job_skills_list,
+        resume_experience=resume_experience_for_skills
     )
     
     # Experience relevance - NOW USES KEYWORD MATCHING
@@ -2640,12 +2674,16 @@ def calculate_requirement_match_score(
     experience_match = calculate_experience_keyword_match(
         resume_experience, job_min_years, job_title_keywords
     )
-    skills_match = calculate_skills_keyword_match(resume_skills, job_skills)
+    skills_result = calculate_skills_keyword_match(
+        resume_skills, job_skills,
+        resume_experience=resume_experience
+    )
+    skills_match = skills_result['score']
     education_match = calculate_education_keyword_match(resume_education, job_education)
     projects_match = calculate_projects_keyword_match(resume_projects, job_projects)
     traincert_match = calculate_traincert_keyword_match(resume_traincerts, job_traincerts)
     achievement_match = calculate_achievement_keyword_match(resume_achievements, job_achievements)
-    
+
     # Calculate weighted requirement match score
     requirement_match_score = (
         experience_match * (weights.get('experience_weight', 28) / 100) +
@@ -2655,7 +2693,7 @@ def calculate_requirement_match_score(
         traincert_match * (weights.get('traincert_weight', 6) / 100) +
         achievement_match * (weights.get('achievements_weight', 4) / 100)
     )
-    
+
     return {
         'requirement_match_score': round(requirement_match_score, 2),
         'breakdown': {
@@ -2666,6 +2704,8 @@ def calculate_requirement_match_score(
             'traincert': round(traincert_match, 2),
             'achievements': round(achievement_match, 2)
         },
+        'matched_skills': skills_result.get('matched', []),
+        'missing_skills': skills_result.get('missing', []),
         'weights_used': weights
     }
 
@@ -2870,9 +2910,11 @@ def calculate_final_hybrid_score(
             'qualified_threshold': qualified_threshold,
             'review_threshold': review_threshold
         },
-        'scoring_type': 'unified',  # Indicates unified scoring is being used
+        'scoring_type': 'unified',
         'requirement_breakdown': requirement_result['breakdown'],
         'count_breakdown': count_result['breakdown'],
+        'matched_skills': requirement_result.get('matched_skills', []),
+        'missing_skills': requirement_result.get('missing_skills', []),
         'status': 'success'
     }
 

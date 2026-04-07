@@ -268,19 +268,18 @@ def process_applicant_screening(
             requirement_match_score = hybrid_result.get('requirement_match_score', 0)
             count_score = hybrid_result.get('count_score', 0)
             decision = hybrid_result.get('decision', 'not_recommended')
-            
+
             req_breakdown = hybrid_result.get('requirement_breakdown', {})
             count_breakdown_data = hybrid_result.get('count_breakdown', {})
             component_scores = {
                 'requirement_match': req_breakdown,
                 'count': count_breakdown_data,
-                # Use requirement-match scores for per-category display so that
-                # education reflects degree matching (100 on exact match) rather
-                # than a raw count of education entries.
                 'experience': req_breakdown.get('experience', count_breakdown_data.get('experience', {}).get('score', 0) if isinstance(count_breakdown_data.get('experience'), dict) else count_breakdown_data.get('experience', 0)),
                 'skills': req_breakdown.get('skills', count_breakdown_data.get('skills', {}).get('score', 0) if isinstance(count_breakdown_data.get('skills'), dict) else count_breakdown_data.get('skills', 0)),
                 'education': req_breakdown.get('education', count_breakdown_data.get('education', {}).get('score', 0) if isinstance(count_breakdown_data.get('education'), dict) else count_breakdown_data.get('education', 0)),
                 'projects': req_breakdown.get('projects', count_breakdown_data.get('projects', {}).get('score', 0) if isinstance(count_breakdown_data.get('projects'), dict) else count_breakdown_data.get('projects', 0)),
+                'matched_skills': hybrid_result.get('matched_skills', []),
+                'missing_skills': hybrid_result.get('missing_skills', []),
             }
             
             print(f"Scoring Type: {hybrid_result.get('scoring_type', 'unified')}")
@@ -353,7 +352,11 @@ def process_applicant_screening(
                     "match_explain": json.dumps({
                         "weights_used": weights,
                         "component_breakdown": component_scores,
-                        "fit_category": fit_category
+                        "fit_category": fit_category,
+                        "matched_skills": component_scores.get("matched_skills", []),
+                        "missing_skills": component_scores.get("missing_skills", []),
+                        "requirement_match_score": requirement_match_score,
+                        "count_score": count_score,
                     })
                 }
                 

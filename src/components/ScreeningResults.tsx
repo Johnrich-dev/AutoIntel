@@ -210,6 +210,7 @@ export function ScreeningResults() {
         let countBreakdown: Record<string, { count: number; score: number }> | null = null;
 
         // Pull real component scores from match_explain (requirement_match breakdown)
+        let dbMissingSkills: string[] | null = null;
         if (resumeScore?.match_explain) {
           try {
             const matchExplain = typeof resumeScore.match_explain === 'string'
@@ -222,11 +223,13 @@ export function ScreeningResults() {
             if (rb.projects      != null) projectsScore     = Math.round(rb.projects);
             if (rb.traincert     != null) traincertScore    = Math.round(rb.traincert);
             if (rb.achievements  != null) achievementsScore = Math.round(rb.achievements);
-            // Also pull the top-level requirement_match_score and count_score
             const cb = matchExplain?.component_breakdown?.count || {};
             if (Object.keys(cb).length > 0) countBreakdown = cb;
             if (matchExplain?.requirement_match_score != null) requirementMatchScore = Math.round(matchExplain.requirement_match_score);
             if (matchExplain?.count_score != null) countScore = Math.round(matchExplain.count_score);
+            // Read backend-computed missing skills for the gap panel
+            if (Array.isArray(matchExplain?.missing_skills))
+              dbMissingSkills = matchExplain.missing_skills;
           } catch { /* keep DB values */ }
         }
 
@@ -245,49 +248,84 @@ export function ScreeningResults() {
         }
 
         if (parsedData) {
-          // Collect ALL skills from parsed_data — no cap
-          const allResumeSkills: string[] = [];
-          if (Array.isArray(parsedData.skills)) {
-            allResumeSkills.push(...parsedData.skills);
-          } else if (parsedData.skills?.hard_skills && Array.isArray(parsedData.skills.hard_skills)) {
-            allResumeSkills.push(...parsedData.skills.hard_skills);
+          // ── Step 1: collect all skills from parsed_data ──────────────────
+          const rawSkills: string[] = [];
+
+          if (parsedData.skills?.all && Array.isArray(parsedData.skills.all) && parsedData.skills.all.length > 0) {
+            rawSkills.push(...parsedData.skills.all);
+          } else if (Array.isArray(parsedData.skills)) {
+            rawSkills.push(...parsedData.skills);
           } else if (parsedData.skills && typeof parsedData.skills === 'object') {
-            Object.values(parsedData.skills).forEach((v: any) => {
-              if (Array.isArray(v)) allResumeSkills.push(...v);
-              else if (typeof v === 'string') allResumeSkills.push(v);
-            });
+            const hard: string[] = parsedData.skills.hard_skills || [];
+            const soft: string[] = parsedData.skills.soft_skills || [];
+            rawSkills.push(...hard, ...soft);
           }
-          // Also pull tech keywords mentioned in experience descriptions
+
+          // Also scrape tech keywords from experience bullets (catches skills only mentioned in experience)
           if (Array.isArray(parsedData.experience)) {
             parsedData.experience.forEach((exp: any) => {
-              const desc = [exp.description, exp.role, exp.company].filter(Boolean).join(' ');
-              const techMatches = desc.match(/\b(ETL|AWS|GCP|Azure|Spark|Hadoop|Airflow|Kafka|Docker|Kubernetes|MongoDB|Redis|Linux|Scala|Terraform|Ansible|Jenkins|CI\/CD|n8n|Talend|SAP|Flask|Django|FastAPI|React|Angular|Vue|TypeScript|PostgreSQL|MySQL|MSSQL|Git|GitHub)\b/gi) || [];
-              allResumeSkills.push(...techMatches);
+              // resume_parser.py uses 'summary', gpt_extractor.py uses 'bullets' (array)
+              const bulletText = Array.isArray(exp.bullets) ? exp.bullets.join(' ') : '';
+              const text = [exp.description, exp.summary, bulletText, exp.role].filter(Boolean).join(' ');
+              const found = text.match(/\b(ETL|AWS|GCP|Azure|Spark|Hadoop|Airflow|Kafka|Docker|Kubernetes|MongoDB|Redis|Linux|Scala|Terraform|Ansible|Jenkins|n8n|Talend|SAP|Flask|Django|FastAPI|React|Angular|Vue|TypeScript|PostgreSQL|MySQL|MSSQL|Git|GitHub|Supabase|Firebase|Figma|Unity)\b/gi) || [];
+              rawSkills.push(...found);
             });
           }
-          // Deduplicate and display up to 20 for the UI
-          const seen = new Set<string>();
-          const deduped: string[] = [];
-          for (const s of allResumeSkills) {
-            const key = s.toLowerCase();
-            if (!seen.has(key)) { seen.add(key); deduped.push(s); }
-          }
-          matchedSkills = deduped.slice(0, 20);
 
-          // Compute sub-scores from parsed data only if not already set from resume_scores
+          // ── Step 2: filter out category labels and deduplicate ────────────
+          // Known category headers that GPT sometimes includes in skills.all
+          const LABEL_SET = new Set([
+            'languages', 'web frameworks', 'frameworks', 'databases', 'database',
+            'tools', 'tools & automation', 'tools and automation', 'automation',
+            'cloud platforms', 'cloud', 'design', 'design & ui/ux', 'ui/ux',
+            'soft skills', 'hard skills', 'data engineering', 'mobile', 'devops',
+            'backend', 'frontend', 'other', 'others', 'skills', 'technical skills',
+            'programming languages', 'platforms', 'operating systems',
+            'version control', 'methodologies', 'certifications', 'technologies',
+            'tools and technologies', 'summary', 'experience', 'education', 'projects',
+          ]);
+
+          // Known short but valid tech tokens to never filter
+          const KEEP = new Set(['c', 'r', 'go', 'js', 'ts', 'php', 'sql', 'css', 'aws', 'gcp', 'git', 'sap', 'erp', 'api', 'ios', 'xml', 'oop', 'mvc', 'vb']);
+
+          const isLabel = (s: string): boolean => {
+            const low = s.toLowerCase().trim();
+            if (!low) return true;
+            if (LABEL_SET.has(low)) return true;
+            if (low.length <= 2 && !KEEP.has(low)) return true;
+            // Pure word-only strings (no digits, dots, +, #, @, /) longer than 3 chars
+            // that don't contain any tech root → likely a section header
+            if (/^[a-z][a-z\s&\-]*$/.test(low) && low.length > 3) {
+              const techRoots = ['python','java','scala','swift','kotlin','ruby','rust','perl','lua','bash','html','css','sql','php','xml','json','yaml','rest','grpc','soap','mvc','oop','api','sdk','git','aws','gcp','sap','erp','ios','android','react','vue','node','next','django','flask','spring','rails','laravel','angular','svelte','tailwind','bootstrap','jquery','webpack','vite','docker','linux','unix','agile','scrum','kanban'];
+              if (!techRoots.some(t => low.includes(t))) return true;
+            }
+            return false;
+          };
+
+          const seen = new Set<string>();
+          const cleanSkills: string[] = [];
+          for (const s of rawSkills) {
+            if (!s || typeof s !== 'string') continue;
+            const key = s.toLowerCase().trim();
+            if (!seen.has(key) && !isLabel(s)) {
+              seen.add(key);
+              cleanSkills.push(s.trim());
+            }
+          }
+          matchedSkills = cleanSkills;
+
+          // ── Step 3: fallback sub-scores if not from DB ────────────────────
           if (skillsScore === null && experienceScore === null && educationScore === null) {
-            if (matchedSkills.length > 0 || parsedData.experience?.length > 0 || parsedData.education?.length > 0) {
-              skillsScore = Math.min(Math.round((matchedSkills.length / 15) * 100), 100);
+            if (cleanSkills.length > 0 || parsedData.experience?.length > 0 || parsedData.education?.length > 0) {
+              skillsScore    = Math.min(Math.round((cleanSkills.length / 15) * 100), 100);
               experienceScore = Math.min(Math.round(((parsedData.experience?.length || 0) / 5) * 100), 100);
-              // Fallback: count-based education score (used only when no requirement-match data available)
-              educationScore = Math.min(Math.round(((parsedData.education?.length || 0) / 3) * 100), 100);
+              educationScore  = Math.min(Math.round(((parsedData.education?.length  || 0) / 3) * 100), 100);
             }
           }
 
-          // Missing skills: prefer job_postings.skills, fall back to position-name heuristic
-          if (applicant.position) {
+          // ── Step 4: compute skill gap (only used as fallback when DB has no missing_skills) ──
+          if (applicant.position && !dbMissingSkills) {
             let requiredSkills: string[] = [];
-            // First try to match from job_postings
             if (jobPostingsData) {
               const match = jobPostingsData.find(j => j.title?.toLowerCase() === applicant.position?.toLowerCase())
                 || jobPostingsData.find(j =>
@@ -295,80 +333,67 @@ export function ScreeningResults() {
                     applicant.position?.toLowerCase().includes(j.title?.toLowerCase() || ''));
               if (match?.skills?.length) requiredSkills = match.skills;
             }
-            // Only fall back to heuristic if no job posting found
             if (requiredSkills.length === 0) {
               const pos = applicant.position.toLowerCase();
-              if (pos.includes('data engineer')) requiredSkills = ['Python', 'SQL', 'Spark', 'Airflow', 'AWS', 'Kafka'];
+              if (pos.includes('data engineer'))       requiredSkills = ['Python', 'SQL', 'Spark', 'Airflow', 'AWS', 'Kafka'];
               else if (pos.includes('data scientist')) requiredSkills = ['Python', 'Machine Learning', 'TensorFlow', 'SQL', 'Statistics'];
-              else if (pos.includes('data analyst')) requiredSkills = ['Excel', 'SQL', 'Tableau', 'PowerBI', 'Python'];
-              else if (pos.includes('backend')) requiredSkills = ['Python', 'Java', 'Node.js', 'PostgreSQL', 'Docker'];
-              else if (pos.includes('frontend')) requiredSkills = ['JavaScript', 'React', 'TypeScript', 'CSS', 'HTML'];
-              else if (pos.includes('full stack')) requiredSkills = ['JavaScript', 'React', 'Node.js', 'SQL', 'Docker'];
-              else if (pos.includes('devops')) requiredSkills = ['Docker', 'Kubernetes', 'AWS', 'Linux', 'CI/CD'];
+              else if (pos.includes('data analyst'))   requiredSkills = ['Excel', 'SQL', 'Tableau', 'PowerBI', 'Python'];
+              else if (pos.includes('backend'))        requiredSkills = ['Python', 'Java', 'Node.js', 'PostgreSQL', 'Docker'];
+              else if (pos.includes('frontend'))       requiredSkills = ['JavaScript', 'React', 'TypeScript', 'CSS', 'HTML'];
+              else if (pos.includes('full stack'))     requiredSkills = ['JavaScript', 'React', 'Node.js', 'SQL', 'Docker'];
+              else if (pos.includes('devops'))         requiredSkills = ['Docker', 'Kubernetes', 'AWS', 'Linux', 'CI/CD'];
               else if (pos.includes('ml') || pos.includes('machine learning')) requiredSkills = ['Python', 'TensorFlow', 'PyTorch', 'Machine Learning', 'SQL'];
               else requiredSkills = ['Python', 'SQL', 'JavaScript', 'Git'];
             }
-            // Aliases: maps abbreviation ↔ full name so "aws" matches "amazon web services", etc.
-            const SKILL_ALIASES: Record<string, string[]> = {
-              'aws':        ['amazon web services', 'aws cloud', 'aws s3', 'aws ec2', 'aws lambda', 'aws rds', 'aws automation', 'aws databases'],
-              'gcp':        ['google cloud', 'google cloud platform', 'google cloud platforms'],
-              'azure':      ['microsoft azure', 'azure fundamentals', 'azure basics'],
-              'etl':        ['etl pipelines', 'etl pipeline', 'etl tools', 'extract transform load'],
-              'spark':      ['apache spark', 'pyspark', 'spark sql'],
-              'airflow':    ['apache airflow'],
-              'hadoop':     ['apache hadoop', 'hdfs', 'mapreduce'],
-              'kafka':      ['apache kafka'],
-              'sql':        ['mysql', 'postgresql', 'postgres', 'mssql', 'ms sql server', 'sqlite', 'supabase'],
-              'nosql':      ['mongodb', 'cassandra', 'dynamodb', 'redis', 'firebase'],
-              'mongodb':    ['mongo'],
-              'linux':      ['unix', 'bash', 'shell scripting'],
-              'python':     ['py', 'django', 'flask', 'fastapi'],
-              'javascript': ['js', 'node.js', 'nodejs', 'react', 'vue', 'angular', 'typescript'],
-              'docker':     ['containerization', 'containers'],
-              'kubernetes': ['k8s'],
-              'git':        ['github', 'gitlab', 'version control', 'git/github'],
-              'dotnet':     ['.net', '.net framework', 'asp.net', 'asp.net core', 'asp.net mvc', 'dotnet core'],
-              'csharp':     ['c#', 'c sharp'],
-              'vb.net':     ['visual basic', 'vb'],
-              'mssql':      ['ms sql', 'ms sql server', 'microsoft sql server', 'mssql server'],
+
+            // Alias map: canonical key → list of equivalent strings
+            const ALIASES: Record<string, string[]> = {
+              'aws':              ['amazon web services', 'aws cloud', 'aws s3', 'aws ec2', 'aws lambda', 'aws rds', 'aws automation', 'aws databases'],
+              'gcp':              ['google cloud', 'google cloud platform', 'google cloud platforms'],
+              'azure':            ['microsoft azure', 'azure cloud', 'azure services', 'azure devops', 'azure fundamentals', 'azure basics'],
+              'etl':              ['etl pipelines', 'etl pipeline', 'etl tools', 'extract transform load'],
+              'spark':            ['apache spark', 'pyspark', 'spark sql'],
+              'airflow':          ['apache airflow'],
+              'hadoop':           ['apache hadoop', 'hdfs', 'mapreduce'],
+              'kafka':            ['apache kafka'],
+              'sql':              ['mysql', 'postgresql', 'postgres', 'mssql', 'ms sql server', 'sqlite', 'supabase'],
+              'mongodb':          ['mongo', 'nosql'],
+              'linux':            ['unix', 'bash', 'shell scripting'],
+              'python':           ['py', 'django', 'flask', 'fastapi'],
+              'javascript':       ['js', 'node.js', 'nodejs', 'react', 'vue', 'angular', 'typescript'],
+              'git':              ['github', 'gitlab', 'version control'],
+              'dotnet':           ['.net', '.net core', '.net framework', 'asp.net', 'asp.net core', 'asp.net mvc'],
+              'csharp':           ['c#', 'c sharp'],
+              'mssql':            ['ms sql', 'ms sql server', 'microsoft sql server'],
               'entity framework': ['ef core', 'entity framework core'],
-              'unit testing': ['nunit', 'xunit', 'mstest', 'jest', 'pytest'],
-              'data modeling': ['data models', 'schema design', 'database design'],
-              'data structures': ['algorithms', 'data structure'],
+              'unit testing':     ['nunit', 'xunit', 'mstest', 'jest', 'pytest'],
+              'data modeling':    ['data models', 'schema design', 'database design'],
+              'data structures':  ['algorithms', 'data structure'],
               'analytical thinking': ['analytical skills', 'data analysis', 'eda', 'exploratory data analysis'],
-              'scala':      ['scala basics'],
             };
 
-            // Build a flat lookup: every alias → canonical key
             const aliasToCanon: Record<string, string> = {};
-            for (const [canon, aliases] of Object.entries(SKILL_ALIASES)) {
+            for (const [canon, variants] of Object.entries(ALIASES)) {
               aliasToCanon[canon] = canon;
-              for (const a of aliases) aliasToCanon[a] = canon;
+              for (const v of variants) aliasToCanon[v] = canon;
             }
 
-            // Strip qualifier suffixes: "airflow basics" → "airflow"
-            const stripQualifiers = (s: string) =>
+            const stripQ = (s: string) =>
               s.toLowerCase()
-               .replace(/\b(basics?|fundamentals?|introduction|intro|beginner|advanced|essentials?|overview|tools?|cloud)\b/g, '')
-               .replace(/\s+/g, ' ')
-               .trim();
+               .replace(/\b(basics?|fundamentals?|introduction|intro|beginner|advanced|essentials?|overview)\b/g, '')
+               .replace(/\s+/g, ' ').trim();
 
-            const canonicalize = (s: string): string => {
-              const stripped = stripQualifiers(s);
+            const canon = (s: string): string => {
+              const stripped = stripQ(s);
               return aliasToCanon[stripped] ?? aliasToCanon[s.toLowerCase()] ?? stripped;
             };
 
-            // Use ALL resume skills (deduped) for gap comparison, not the display-capped list
-            const matchedCanon = deduped.map(canonicalize);
+            const resumeCanons = cleanSkills.map(canon);
 
             missingSkills = requiredSkills.filter(req => {
-              const reqCanon = canonicalize(req);
-              const reqStripped = stripQualifiers(req);
-              return !matchedCanon.some(mc =>
-                mc === reqCanon ||
-                mc.includes(reqStripped) || reqStripped.includes(mc) ||
-                mc.includes(reqCanon)    || reqCanon.includes(mc)
-              );
+              const rc = canon(req);
+              const rs = stripQ(req);
+              return !resumeCanons.some(mc => mc === rc || mc.includes(rs) || rs.includes(mc) || mc.includes(rc) || rc.includes(mc));
             });
           }
         }
@@ -388,8 +413,13 @@ export function ScreeningResults() {
           achievements_score: achievementsScore !== null ? Math.round(achievementsScore) : null,
           screening_status: status,
           screened_at: applicant.screened_at ?? null,
+          // Prefer backend-stored skill lists (accurate, matches scoring logic).
+          // Fall back to frontend-computed lists only for old records without DB data.
+          // NOTE: matched_skills (Resume Skills panel) always comes from parsedData —
+          // it shows ALL skills on the resume, not just the ones that matched the job.
+          // dbMatchedSkills/dbMissingSkills are only used for the Skills Gap panel.
           matched_skills: matchedSkills,
-          missing_skills: missingSkills,
+          missing_skills: dbMissingSkills ?? missingSkills,
           video_submitted: hasVideoSubmitted,
           work_style_completed: hasWorkStyleCompleted,
         };
