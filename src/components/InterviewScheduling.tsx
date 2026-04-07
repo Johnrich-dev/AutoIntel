@@ -11,12 +11,16 @@ import {
   Users,
   X,
   CheckCircle,
+  XCircle,
   CalendarDays,
   List,
   Briefcase,
   User,
   FileText,
-  ExternalLink
+  ExternalLink,
+  UserCheck,
+  UserX,
+  AlertTriangle
 } from 'lucide-react';
 import { getSupabaseAdminClient, Applicant } from '../lib/supabase';
 import { FilterDropdown } from './FilterDropdown';
@@ -1176,10 +1180,6 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
     }
   };
 
-  const handleCancelInterview = async (interviewId: string) => {
-    const interview = interviews.find(i => i.id === interviewId);
-    setConfirmAction({ type: 'cancel', interviewId, applicantName: interview?.applicantName });
-  };
 
   const executeCancelInterview = async (interviewId: string) => {
     try {
@@ -1199,13 +1199,6 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
     setNotification({ type: 'success', message: 'Interview cancelled successfully.' });
   };
 
-  const handleMarkCompleted = (interviewId: string) => {
-    setInterviews((prev) =>
-      prev.map((interview) =>
-        interview.id === interviewId ? { ...interview, status: 'completed' as const } : interview
-      )
-    );
-  };
 
   const handleMarkHired = async (applicantId: string) => {
     const interview = interviews.find(i => i.applicantId === applicantId);

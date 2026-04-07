@@ -253,15 +253,15 @@ export function ScreeningResults() {
           } else if (parsedData.skills?.hard_skills && Array.isArray(parsedData.skills.hard_skills)) {
             allResumeSkills.push(...parsedData.skills.hard_skills);
           } else if (parsedData.skills && typeof parsedData.skills === 'object') {
-            Object.values(parsedData.skills).forEach((v: any) => {
-              if (Array.isArray(v)) allResumeSkills.push(...v);
+            Object.values(parsedData.skills).forEach((v: unknown) => {
+              if (Array.isArray(v)) allResumeSkills.push(...(v as string[]));
               else if (typeof v === 'string') allResumeSkills.push(v);
             });
           }
 
           // Also scrape tech keywords from experience bullets (catches skills only mentioned in experience)
           if (Array.isArray(parsedData.experience)) {
-            parsedData.experience.forEach((exp: any) => {
+            parsedData.experience.forEach((exp: Record<string, unknown>) => {
               const desc = [exp.description, exp.role, exp.company].filter(Boolean).join(' ');
               const techMatches = desc.match(/\b(ETL|AWS|GCP|Azure|Spark|Hadoop|Airflow|Kafka|Docker|Kubernetes|MongoDB|Redis|Linux|Scala|Terraform|Ansible|Jenkins|CI\/CD|n8n|Talend|SAP|Flask|Django|FastAPI|React|Angular|Vue|TypeScript|PostgreSQL|MySQL|MSSQL|Git|GitHub)\b/gi) || [];
               allResumeSkills.push(...techMatches);
@@ -270,10 +270,11 @@ export function ScreeningResults() {
           // Deduplicate and display up to 20 for the UI
           const seen = new Set<string>();
           const cleanSkills: string[] = [];
-          for (const s of rawSkills) {
+          const labelPattern = /^(skills?|technical|soft|hard|tools?|languages?|frameworks?|platforms?|databases?|other|additional|core|key|professional|personal)$/i;
+          for (const s of allResumeSkills) {
             if (!s || typeof s !== 'string') continue;
             const key = s.toLowerCase().trim();
-            if (!seen.has(key) && !isLabel(s)) {
+            if (!seen.has(key) && !labelPattern.test(key)) {
               seen.add(key);
               cleanSkills.push(s.trim());
             }

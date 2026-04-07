@@ -139,6 +139,8 @@ export function ApplicantsList() {
   const [retryConfirmApplicant, setRetryConfirmApplicant] = useState<ApplicantWithResume | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
   
+  const itemsPerPage = 10;
+
   const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     setToast({ message, type });
   };

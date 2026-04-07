@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Settings, Save, RotateCcw, AlertCircle, CheckCircle, Sliders, Target, GraduationCap, Briefcase, FolderGit2, Award, BookOpen, X, AlertTriangle } from 'lucide-react';
+import { Settings, Save, RotateCcw, AlertCircle, CheckCircle, Sliders, Target, GraduationCap, Briefcase, FolderGit2, Award, BookOpen, AlertTriangle } from 'lucide-react';
 import { getSupabaseAdminClient, ScoringSettings } from '../lib/supabase';
 
 const DEFAULT_SETTINGS = {
@@ -36,6 +36,51 @@ const isTableNotExistError = (error: unknown): boolean => {
   }
   return false;
 };
+
+// Defined outside the component to prevent remounting on every render
+function WeightInput({
+  label,
+  icon: Icon,
+  value,
+  onChange,
+  color,
+}: {
+  label: string;
+  icon: React.ElementType;
+  value: number;
+  onChange: (value: number) => void;
+  color: string;
+}) {
+  return (
+    <div className="bg-white p-4 rounded-lg border border-gray-200">
+      <div className="flex items-center gap-2 mb-3">
+        <div className={`p-2 rounded-lg ${color}`}>
+          <Icon className="w-5 h-5 text-white" />
+        </div>
+        <label className="font-medium text-gray-900">{label}</label>
+      </div>
+      <div className="flex items-center gap-3">
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+        />
+        <input
+          type="number"
+          min="0"
+          max="100"
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value) || 0)}
+          className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-center font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        />
+        <span className="text-gray-500 font-medium">%</span>
+      </div>
+    </div>
+  );
+}
 
 export function AdminScoringSettings() {
   const [settings, setSettings] = useState<ScoringSettings | null>(null);
@@ -268,10 +313,13 @@ export function AdminScoringSettings() {
   };
 
   const handleResetToDefaults = () => {
-    if (window.confirm('Are you sure you want to reset all settings to defaults?')) {
-      setFormValues(DEFAULT_SETTINGS);
-      setValidationErrors({});
-    }
+    setShowResetConfirm(true);
+  };
+
+  const confirmResetToDefaults = () => {
+    setFormValues(DEFAULT_SETTINGS);
+    setValidationErrors({});
+    setShowResetConfirm(false);
   };
 
   useEffect(() => {
@@ -285,48 +333,6 @@ export function AdminScoringSettings() {
       </div>
     );
   }
-
-  const WeightInput = ({
-    label,
-    icon: Icon,
-    value,
-    onChange,
-    color,
-  }: {
-    label: string;
-    icon: React.ElementType;
-    value: number;
-    onChange: (value: number) => void;
-    color: string;
-  }) => (
-    <div className="bg-white p-4 rounded-lg border border-gray-200">
-      <div className="flex items-center gap-2 mb-3">
-        <div className={`p-2 rounded-lg ${color}`}>
-          <Icon className="w-5 h-5 text-white" />
-        </div>
-        <label className="font-medium text-gray-900">{label}</label>
-      </div>
-      <div className="flex items-center gap-3">
-        <input
-          type="range"
-          min="0"
-          max="100"
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-        />
-        <input
-          type="number"
-          min="0"
-          max="100"
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value) || 0)}
-          className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-center font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
-        <span className="text-gray-500 font-medium">%</span>
-      </div>
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 lg:p-10">

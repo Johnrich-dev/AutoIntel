@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Video, Upload, ArrowLeft, CheckCircle, Camera, Mic, MicOff, Video as VideoIcon, VideoOff, RefreshCw, Square, Download, Save, User } from 'lucide-react';
+import { Video, Upload, ArrowLeft, CheckCircle, XCircle, AlertCircle, Camera, Mic, MicOff, Video as VideoIcon, VideoOff, RefreshCw, Square, Download, Save, User, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getSupabaseAdminClient } from '../lib/supabase';
 
