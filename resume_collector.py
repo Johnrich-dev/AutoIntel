@@ -17,6 +17,99 @@ from email.header import decode_header
 from pathlib import Path
 from typing import Any, Optional
 
+def clean_extracted_text(text: str) -> str:
+    """
+    Fix common PDF extraction artifacts before storing or parsing.
+
+    Handles character-spaced words produced by some PDF renderers:
+      "P y thon"              → "Python"
+      "E T L"                 → "ETL"
+      "A m a z o n"           → "Amazon"
+      "A m a z o n W e b"     → "Amazon Web"   (word boundary at uppercase-after-lowercase)
+      "G o o g l e C l o u d" → "Google Cloud"
+
+    Algorithm (single token-by-token pass per line):
+    - When a single-alpha token is seen, start collecting a run.
+    - Keep adding single-alpha tokens to the run.
+    - Stop the run when an uppercase token follows lowercase tokens
+      (signals a new capitalised word starting).
+    - If the run ends at a multi-char alpha token AND the run so far is
+      only 1-2 tokens, absorb that token as the word suffix
+      (e.g. "P y" + "thon" → "Python").
+    - Collapse the run only when it has 3+ tokens (avoids "I am" → "Iam").
+    - After the main pass, collapse remaining 2-uppercase-char pairs
+      that are clearly acronyms (e.g. "A I" → "AI").
+    """
+    if not text:
+        return text
+
+    import unicodedata
+    text = unicodedata.normalize('NFKC', text)
+
+    def collapse_line(line: str) -> str:
+        tokens = line.split(' ')
+        result = []
+        i = 0
+        while i < len(tokens):
+            tok = tokens[i]
+            # Strip trailing punctuation for classification, keep it for output
+            tok_alpha = tok.rstrip('.,;:!?)')
+            tok_punct = tok[len(tok_alpha):]
+            if len(tok_alpha) == 1 and tok_alpha.isalpha():
+                run = [tok_alpha]
+                run_punct = [tok_punct]  # track punctuation per token
+                j = i + 1
+                seen_lower = tok_alpha.islower()
+                while j < len(tokens):
+                    nt = tokens[j]
+                    nt_alpha = nt.rstrip('.,;:!?)')
+                    nt_punct = nt[len(nt_alpha):]
+                    if len(nt_alpha) == 1 and nt_alpha.isalpha():
+                        if nt_alpha.isupper() and seen_lower:
+                            break
+                        run.append(nt_alpha)
+                        run_punct.append(nt_punct)
+                        if nt_alpha.islower():
+                            seen_lower = True
+                        j += 1
+                    else:
+                        break
+                # Absorb one multi-char suffix only when run is still short
+                suffix_punct = ''
+                if (j < len(tokens)
+                        and len(tokens[j]) >= 2
+                        and len(run) <= 2):
+                    nt = tokens[j]
+                    nt_alpha = nt.rstrip('.,;:!?)')
+                    nt_punct = nt[len(nt_alpha):]
+                    if nt_alpha.isalpha():
+                        run.append(nt_alpha)
+                        suffix_punct = nt_punct
+                        j += 1
+                if len(run) >= 3:
+                    # Collapse: join all alpha parts, append only the last punctuation
+                    last_punct = suffix_punct or run_punct[-1]
+                    result.append(''.join(run) + last_punct)
+                    i = j
+                else:
+                    result.append(tok)
+                    i += 1
+            else:
+                result.append(tok)
+                i += 1
+        return ' '.join(result)
+
+    text = '\n'.join(collapse_line(line) for line in text.splitlines())
+
+    # Collapse remaining 2-uppercase-char pairs that are clearly acronyms
+    text = re.sub(r'\b([A-Z]) ([A-Z])\b', lambda m: m.group(1) + m.group(2), text)
+
+    # Clean up blank lines and trailing whitespace
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = '\n'.join(line.rstrip() for line in text.splitlines())
+    return text.strip()
+
+
 def _prefer_site_packages():
     repo_root = Path(__file__).resolve().parent
     if (repo_root / 'supabase').is_dir() and str(repo_root) in sys.path:
@@ -368,7 +461,8 @@ def extract_text_from_pdf(file_content):
                     lines.append(page_text.strip())
             
             text = "\n\n".join(lines).strip()
-            
+            text = clean_extracted_text(text)
+
             # Verify we got meaningful content (not just a few characters)
             if text and len(text) > 50:
                 return text, "pdfplumber"
@@ -389,7 +483,8 @@ def extract_text_from_pdf(file_content):
                 if t:
                     lines.append(t)
         text = "\n".join(lines).strip()
-        
+        text = clean_extracted_text(text)
+
         if text and len(text) > 50:
             return text, "pymupdf"
     except Exception as e:
@@ -405,7 +500,8 @@ def extract_text_from_pdf(file_content):
             if page_text.strip():
                 chunks.append(page_text.strip())
         text = "\n\n".join(chunks).strip()
-        
+        text = clean_extracted_text(text)
+
         if text and len(text) > 50:
             return text, "pypdf2"
     except Exception as e:

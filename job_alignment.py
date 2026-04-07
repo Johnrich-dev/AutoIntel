@@ -591,25 +591,513 @@ def normalize_skill(skill: str) -> str:
     """
     Normalize a skill string for matching.
     Removes common variations and normalizes to lowercase.
-    
-    Args:
-        skill: Raw skill string
-    
-    Returns:
-        Normalized skill string
     """
-    # Convert to lowercase
     skill = skill.lower().strip()
-    
-    # Remove common prefixes/suffixes
-    for prefix in ['senior', 'junior', 'lead', 'principal', 'staff']:
-        skill = skill.replace(prefix, '')
-    
-    # Remove special characters and normalize
+    # Remove seniority prefixes only when they appear as standalone words
+    # (avoid stripping 'lead' from 'lead generation', 'principal' from 'principal component', etc.)
+    for prefix in ['senior', 'junior', 'principal', 'staff']:
+        skill = re.sub(r'\b' + prefix + r'\b', '', skill)
     skill = re.sub(r'[^\w#+\.]', ' ', skill)
     skill = re.sub(r'\s+', ' ', skill).strip()
-    
     return skill
+
+
+# Canonical alias map: maps known variants/abbreviations to a single canonical token.
+# Both the resume skill and the job requirement are resolved through this map before
+# comparison, so "reactjs" and "react.js" both resolve to "react" and match correctly.
+_SKILL_ALIASES: Dict[str, str] = {
+    # JavaScript ecosystem
+    'javascript': 'javascript', 'js': 'javascript',
+    'typescript': 'typescript', 'ts': 'typescript',
+    'react': 'react', 'reactjs': 'react', 'react.js': 'react',
+    'vue': 'vue', 'vuejs': 'vue', 'vue.js': 'vue',
+    'angular': 'angular', 'angularjs': 'angular',
+    'node': 'nodejs', 'nodejs': 'nodejs', 'node.js': 'nodejs',
+    'next': 'nextjs', 'nextjs': 'nextjs', 'next.js': 'nextjs',
+    'express': 'express', 'expressjs': 'express', 'express.js': 'express',
+    # Python ecosystem
+    'python': 'python', 'py': 'python',
+    'django': 'django', 'flask': 'flask', 'fastapi': 'fastapi',
+    'pandas': 'pandas', 'numpy': 'numpy', 'scipy': 'scipy',
+    'tensorflow': 'tensorflow', 'tf': 'tensorflow',
+    'pytorch': 'pytorch', 'torch': 'pytorch',
+    'scikit': 'scikitlearn', 'scikit-learn': 'scikitlearn', 'sklearn': 'scikitlearn',
+    # JVM
+    'java': 'java', 'kotlin': 'kotlin', 'scala': 'scala',
+    'spring': 'spring', 'springboot': 'spring', 'spring boot': 'spring',
+    # .NET
+    'c#': 'csharp', 'csharp': 'csharp',
+    '.net': 'dotnet', 'dotnet': 'dotnet', 'asp.net': 'dotnet',
+    # C/C++
+    'c++': 'cpp', 'cpp': 'cpp',
+    'c': 'clang',  # only exact "c" maps here; "c++" already handled above
+    # Databases
+    'sql': 'sql',
+    'mysql': 'mysql', 'postgresql': 'postgresql', 'postgres': 'postgresql',
+    'mssql': 'mssql', 'sql server': 'mssql', 'microsoft sql server': 'mssql',
+    'mongodb': 'mongodb', 'mongo': 'mongodb',
+    'redis': 'redis', 'elasticsearch': 'elasticsearch', 'elastic': 'elasticsearch',
+    'sqlite': 'sqlite',
+    # Cloud / DevOps
+    'aws': 'aws', 'amazon web services': 'aws',
+    'azure': 'azure', 'microsoft azure': 'azure',
+    'gcp': 'gcp', 'google cloud': 'gcp', 'google cloud platform': 'gcp',
+    'docker': 'docker', 'kubernetes': 'kubernetes', 'k8s': 'kubernetes',
+    'terraform': 'terraform', 'ansible': 'ansible',
+    'jenkins': 'jenkins', 'github actions': 'githubactions', 'gitlab ci': 'gitlabci',
+    'ci/cd': 'cicd', 'cicd': 'cicd',
+    # ML / Data
+    'machine learning': 'machinelearning', 'ml': 'machinelearning',
+    'deep learning': 'deeplearning', 'dl': 'deeplearning',
+    'nlp': 'nlp', 'natural language processing': 'nlp',
+    'computer vision': 'computervision', 'cv': 'computervision',
+    'data science': 'datascience',
+    'data engineering': 'dataengineering',
+    'data analysis': 'dataanalysis', 'data analytics': 'dataanalysis',
+    'power bi': 'powerbi', 'powerbi': 'powerbi',
+    'tableau': 'tableau',
+    'spark': 'spark', 'apache spark': 'spark',
+    'kafka': 'kafka', 'apache kafka': 'kafka',
+    'airflow': 'airflow', 'apache airflow': 'airflow',
+    # Version control / tools
+    'git': 'git', 'github': 'github', 'gitlab': 'gitlab', 'bitbucket': 'bitbucket',
+    'linux': 'linux', 'unix': 'linux',
+    'bash': 'bash', 'shell': 'bash', 'shell scripting': 'bash',
+    'rest': 'restapi', 'rest api': 'restapi', 'restful': 'restapi',
+    'graphql': 'graphql',
+    # Mobile
+    'swift': 'swift', 'objective-c': 'objectivec',
+    'flutter': 'flutter', 'dart': 'dart',
+    'react native': 'reactnative',
+    # Other common
+    'php': 'php', 'laravel': 'laravel',
+    'ruby': 'ruby', 'rails': 'rails', 'ruby on rails': 'rails',
+    'go': 'golang', 'golang': 'golang',
+    'rust': 'rust',
+    'r': 'rlang',
+    'excel': 'excel', 'microsoft excel': 'excel',
+    'word': 'msword', 'microsoft word': 'msword',
+    'powerpoint': 'powerpoint', 'microsoft powerpoint': 'powerpoint',
+    'figma': 'figma', 'sketch': 'sketch', 'adobe xd': 'adobexd',
+    'photoshop': 'photoshop', 'illustrator': 'illustrator',
+    'jira': 'jira', 'confluence': 'confluence', 'trello': 'trello',
+    'agile': 'agile', 'scrum': 'scrum', 'kanban': 'kanban',
+}
+
+# Canonical alias map: maps known variants/abbreviations to a single canonical token.
+# Both the resume skill and the job requirement are resolved through this map before
+# comparison, so "reactjs" and "react.js" both resolve to "react" and match correctly.
+# Covers: Tech, Finance, Healthcare, Marketing, Sales, HR, Legal, Operations, Education,
+#         Creative, Supply Chain, Real Estate, Hospitality, and more.
+_SKILL_ALIASES: Dict[str, str] = {
+    # ── JavaScript / Web ──────────────────────────────────────────────────────
+    'javascript': 'javascript', 'js': 'javascript',
+    'typescript': 'typescript', 'ts': 'typescript',
+    'react': 'react', 'reactjs': 'react', 'react.js': 'react',
+    'vue': 'vue', 'vuejs': 'vue', 'vue.js': 'vue',
+    'angular': 'angular', 'angularjs': 'angular',
+    'node': 'nodejs', 'nodejs': 'nodejs', 'node.js': 'nodejs',
+    'next': 'nextjs', 'nextjs': 'nextjs', 'next.js': 'nextjs',
+    'nuxt': 'nuxtjs', 'nuxtjs': 'nuxtjs', 'nuxt.js': 'nuxtjs',
+    'svelte': 'svelte', 'sveltekit': 'svelte',
+    'express': 'express', 'expressjs': 'express', 'express.js': 'express',
+    'jquery': 'jquery',
+    'html': 'html', 'html5': 'html',
+    'css': 'css', 'css3': 'css',
+    'sass': 'sass', 'scss': 'sass',
+    'tailwind': 'tailwind', 'tailwindcss': 'tailwind',
+    'bootstrap': 'bootstrap',
+    'webpack': 'webpack', 'vite': 'vite',
+    # ── Python ────────────────────────────────────────────────────────────────
+    'python': 'python', 'py': 'python',
+    'django': 'django', 'flask': 'flask', 'fastapi': 'fastapi',
+    'pandas': 'pandas', 'numpy': 'numpy', 'scipy': 'scipy',
+    'matplotlib': 'matplotlib', 'seaborn': 'seaborn', 'plotly': 'plotly',
+    'tensorflow': 'tensorflow', 'tf': 'tensorflow',
+    'pytorch': 'pytorch', 'torch': 'pytorch',
+    'scikit': 'scikitlearn', 'scikit-learn': 'scikitlearn', 'sklearn': 'scikitlearn',
+    'keras': 'keras', 'xgboost': 'xgboost', 'lightgbm': 'lightgbm',
+    'jupyter': 'jupyter', 'jupyter notebook': 'jupyter',
+    # ── JVM ───────────────────────────────────────────────────────────────────
+    'java': 'java', 'kotlin': 'kotlin', 'scala': 'scala', 'groovy': 'groovy',
+    'spring': 'spring', 'springboot': 'spring', 'spring boot': 'spring',
+    'hibernate': 'hibernate', 'maven': 'maven', 'gradle': 'gradle',
+    # ── .NET ──────────────────────────────────────────────────────────────────
+    'c#': 'csharp', 'csharp': 'csharp',
+    '.net': 'dotnet', 'dotnet': 'dotnet', 'asp.net': 'dotnet',
+    'blazor': 'blazor', 'xamarin': 'xamarin', 'maui': 'maui',
+    # ── C / C++ ───────────────────────────────────────────────────────────────
+    'c++': 'cpp', 'cpp': 'cpp',
+    'c': 'clang',
+    # ── Databases ─────────────────────────────────────────────────────────────
+    'sql': 'sql',
+    'mysql': 'mysql', 'postgresql': 'postgresql', 'postgres': 'postgresql',
+    'mssql': 'mssql', 'sql server': 'mssql', 'microsoft sql server': 'mssql',
+    'oracle': 'oracle', 'oracle db': 'oracle', 'oracle database': 'oracle',
+    'mongodb': 'mongodb', 'mongo': 'mongodb',
+    'redis': 'redis', 'memcached': 'memcached',
+    'elasticsearch': 'elasticsearch', 'elastic': 'elasticsearch',
+    'cassandra': 'cassandra', 'dynamodb': 'dynamodb',
+    'sqlite': 'sqlite', 'mariadb': 'mariadb',
+    'snowflake': 'snowflake', 'bigquery': 'bigquery', 'redshift': 'redshift',
+    # ── Cloud / DevOps ────────────────────────────────────────────────────────
+    'aws': 'aws', 'amazon web services': 'aws',
+    'aws s3': 'aws', 'aws ec2': 'aws', 'aws lambda': 'aws', 'aws rds': 'aws',
+    'aws cloud': 'aws', 'aws automation': 'aws', 'aws databases': 'aws',
+    'aws api gateway': 'aws', 'aws cloudfront': 'aws', 'aws route 53': 'aws',
+    'aws codecommit': 'aws', 'aws cognito': 'aws', 'aws glue': 'aws',
+    'azure': 'azure', 'microsoft azure': 'azure',
+    'gcp': 'gcp', 'google cloud': 'gcp', 'google cloud platform': 'gcp', 'google cloud platforms': 'gcp',
+    'docker': 'docker', 'kubernetes': 'kubernetes', 'k8s': 'kubernetes',
+    'terraform': 'terraform', 'ansible': 'ansible', 'puppet': 'puppet', 'chef': 'chef',
+    'jenkins': 'jenkins', 'github actions': 'githubactions', 'gitlab ci': 'gitlabci',
+    'ci/cd': 'cicd', 'cicd': 'cicd', 'continuous integration': 'cicd',
+    'nginx': 'nginx', 'apache': 'apache',
+    'linux': 'linux', 'unix': 'linux', 'ubuntu': 'linux', 'centos': 'linux',
+    'bash': 'bash', 'shell': 'bash', 'shell scripting': 'bash',
+    # ── ML / Data ─────────────────────────────────────────────────────────────
+    'machine learning': 'machinelearning', 'ml': 'machinelearning',
+    'deep learning': 'deeplearning', 'dl': 'deeplearning',
+    'nlp': 'nlp', 'natural language processing': 'nlp',
+    'computer vision': 'computervision', 'cv': 'computervision',
+    'data science': 'datascience',
+    'data engineering': 'dataengineering',
+    'data analysis': 'dataanalysis', 'data analytics': 'dataanalysis',
+    'data visualization': 'datavisualization', 'data viz': 'datavisualization',
+    'power bi': 'powerbi', 'powerbi': 'powerbi',
+    'tableau': 'tableau', 'looker': 'looker', 'qlik': 'qlik',
+    'spark': 'spark', 'apache spark': 'spark', 'pyspark': 'spark',
+    'kafka': 'kafka', 'apache kafka': 'kafka',
+    'airflow': 'airflow', 'apache airflow': 'airflow',
+    'etl': 'etl', 'etl pipelines': 'etl', 'etl pipeline': 'etl',
+    'etl tools': 'etl', 'extract transform load': 'etl',
+    'hadoop': 'hadoop', 'apache hadoop': 'hadoop', 'hdfs': 'hadoop', 'mapreduce': 'hadoop',
+    'hive': 'hive', 'hbase': 'hbase', 'pig': 'pig',
+    'scala': 'scala',
+    'data modeling': 'datamodeling', 'data modelling': 'datamodeling', 'data models': 'datamodeling',
+    'data structures': 'datastructures', 'data structure': 'datastructures',
+    'analytical thinking': 'analytical', 'analytical skills': 'analytical',
+    'eda': 'dataanalysis', 'exploratory data analysis': 'dataanalysis',
+    'dbt': 'dbt', 'fivetran': 'fivetran', 'stitch': 'stitch',
+    'r': 'rlang', 'r programming': 'rlang', 'r language': 'rlang',
+    'sas': 'sas', 'spss': 'spss', 'stata': 'stata',
+    # ── Version control / APIs ────────────────────────────────────────────────
+    'git': 'git', 'github': 'github', 'gitlab': 'gitlab', 'bitbucket': 'bitbucket',
+    'rest': 'restapi', 'rest api': 'restapi', 'restful': 'restapi',
+    'graphql': 'graphql', 'grpc': 'grpc', 'soap': 'soap',
+    'postman': 'postman', 'swagger': 'swagger', 'openapi': 'openapi',
+    # ── Mobile ────────────────────────────────────────────────────────────────
+    'swift': 'swift', 'objective-c': 'objectivec',
+    'flutter': 'flutter', 'dart': 'dart',
+    'react native': 'reactnative',
+    'android': 'android', 'ios': 'ios',
+    # ── Other languages ───────────────────────────────────────────────────────
+    'php': 'php', 'laravel': 'laravel', 'symfony': 'symfony',
+    'ruby': 'ruby', 'rails': 'rails', 'ruby on rails': 'rails',
+    'go': 'golang', 'golang': 'golang',
+    'rust': 'rust', 'elixir': 'elixir', 'erlang': 'erlang',
+    'perl': 'perl', 'lua': 'lua',
+    # ── Project management / collaboration ────────────────────────────────────
+    'jira': 'jira', 'confluence': 'confluence', 'trello': 'trello',
+    'asana': 'asana', 'monday': 'monday', 'monday.com': 'monday',
+    'notion': 'notion', 'basecamp': 'basecamp', 'clickup': 'clickup',
+    'slack': 'slack', 'teams': 'msteams', 'microsoft teams': 'msteams',
+    'zoom': 'zoom', 'google meet': 'googlemeet',
+    'agile': 'agile', 'scrum': 'scrum', 'kanban': 'kanban',
+    'waterfall': 'waterfall', 'prince2': 'prince2', 'pmp': 'pmp',
+    'six sigma': 'sixsigma', 'lean': 'lean', 'kaizen': 'kaizen',
+    # ── Microsoft Office / Google Workspace ───────────────────────────────────
+    'excel': 'excel', 'microsoft excel': 'excel', 'ms excel': 'excel',
+    'word': 'msword', 'microsoft word': 'msword', 'ms word': 'msword',
+    'powerpoint': 'powerpoint', 'microsoft powerpoint': 'powerpoint', 'ms powerpoint': 'powerpoint',
+    'outlook': 'outlook', 'microsoft outlook': 'outlook',
+    'access': 'msaccess', 'microsoft access': 'msaccess',
+    'sharepoint': 'sharepoint', 'microsoft sharepoint': 'sharepoint',
+    'google sheets': 'googlesheets', 'google docs': 'googledocs',
+    'google workspace': 'googleworkspace', 'g suite': 'googleworkspace',
+    # ── Design / Creative ─────────────────────────────────────────────────────
+    'figma': 'figma', 'sketch': 'sketch', 'adobe xd': 'adobexd', 'xd': 'adobexd',
+    'photoshop': 'photoshop', 'adobe photoshop': 'photoshop',
+    'illustrator': 'illustrator', 'adobe illustrator': 'illustrator',
+    'indesign': 'indesign', 'adobe indesign': 'indesign',
+    'premiere': 'premiere', 'adobe premiere': 'premiere', 'premiere pro': 'premiere',
+    'after effects': 'aftereffects', 'adobe after effects': 'aftereffects',
+    'lightroom': 'lightroom', 'adobe lightroom': 'lightroom',
+    'canva': 'canva', 'coreldraw': 'coreldraw',
+    'blender': 'blender', 'maya': 'maya', 'autocad': 'autocad',
+    '3ds max': '3dsmax', 'cinema 4d': 'cinema4d',
+    # ── Finance / Accounting ──────────────────────────────────────────────────
+    'quickbooks': 'quickbooks', 'quickbooks online': 'quickbooks',
+    'xero': 'xero', 'sage': 'sage', 'sage accounting': 'sage',
+    'sap': 'sap', 'sap fi': 'sap', 'sap fico': 'sap',
+    'oracle financials': 'oraclefinancials', 'oracle erp': 'oraclefinancials',
+    'netsuite': 'netsuite', 'oracle netsuite': 'netsuite',
+    'financial modeling': 'financialmodeling', 'financial modelling': 'financialmodeling',
+    'financial analysis': 'financialanalysis', 'financial reporting': 'financialreporting',
+    'budgeting': 'budgeting', 'forecasting': 'forecasting',
+    'accounts payable': 'accountspayable', 'ap': 'accountspayable',
+    'accounts receivable': 'accountsreceivable', 'ar': 'accountsreceivable',
+    'general ledger': 'generalledger', 'gl': 'generalledger',
+    'gaap': 'gaap', 'ifrs': 'ifrs',
+    'tax': 'tax', 'taxation': 'tax', 'tax compliance': 'tax',
+    'audit': 'audit', 'internal audit': 'audit', 'external audit': 'audit',
+    'payroll': 'payroll', 'payroll processing': 'payroll',
+    'bloomberg': 'bloomberg', 'bloomberg terminal': 'bloomberg',
+    'valuation': 'valuation', 'dcf': 'dcf', 'discounted cash flow': 'dcf',
+    'equity research': 'equityresearch', 'investment banking': 'investmentbanking',
+    'risk management': 'riskmanagement', 'credit risk': 'creditrisk',
+    'compliance': 'compliance', 'regulatory compliance': 'compliance',
+    'kyc': 'kyc', 'know your customer': 'kyc',
+    'aml': 'aml', 'anti-money laundering': 'aml',
+    'derivatives': 'derivatives', 'fixed income': 'fixedincome',
+    'portfolio management': 'portfoliomanagement',
+    'financial planning': 'financialplanning', 'fp&a': 'fpa', 'fpa': 'fpa',
+    # ── Marketing / Digital Marketing ─────────────────────────────────────────
+    'seo': 'seo', 'search engine optimization': 'seo',
+    'sem': 'sem', 'search engine marketing': 'sem',
+    'ppc': 'ppc', 'pay per click': 'ppc', 'paid search': 'ppc',
+    'google ads': 'googleads', 'google adwords': 'googleads',
+    'facebook ads': 'facebookads', 'meta ads': 'facebookads',
+    'social media marketing': 'socialmediamarketing', 'smm': 'socialmediamarketing',
+    'content marketing': 'contentmarketing', 'content strategy': 'contentmarketing',
+    'email marketing': 'emailmarketing',
+    'marketing automation': 'marketingautomation',
+    'hubspot': 'hubspot', 'marketo': 'marketo', 'pardot': 'pardot',
+    'mailchimp': 'mailchimp', 'klaviyo': 'klaviyo',
+    'google analytics': 'googleanalytics', 'ga4': 'googleanalytics',
+    'adobe analytics': 'adobeanalytics',
+    'crm': 'crm', 'customer relationship management': 'crm',
+    'salesforce': 'salesforce', 'salesforce crm': 'salesforce',
+    'zoho': 'zoho', 'zoho crm': 'zoho',
+    'brand management': 'brandmanagement', 'branding': 'brandmanagement',
+    'market research': 'marketresearch', 'consumer insights': 'marketresearch',
+    'copywriting': 'copywriting', 'content writing': 'copywriting',
+    'public relations': 'pr', 'pr': 'pr',
+    'influencer marketing': 'influencermarketing',
+    'affiliate marketing': 'affiliatemarketing',
+    'conversion rate optimization': 'cro', 'cro': 'cro',
+    'a/b testing': 'abtesting', 'ab testing': 'abtesting',
+    'growth hacking': 'growthhacking', 'growth marketing': 'growthhacking',
+    # ── Sales ─────────────────────────────────────────────────────────────────
+    'b2b sales': 'b2bsales', 'b2b': 'b2bsales',
+    'b2c sales': 'b2csales', 'b2c': 'b2csales',
+    'inside sales': 'insidesales', 'outside sales': 'outsidesales',
+    'account management': 'accountmanagement',
+    'business development': 'businessdevelopment', 'biz dev': 'businessdevelopment',
+    'lead generation': 'leadgeneration', 'prospecting': 'leadgeneration',
+    'lead gen': 'leadgeneration', 'outbound prospecting': 'leadgeneration',
+    'cold calling': 'coldcalling', 'cold outreach': 'coldcalling',
+    'pipeline management': 'pipelinemanagement', 'sales pipeline': 'pipelinemanagement',
+    'negotiation': 'negotiation', 'contract negotiation': 'negotiation',
+    'closing': 'salesclosing', 'deal closing': 'salesclosing',
+    'quota': 'quota', 'revenue target': 'quota',
+    'upselling': 'upselling', 'cross-selling': 'crossselling', 'cross selling': 'crossselling',
+    # ── HR / People ───────────────────────────────────────────────────────────
+    'recruitment': 'recruitment', 'recruiting': 'recruitment', 'talent acquisition': 'recruitment',
+    'sourcing': 'sourcing', 'talent sourcing': 'sourcing',
+    'onboarding': 'onboarding', 'employee onboarding': 'onboarding',
+    'performance management': 'performancemanagement', 'performance review': 'performancemanagement',
+    'employee relations': 'employeerelations', 'er': 'employeerelations',
+    'compensation': 'compensation', 'benefits': 'benefits',
+    'compensation and benefits': 'compensationbenefits', 'c&b': 'compensationbenefits',
+    'hris': 'hris', 'hr information system': 'hris',
+    'workday': 'workday', 'bamboohr': 'bamboohr', 'adp': 'adp',
+    'successfactors': 'successfactors', 'sap successfactors': 'successfactors',
+    'learning and development': 'learninganddevelopment', 'l&d': 'learninganddevelopment',
+    'l and d': 'learninganddevelopment', 'ld': 'learninganddevelopment',
+    'training and development': 'learninganddevelopment', 't&d': 'learninganddevelopment',
+    'organizational development': 'orgdevelopment', 'od': 'orgdevelopment',
+    'labor law': 'laborlaw', 'employment law': 'laborlaw',
+    'diversity and inclusion': 'dei', 'dei': 'dei', 'd&i': 'dei',
+    'workforce planning': 'workforceplanning', 'headcount planning': 'workforceplanning',
+    # ── Healthcare / Medical ──────────────────────────────────────────────────
+    'ehr': 'ehr', 'electronic health records': 'ehr', 'emr': 'ehr',
+    'epic': 'epic', 'epic systems': 'epic',
+    'cerner': 'cerner', 'meditech': 'meditech',
+    'hipaa': 'hipaa', 'hipaa compliance': 'hipaa',
+    'icd-10': 'icd10', 'icd10': 'icd10', 'icd 10': 'icd10',
+    'cpt coding': 'cptcoding', 'medical coding': 'cptcoding',
+    'medical billing': 'medicalbilling',
+    'clinical research': 'clinicalresearch', 'clinical trials': 'clinicalresearch',
+    'patient care': 'patientcare', 'patient management': 'patientcare',
+    'nursing': 'nursing', 'rn': 'rn', 'registered nurse': 'rn',
+    'lpn': 'lpn', 'licensed practical nurse': 'lpn',
+    'cna': 'cna', 'certified nursing assistant': 'cna',
+    'phlebotomy': 'phlebotomy', 'venipuncture': 'phlebotomy',
+    'radiology': 'radiology', 'mri': 'mri', 'ct scan': 'ctscan',
+    'pharmacy': 'pharmacy', 'pharmacology': 'pharmacology',
+    'physical therapy': 'physicaltherapy', 'pt': 'physicaltherapy',
+    'occupational therapy': 'occupationaltherapy', 'ot': 'occupationaltherapy',
+    'mental health': 'mentalhealth', 'counseling': 'counseling',
+    'telemedicine': 'telemedicine', 'telehealth': 'telemedicine',
+    # ── Legal ─────────────────────────────────────────────────────────────────
+    'legal research': 'legalresearch', 'case research': 'legalresearch',
+    'legal writing': 'legalwriting', 'legal drafting': 'legalwriting',
+    'contract drafting': 'contractdrafting', 'contract review': 'contractdrafting',
+    'litigation': 'litigation', 'trial preparation': 'litigation',
+    'corporate law': 'corporatelaw', 'mergers and acquisitions': 'mergers',
+    'm&a': 'mergers', 'due diligence': 'duediligence',
+    'intellectual property': 'ip', 'ip law': 'ip', 'patent': 'patent',
+    'trademark': 'trademark', 'copyright': 'copyright',
+    'westlaw': 'westlaw', 'lexisnexis': 'lexisnexis',
+    'paralegal': 'paralegal', 'legal assistant': 'paralegal',
+    # ── Operations / Supply Chain / Logistics ─────────────────────────────────
+    'supply chain': 'supplychain', 'supply chain management': 'supplychain',
+    'logistics': 'logistics', 'freight': 'logistics',
+    'procurement': 'procurement', 'purchasing': 'procurement',
+    'inventory management': 'inventorymanagement', 'inventory control': 'inventorymanagement',
+    'warehouse management': 'warehousemanagement', 'wms': 'warehousemanagement',
+    'erp': 'erp', 'enterprise resource planning': 'erp',
+    'sap mm': 'sapmm', 'sap sd': 'sapsd', 'sap pp': 'sappp',
+    'demand planning': 'demandplanning', 'demand forecasting': 'demandplanning',
+    'vendor management': 'vendormanagement', 'supplier management': 'vendormanagement',
+    'quality control': 'qualitycontrol', 'qc': 'qualitycontrol',
+    'quality assurance': 'qualityassurance', 'qa': 'qualityassurance',
+    'iso': 'iso', 'iso 9001': 'iso9001', 'iso 14001': 'iso14001',
+    'lean manufacturing': 'leanmanufacturing', 'lean six sigma': 'leansixsigma',
+    'process improvement': 'processimprovement', 'continuous improvement': 'processimprovement',
+    'operations management': 'operationsmanagement',
+    'fleet management': 'fleetmanagement',
+    # ── Customer Service / Support ────────────────────────────────────────────
+    'customer service': 'customerservice', 'customer support': 'customerservice',
+    'customer success': 'customersuccess', 'cs': 'customersuccess',
+    'zendesk': 'zendesk', 'freshdesk': 'freshdesk', 'intercom': 'intercom',
+    'servicenow': 'servicenow', 'service now': 'servicenow',
+    'help desk': 'helpdesk', 'helpdesk': 'helpdesk', 'it support': 'helpdesk',
+    'ticketing': 'ticketing', 'ticket management': 'ticketing',
+    'call center': 'callcenter', 'contact center': 'callcenter',
+    'live chat': 'livechat', 'chat support': 'livechat',
+    'nps': 'nps', 'net promoter score': 'nps',
+    'csat': 'csat', 'customer satisfaction': 'csat',
+    # ── Education / Training ──────────────────────────────────────────────────
+    'curriculum development': 'curriculumdevelopment', 'curriculum design': 'curriculumdevelopment',
+    'instructional design': 'instructionaldesign', 'e-learning': 'elearning',
+    'lms': 'lms', 'learning management system': 'lms',
+    'moodle': 'moodle', 'canvas': 'canvas', 'blackboard': 'blackboard',
+    'classroom management': 'classroommanagement',
+    'lesson planning': 'lessonplanning', 'lesson plan': 'lessonplanning',
+    'special education': 'specialeducation', 'sped': 'specialeducation',
+    'stem': 'stem', 'steam': 'steam',
+    # ── Real Estate ───────────────────────────────────────────────────────────
+    'property management': 'propertymanagement',
+    'real estate': 'realestate', 'real estate sales': 'realestate',
+    'mls': 'mls', 'multiple listing service': 'mls',
+    'lease administration': 'leaseadmin', 'lease management': 'leaseadmin',
+    'appraisal': 'appraisal', 'property valuation': 'appraisal',
+    'title insurance': 'titleinsurance', 'escrow': 'escrow',
+    # ── Hospitality / Food & Beverage ─────────────────────────────────────────
+    'food safety': 'foodsafety', 'haccp': 'haccp',
+    'pos': 'pos', 'point of sale': 'pos',
+    'restaurant management': 'restaurantmanagement',
+    'hotel management': 'hotelmanagement', 'hospitality management': 'hotelmanagement',
+    'front desk': 'frontdesk', 'front office': 'frontdesk',
+    'housekeeping': 'housekeeping',
+    'event planning': 'eventplanning', 'event management': 'eventplanning',
+    'catering': 'catering', 'banquet': 'banquet',
+    # ── Construction / Engineering ────────────────────────────────────────────
+    'revit': 'revit', 'archicad': 'archicad',
+    'civil 3d': 'civil3d', 'microstation': 'microstation',
+    'construction management': 'constructionmanagement',
+    'cost estimation': 'costestimation', 'quantity surveying': 'costestimation',
+    'structural analysis': 'structuralanalysis',
+    'building codes': 'buildingcodes', 'building regulations': 'buildingcodes',
+    'osha': 'osha', 'health and safety': 'healthsafety', 'hse': 'healthsafety',
+    # ── Soft skills (universal) ───────────────────────────────────────────────
+    'communication': 'communication', 'written communication': 'communication',
+    'verbal communication': 'communication', 'presentation': 'presentation',
+    'public speaking': 'publicspeaking',
+    'leadership': 'leadership', 'team leadership': 'leadership',
+    'management': 'management', 'people management': 'management',
+    'teamwork': 'teamwork', 'collaboration': 'teamwork', 'team player': 'teamwork',
+    'problem solving': 'problemsolving', 'critical thinking': 'criticalthinking',
+    'analytical': 'analytical', 'analytical skills': 'analytical',
+    'attention to detail': 'attentiontodetail', 'detail oriented': 'attentiontodetail',
+    'time management': 'timemanagement', 'prioritization': 'timemanagement',
+    'multitasking': 'multitasking',
+    'adaptability': 'adaptability', 'flexibility': 'adaptability',
+    'creativity': 'creativity', 'innovation': 'innovation',
+    'customer focus': 'customerfocus', 'client focus': 'customerfocus',
+    'research': 'research', 'report writing': 'reportwriting',
+    'microsoft office': 'msoffice', 'ms office': 'msoffice', 'office suite': 'msoffice',
+}
+
+# Minimum token length for a partial-match to be considered valid.
+# Prevents single-letter or very short tokens from causing false positives.
+_MIN_PARTIAL_LEN = 4
+
+
+def _strip_skill_qualifiers(skill: str) -> str:
+    """
+    Remove level/proficiency qualifiers that job postings append to skill names.
+    e.g. "React basics" → "React", "AWS S3 basics" → "AWS S3",
+         "ETL fundamentals" → "ETL", "Node.js introduction" → "Node.js"
+
+    This ensures job requirements like "React basics" match a resume that lists "React".
+    """
+    qualifiers = (
+        r'\b(?:basics?|fundamentals?|introduction|intro|beginner|intermediate|advanced|'
+        r'proficiency|knowledge|experience|skills?|concepts?|principles?|overview|'
+        r'essentials?|foundations?|core|level [1-9]|[1-9] ?[0-9]* ?(?:years?|yrs?))\b'
+    )
+    cleaned = re.sub(qualifiers, '', skill, flags=re.IGNORECASE)
+    # Clean up leftover punctuation / extra spaces
+    cleaned = re.sub(r'[\-/,]+$', '', cleaned.strip())
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    return cleaned if cleaned else skill  # fall back to original if everything was stripped
+
+
+def _canonicalize_skill(raw: str) -> str:
+    """
+    Resolve a raw skill string to its canonical alias (if known),
+    otherwise return the normalized form.
+
+    Pipeline:
+    1. Strip level qualifiers ("React basics" → "React")
+    2. Normalize (lowercase, remove special chars)
+    3. Look up in alias map (full string, then compact/no-spaces form)
+    4. Return canonical token or normalized string
+    """
+    # Step 1: strip qualifiers before normalizing
+    stripped = _strip_skill_qualifiers(raw)
+    norm = normalize_skill(stripped)
+    # Try the full normalized string first
+    if norm in _SKILL_ALIASES:
+        return _SKILL_ALIASES[norm]
+    # Try without internal spaces (e.g. "react js" -> "reactjs")
+    compact = norm.replace(' ', '')
+    if compact in _SKILL_ALIASES:
+        return _SKILL_ALIASES[compact]
+    return norm
+
+
+def _skills_match(resume_canon: str, req_canon: str) -> bool:
+    """
+    Return True if resume_canon is considered a match for req_canon.
+
+    Rules (in order):
+    1. Exact canonical match.
+    2. One is a whole-word prefix/suffix of the other — but only when both
+       tokens are long enough to avoid Java/JavaScript-style false positives.
+    3. One contains the other as a whole word (word-boundary check).
+    """
+    if resume_canon == req_canon:
+        return True
+
+    # Guard: both sides must be at least _MIN_PARTIAL_LEN chars for partial matching
+    if len(resume_canon) < _MIN_PARTIAL_LEN or len(req_canon) < _MIN_PARTIAL_LEN:
+        return False
+
+    # Whole-word containment: "python developer" contains "python" as a word
+    # Use word-boundary regex to avoid "sql" matching "nosql"
+    try:
+        if re.search(r'\b' + re.escape(req_canon) + r'\b', resume_canon):
+            return True
+        if re.search(r'\b' + re.escape(resume_canon) + r'\b', req_canon):
+            return True
+    except re.error:
+        pass
+
+    return False
 
 
 def calculate_skills_keyword_match(
@@ -617,64 +1105,391 @@ def calculate_skills_keyword_match(
     job_skills: List[str]
 ) -> float:
     """
-    Calculate skills match using keyword overlap.
-    This is the FIX for the BERT string similarity problem!
-    
-    Args:
-        resume_skills: Dictionary with hard_skills and soft_skills from resume
-        job_skills: List of required skills from job posting
-    
+    Calculate skills match using canonical alias resolution + safe word-boundary matching.
+
+    Fixes:
+    - Java no longer matches JavaScript (alias map + word-boundary guard)
+    - ReactJS / React.js / React all resolve to the same canonical token
+    - ML matches Machine Learning via alias map
+    - Minimum token length prevents single-char false positives
+
     Returns:
         Match score from 0-100 (percentage of job skills matched)
     """
     if not job_skills:
         return 50.0  # No requirements, give half credit
-    
+
     # Extract all resume skills
-    all_resume_skills = []
+    all_resume_skills: List[str] = []
     if isinstance(resume_skills, dict):
         all_resume_skills = resume_skills.get('hard_skills', []) + resume_skills.get('soft_skills', [])
+        # Also handle category-dict format (e.g. {'Languages': 'PHP, Python'})
+        if not all_resume_skills:
+            for v in resume_skills.values():
+                if isinstance(v, str):
+                    all_resume_skills.extend(s.strip() for s in v.split(',') if s.strip())
+                elif isinstance(v, list):
+                    all_resume_skills.extend(v)
     elif isinstance(resume_skills, list):
         all_resume_skills = resume_skills
-    
+
     if not all_resume_skills:
         return 0.0
-    
-    # Normalize skills for comparison
-    normalized_job_skills = {normalize_skill(s): s for s in job_skills if s}
-    normalized_resume_skills = [normalize_skill(s) for s in all_resume_skills if s]
-    
-    # Count matches
-    matched_skills = set()
-    required_skills = set(normalized_job_skills.keys())
-    
-    for resume_skill in normalized_resume_skills:
-        for req_skill in required_skills:
-            # Exact match
-            if resume_skill == req_skill:
-                matched_skills.add(req_skill)
-            # Partial match (e.g., "python" in "python developer" or vice versa)
-            elif resume_skill in req_skill or req_skill in resume_skill:
-                matched_skills.add(req_skill)
-            # Handle common variations
-            elif resume_skill.replace('#', 'sharp') == req_skill.replace('#', 'sharp'):
-                matched_skills.add(req_skill)
-            elif resume_skill.replace('++', 'pp') == req_skill.replace('++', 'pp'):
-                matched_skills.add(req_skill)
-    
-    # Calculate percentage
-    match_percentage = (len(matched_skills) / len(required_skills)) * 100 if required_skills else 0
-    
-    # Debug output
-    print(f"[DEBUG] Skills match: {len(matched_skills)}/{len(required_skills)} = {match_percentage:.1f}%")
-    print(f"[DEBUG]   Required: {list(required_skills)}")
-    print(f"[DEBUG]   Matched: {matched_skills}")
-    
+
+    # Canonicalize both sides
+    canon_resume = [_canonicalize_skill(s) for s in all_resume_skills if s]
+    # Deduplicate job skills by canonical form to avoid inflating the denominator
+    # e.g. "airflow basics" and "airflow fundamentals" both → "airflow", count once
+    seen_req: set = set()
+    canon_job: list = []
+    for s in job_skills:
+        if s:
+            canon = _canonicalize_skill(s)
+            if canon not in seen_req:
+                seen_req.add(canon)
+                canon_job.append((canon, s))
+
+    matched_skills: set = set()
+    for req_canon, req_raw in canon_job:
+        for res_canon in canon_resume:
+            if _skills_match(res_canon, req_canon):
+                matched_skills.add(req_canon)
+                break  # no need to check more resume skills for this requirement
+
+    match_percentage = (len(matched_skills) / len(canon_job)) * 100 if canon_job else 0
+
+    print(f"[DEBUG] Skills match: {len(matched_skills)}/{len(canon_job)} = {match_percentage:.1f}%")
+    print(f"[DEBUG]   Required (canon): {[c for c, _ in canon_job]}")
+    print(f"[DEBUG]   Matched (canon): {matched_skills}")
+
     return round(match_percentage, 2)
 
 
 
 
+
+
+def _parse_years_from_experience(exp: Dict) -> float:
+    """
+    Extract the number of years from a single experience entry.
+
+    Handles:
+    - Explicit text: "3 years", "2 yrs"
+    - Date ranges: "2021-2024", "Jan 2020 – Mar 2023", "AUG 2025 - SEPT 2025",
+      "2019 to present", "2018 – current", etc.
+    - Same-year ranges: "AUG 2025 - SEPT 2025" → 0.08 years (1 month)
+    - Numeric year values stored directly as int/float
+    """
+    from datetime import date
+
+    _MONTH_MAP = {
+        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+        'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+    }
+
+    _MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun',
+                    'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+
+    def month_num(s: str) -> int:
+        return _MONTH_MAP.get(s[:3].lower(), 1)
+
+    def months_between(m1: int, y1: int, m2: int, y2: int) -> float:
+        return max(0.0, (y2 - y1) * 12 + (m2 - m1)) / 12.0
+
+    current_year  = date.today().year
+    current_month = date.today().month
+    current_month_name = _MONTH_NAMES[current_month - 1]
+    present_replacement = f'{current_month_name} {current_year}'
+
+    # 1. Try the 'years' field first
+    raw_years = exp.get('years') or exp.get('year_range') or ''
+    if isinstance(raw_years, (int, float)):
+        # Guard: a raw 4-digit year like 2025 is not a duration
+        val = float(raw_years)
+        return val if val < 100 else 0.0
+
+    raw_years = str(raw_years).strip()
+
+    # Guard: a bare 4-digit calendar year is not a duration — skip it
+    if re.fullmatch(r'\d{4}', raw_years):
+        return 0.0
+
+    # 1a. Explicit "N years" / "N yrs"
+    m = re.search(r'(\d+(?:\.\d+)?)\s*(?:years?|yrs?)', raw_years, re.IGNORECASE)
+    if m:
+        return float(m.group(1))
+
+    # Normalise separators and present/current tokens
+    normalised = re.sub(
+        r'(?i)\b(present|current|now|ongoing)\b',
+        present_replacement,
+        raw_years
+    )
+    normalised = re.sub(r'[–—−]', '-', normalised)
+
+    months_pat = r'(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*'
+
+    # 1b. "Mon YYYY - Mon YYYY"  (full month-level precision)
+    m = re.search(
+        rf'({months_pat})\s+(\d{{4}})\s*(?:-|to)\s*({months_pat})\s+(\d{{4}})',
+        normalised, re.IGNORECASE
+    )
+    if m:
+        m1, y1 = month_num(m.group(1)), int(m.group(2))
+        m2, y2 = month_num(m.group(3)), int(m.group(4))
+        return months_between(m1, y1, m2, y2)
+
+    # 1c. "Mon YYYY - YYYY"  (start month known, end year only)
+    m = re.search(
+        rf'({months_pat})\s+(\d{{4}})\s*(?:-|to)\s*(\d{{4}})',
+        normalised, re.IGNORECASE
+    )
+    if m:
+        m1, y1, y2 = month_num(m.group(1)), int(m.group(2)), int(m.group(3))
+        return months_between(m1, y1, 1, y2)
+
+    # 1d. "YYYY - Mon YYYY"  (end month known, start year only)
+    m = re.search(
+        rf'(\d{{4}})\s*(?:-|to)\s*({months_pat})\s+(\d{{4}})',
+        normalised, re.IGNORECASE
+    )
+    if m:
+        y1, m2, y2 = int(m.group(1)), month_num(m.group(2)), int(m.group(3))
+        return months_between(1, y1, m2, y2)
+
+    # 1e. "YYYY - YYYY"  (year-only range)
+    m = re.search(r'(\d{4})\s*(?:-|to)\s*(\d{4})', normalised)
+    if m:
+        y1, y2 = int(m.group(1)), int(m.group(2))
+        return max(0.0, float(y2 - y1))
+
+    # 2. Fall back to the full experience text
+    exp_text = extract_experience_text([exp]).lower()
+    m = re.search(r'(\d+(?:\.\d+)?)\s*(?:years?|yrs?)', exp_text)
+    if m:
+        return float(m.group(1))
+
+    # 3. Try date-range patterns in combined text
+    normalised2 = re.sub(
+        r'(?i)\b(present|current|now|ongoing)\b',
+        present_replacement,
+        exp_text
+    )
+    normalised2 = re.sub(r'[–—−]', '-', normalised2)
+
+    m = re.search(
+        rf'({months_pat})\s+(\d{{4}})\s*(?:-|to)\s*({months_pat})\s+(\d{{4}})',
+        normalised2, re.IGNORECASE
+    )
+    if m:
+        m1, y1 = month_num(m.group(1)), int(m.group(2))
+        m2, y2 = month_num(m.group(3)), int(m.group(4))
+        return months_between(m1, y1, m2, y2)
+
+    m = re.search(r'(\d{4})\s*(?:-|to)\s*(\d{4})', normalised2)
+    if m:
+        y1, y2 = int(m.group(1)), int(m.group(2))
+        return max(0.0, float(y2 - y1))
+
+    return 0.0
+
+
+# ── Role / title synonym groups ───────────────────────────────────────────────
+# Each tuple is a set of interchangeable terms. When a job-title keyword
+# matches any member of a group, all other members are also considered matched.
+# Covers: Tech, Finance, Healthcare, Marketing, Sales, HR, Legal, Operations,
+#         Education, Creative, Supply Chain, Real Estate, Hospitality, and more.
+_ROLE_SYNONYMS: List[tuple] = [
+    # ── Software Engineering ──────────────────────────────────────────────────
+    ('engineer', 'developer', 'programmer', 'coder', 'dev'),
+    ('software engineer', 'software developer', 'software programmer'),
+    ('frontend', 'front-end', 'front end', 'ui developer', 'ui engineer'),
+    ('backend', 'back-end', 'back end', 'server-side'),
+    ('fullstack', 'full-stack', 'full stack', 'full-stack developer', 'fullstack developer'),
+    ('mobile developer', 'mobile engineer', 'app developer'),
+    ('ios developer', 'ios engineer', 'swift developer'),
+    ('android developer', 'android engineer', 'kotlin developer'),
+    ('devops', 'dev ops', 'site reliability', 'sre', 'platform engineer'),
+    ('data engineer', 'data pipeline engineer', 'etl developer', 'etl engineer'),
+    ('data scientist', 'data science', 'ml engineer', 'machine learning engineer'),
+    ('data analyst', 'data analytics', 'business analyst', 'bi analyst'),
+    ('cloud engineer', 'cloud architect', 'cloud developer'),
+    ('security engineer', 'cybersecurity engineer', 'infosec engineer', 'information security engineer'),
+    ('qa engineer', 'quality assurance engineer', 'test engineer', 'sdet', 'automation engineer', 'software tester'),
+    ('embedded engineer', 'firmware engineer', 'embedded developer'),
+    ('solutions architect', 'enterprise architect', 'technical architect'),
+    ('database administrator', 'dba', 'database engineer'),
+    ('network engineer', 'network administrator', 'network analyst', 'network specialist'),
+    ('systems administrator', 'sysadmin', 'systems engineer', 'it administrator'),
+    ('technical writer', 'documentation engineer', 'technical documentation specialist'),
+    # ── Tech Management ───────────────────────────────────────────────────────
+    ('tech lead', 'technical lead', 'team lead', 'engineering lead'),
+    ('engineering manager', 'software manager', 'development manager'),
+    ('product manager', 'product owner', 'pm'),
+    ('project manager', 'project lead', 'delivery manager', 'program manager'),
+    ('scrum master', 'agile coach', 'agile practitioner'),
+    ('it manager', 'it director', 'head of it', 'chief information officer', 'cio'),
+    ('cto', 'chief technology officer', 'vp of engineering', 'head of engineering'),
+    # ── Design / UX ───────────────────────────────────────────────────────────
+    ('ux designer', 'ui designer', 'ux/ui designer', 'product designer', 'interaction designer', 'user experience designer'),
+    ('graphic designer', 'visual designer', 'graphic artist'),
+    ('web designer', 'website designer', 'digital designer'),
+    ('motion designer', 'motion graphics artist', 'animator'),
+    ('art director', 'creative director', 'design director'),
+    ('brand designer', 'brand identity designer'),
+    # ── Finance / Accounting ──────────────────────────────────────────────────
+    ('accountant', 'accounting specialist', 'accounting officer'),
+    ('financial analyst', 'finance analyst', 'financial planning analyst', 'fp&a analyst'),
+    ('financial controller', 'finance controller', 'comptroller'),
+    ('chief financial officer', 'cfo', 'vp of finance', 'head of finance'),
+    ('auditor', 'internal auditor', 'external auditor', 'audit specialist'),
+    ('tax accountant', 'tax specialist', 'tax consultant', 'tax advisor'),
+    ('bookkeeper', 'accounts clerk', 'accounting clerk'),
+    ('investment analyst', 'equity analyst', 'research analyst', 'equity research analyst'),
+    ('investment banker', 'investment banking analyst', 'ib analyst'),
+    ('risk analyst', 'risk manager', 'risk officer', 'credit risk analyst'),
+    ('compliance officer', 'compliance analyst', 'regulatory affairs officer'),
+    ('treasury analyst', 'treasury manager', 'cash management analyst'),
+    ('payroll specialist', 'payroll administrator', 'payroll officer'),
+    ('budget analyst', 'budget manager', 'budget officer'),
+    ('actuary', 'actuarial analyst', 'actuarial associate'),
+    # ── Marketing ─────────────────────────────────────────────────────────────
+    ('marketing manager', 'marketing director', 'head of marketing'),
+    ('digital marketing manager', 'digital marketing specialist', 'online marketing manager'),
+    ('seo specialist', 'seo analyst', 'seo manager', 'search engine optimization specialist'),
+    ('content writer', 'copywriter', 'content creator', 'content specialist'),
+    ('social media manager', 'social media specialist', 'social media coordinator'),
+    ('brand manager', 'brand strategist', 'brand specialist'),
+    ('marketing analyst', 'market research analyst', 'consumer insights analyst'),
+    ('email marketing specialist', 'email marketing manager', 'crm specialist'),
+    ('growth marketer', 'growth hacker', 'growth manager'),
+    ('public relations manager', 'pr manager', 'communications manager', 'pr specialist'),
+    ('event coordinator', 'event planner', 'event manager', 'events specialist'),
+    ('media buyer', 'media planner', 'paid media specialist'),
+    # ── Sales ─────────────────────────────────────────────────────────────────
+    ('sales representative', 'sales rep', 'sales executive', 'sales associate'),
+    ('account executive', 'account manager', 'client manager', 'relationship manager'),
+    ('business development manager', 'business development executive', 'biz dev manager'),
+    ('sales manager', 'sales director', 'head of sales', 'vp of sales'),
+    ('inside sales representative', 'inside sales rep', 'inbound sales rep'),
+    ('outside sales representative', 'field sales representative', 'territory manager'),
+    ('key account manager', 'kam', 'strategic account manager'),
+    ('pre-sales consultant', 'solutions consultant', 'sales engineer'),
+    ('retail sales associate', 'retail associate', 'sales floor associate'),
+    # ── HR / People ───────────────────────────────────────────────────────────
+    ('hr manager', 'human resources manager', 'people manager', 'hr business partner', 'hrbp'),
+    ('recruiter', 'talent acquisition specialist', 'talent acquisition manager', 'hiring manager'),
+    ('hr generalist', 'human resources generalist', 'hr officer'),
+    ('hr director', 'chief people officer', 'cpo', 'vp of hr', 'head of hr'),
+    ('compensation analyst', 'benefits analyst', 'total rewards analyst'),
+    ('learning and development specialist', 'l&d specialist', 'training specialist', 'training coordinator'),
+    ('organizational development specialist', 'od specialist', 'change management specialist'),
+    ('hr coordinator', 'hr assistant', 'people operations coordinator'),
+    # ── Healthcare ────────────────────────────────────────────────────────────
+    ('registered nurse', 'rn', 'staff nurse', 'clinical nurse'),
+    ('licensed practical nurse', 'lpn', 'licensed vocational nurse', 'lvn'),
+    ('nurse practitioner', 'np', 'advanced practice nurse', 'aprn'),
+    ('physician', 'doctor', 'medical doctor', 'md', 'attending physician'),
+    ('physician assistant', 'pa', 'pa-c'),
+    ('medical assistant', 'clinical assistant', 'healthcare assistant'),
+    ('pharmacist', 'clinical pharmacist', 'staff pharmacist'),
+    ('pharmacy technician', 'pharm tech', 'pharmacy assistant'),
+    ('physical therapist', 'physiotherapist', 'pt'),
+    ('occupational therapist', 'ot'),
+    ('radiologist', 'radiology technician', 'radiologic technologist', 'x-ray technician'),
+    ('medical coder', 'medical billing specialist', 'coding specialist'),
+    ('healthcare administrator', 'hospital administrator', 'clinic manager'),
+    ('clinical research coordinator', 'crc', 'clinical trial coordinator'),
+    ('mental health counselor', 'therapist', 'psychotherapist', 'counselor'),
+    ('social worker', 'clinical social worker', 'case manager'),
+    ('dentist', 'dental surgeon', 'general dentist'),
+    ('dental hygienist', 'dental assistant'),
+    # ── Legal ─────────────────────────────────────────────────────────────────
+    ('lawyer', 'attorney', 'counsel', 'legal counsel', 'solicitor', 'advocate'),
+    ('paralegal', 'legal assistant', 'legal secretary'),
+    ('legal analyst', 'legal researcher', 'law clerk'),
+    ('corporate lawyer', 'corporate attorney', 'corporate counsel'),
+    ('litigation attorney', 'trial lawyer', 'litigator'),
+    ('compliance lawyer', 'regulatory lawyer', 'compliance counsel'),
+    ('contract manager', 'contracts manager', 'contract administrator'),
+    # ── Operations / Supply Chain ─────────────────────────────────────────────
+    ('operations manager', 'operations director', 'head of operations', 'ops manager'),
+    ('supply chain manager', 'supply chain analyst', 'supply chain coordinator'),
+    ('logistics manager', 'logistics coordinator', 'logistics specialist'),
+    ('procurement manager', 'purchasing manager', 'sourcing manager', 'category manager'),
+    ('warehouse manager', 'warehouse supervisor', 'distribution center manager'),
+    ('inventory analyst', 'inventory manager', 'stock controller'),
+    ('quality manager', 'quality control manager', 'quality assurance manager'),
+    ('process improvement manager', 'continuous improvement manager', 'lean manager'),
+    ('facilities manager', 'facility manager', 'building manager'),
+    # ── Customer Service ──────────────────────────────────────────────────────
+    ('customer service representative', 'customer service agent', 'customer support agent', 'csr'),
+    ('customer success manager', 'csm', 'client success manager'),
+    ('call center agent', 'call center representative', 'contact center agent'),
+    ('help desk technician', 'it support specialist', 'technical support specialist'),
+    ('customer experience manager', 'cx manager', 'client experience manager'),
+    # ── Education ─────────────────────────────────────────────────────────────
+    ('teacher', 'educator', 'instructor', 'faculty', 'lecturer'),
+    ('professor', 'associate professor', 'assistant professor', 'adjunct professor'),
+    ('school principal', 'headmaster', 'headmistress', 'school head'),
+    ('curriculum developer', 'curriculum designer', 'instructional designer'),
+    ('tutor', 'academic tutor', 'private tutor', 'learning coach'),
+    ('special education teacher', 'sped teacher', 'special needs teacher'),
+    ('school counselor', 'guidance counselor', 'academic advisor'),
+    ('training coordinator', 'training manager', 'corporate trainer'),
+    # ── Real Estate ───────────────────────────────────────────────────────────
+    ('real estate agent', 'real estate broker', 'realtor', 'property agent'),
+    ('property manager', 'property management specialist', 'asset manager'),
+    ('leasing agent', 'leasing consultant', 'leasing manager'),
+    ('real estate analyst', 'property analyst', 'real estate investment analyst'),
+    # ── Hospitality / Food & Beverage ─────────────────────────────────────────
+    ('hotel manager', 'general manager', 'hospitality manager'),
+    ('front desk agent', 'front desk officer', 'receptionist', 'guest services agent'),
+    ('restaurant manager', 'food and beverage manager', 'f&b manager'),
+    ('chef', 'head chef', 'executive chef', 'sous chef'),
+    ('bartender', 'bar manager', 'mixologist'),
+    ('housekeeper', 'housekeeping supervisor', 'room attendant'),
+    ('concierge', 'guest relations officer', 'guest experience specialist'),
+    # ── Construction / Engineering ────────────────────────────────────────────
+    ('civil engineer', 'structural engineer', 'geotechnical engineer'),
+    ('mechanical engineer', 'mechanical design engineer'),
+    ('electrical engineer', 'electrical design engineer'),
+    ('project engineer', 'site engineer', 'construction engineer'),
+    ('quantity surveyor', 'cost estimator', 'cost engineer'),
+    ('architect', 'architectural designer', 'building designer'),
+    ('site manager', 'construction manager', 'site supervisor'),
+    ('health and safety officer', 'hse officer', 'safety officer', 'safety manager'),
+    # ── Administrative / Office ───────────────────────────────────────────────
+    ('administrative assistant', 'admin assistant', 'office assistant', 'secretary'),
+    ('executive assistant', 'ea', 'personal assistant', 'pa'),
+    ('office manager', 'office administrator', 'office coordinator'),
+    ('data entry specialist', 'data entry clerk', 'data entry operator'),
+    ('receptionist', 'front desk receptionist', 'office receptionist'),
+    ('virtual assistant', 'va', 'remote assistant'),
+]
+
+# Flatten into a lookup: token → canonical group index
+_ROLE_SYNONYM_MAP: Dict[str, int] = {}
+for _gidx, _group in enumerate(_ROLE_SYNONYMS):
+    for _term in _group:
+        _ROLE_SYNONYM_MAP[_term.lower()] = _gidx
+
+
+def _expand_keywords(keywords: List[str]) -> set:
+    """
+    Expand a list of job-title keywords with their synonym group members.
+    Returns a flat set of all tokens that should be considered equivalent.
+    """
+    expanded: set = set()
+    for kw in keywords:
+        kw_lower = kw.lower()
+        expanded.add(kw_lower)
+        # Check if this keyword (or any multi-word phrase containing it) is in a group
+        if kw_lower in _ROLE_SYNONYM_MAP:
+            gidx = _ROLE_SYNONYM_MAP[kw_lower]
+            for term in _ROLE_SYNONYMS[gidx]:
+                expanded.add(term.lower())
+    return expanded
 
 
 def calculate_experience_keyword_match(
@@ -683,58 +1498,72 @@ def calculate_experience_keyword_match(
     job_title_keywords: List[str]
 ) -> float:
     """
-    Calculate experience relevance using keyword matching.
-    
-    Args:
-        resume_experience: List of experience entries from resume
-        min_years: Minimum years required from job
-        job_title_keywords: Keywords from job title (e.g., ["python", "developer"])
-    
+    Calculate experience relevance using keyword + synonym matching.
+
+    Improvements:
+    - Accumulates total years across ALL experience entries.
+    - Parses date-range formats ("2021-2024", "Jan 2020 – Mar 2023", "2019 to present").
+    - Job-title keywords are expanded with synonym groups so "Software Engineer"
+      matches "Software Developer", "ML Engineer" matches "Machine Learning Engineer", etc.
+
     Returns:
         Match score from 0-100
     """
     if not resume_experience:
         return 0.0
-    
-    score = 0.0
-    best_match = 0.0
-    
-    # Parse years from experience
-    for exp in resume_experience:
-        exp_text = extract_experience_text([exp])
-        exp_lower = exp_text.lower()
-        
-        # Extract years from text
-        years_match = re.search(r'(\d+)\s*(?:years?|yrs?)', exp_lower)
-        if years_match:
-            years = int(years_match.group(1))
+
+    # ── Years score ──────────────────────────────────────────────────────────
+    total_years = sum(_parse_years_from_experience(exp) for exp in resume_experience)
+
+    if min_years:
+        if total_years >= min_years:
+            years_score = 100.0
+        elif total_years > 0:
+            years_score = min((total_years / min_years) * 100, 100.0)
         else:
-            years = 0
-        
-        # Check if years requirement is met
-        years_score = 0.0
-        if min_years:
-            if years >= min_years:
-                years_score = 100.0
-            elif years > 0:
-                years_score = (years / min_years) * 100
-        else:
-            years_score = 50.0 if years > 0 else 0.0
-        
-        # Check keyword match with job title
-        keyword_score = 0.0
-        if job_title_keywords:
-            matched_keywords = 0
-            for kw in job_title_keywords:
-                if kw.lower() in exp_lower:
-                    matched_keywords += 1
-            keyword_score = (matched_keywords / len(job_title_keywords)) * 100
-        
-        # Combine scores (50% years, 50% keyword match)
-        exp_score = (years_score * 0.5) + (keyword_score * 0.5)
-        best_match = max(best_match, exp_score)
-    
-    return round(best_match, 2)
+            years_score = 0.0
+    else:
+        years_score = 100.0 if total_years > 0 else 50.0
+
+    # ── Keyword score with synonym expansion ─────────────────────────────────
+    if job_title_keywords:
+        expanded_kw = _expand_keywords(job_title_keywords)
+        all_exp_text = ' '.join(
+            extract_experience_text([exp]).lower() for exp in resume_experience
+        )
+        # A keyword is matched if any synonym appears in the experience text
+        # Use word-boundary check to avoid partial-word false positives
+        matched_kw = 0
+        for kw in job_title_keywords:
+            kw_lower = kw.lower()
+            # Collect all synonyms for this keyword
+            if kw_lower in _ROLE_SYNONYM_MAP:
+                gidx = _ROLE_SYNONYM_MAP[kw_lower]
+                candidates = [t.lower() for t in _ROLE_SYNONYMS[gidx]]
+            else:
+                candidates = [kw_lower]
+            # Match if any candidate appears as a whole word in the experience text
+            for candidate in candidates:
+                try:
+                    if re.search(r'\b' + re.escape(candidate) + r'\b', all_exp_text):
+                        matched_kw += 1
+                        break
+                except re.error:
+                    if candidate in all_exp_text:
+                        matched_kw += 1
+                        break
+        keyword_score = (matched_kw / len(job_title_keywords)) * 100
+    else:
+        keyword_score = 100.0
+
+    # ── Combine: 60% years, 40% keyword relevance ────────────────────────────
+    combined = (years_score * 0.6) + (keyword_score * 0.4)
+
+    print(f"[DEBUG] Experience: total_years={total_years:.1f}, min_years={min_years}, "
+          f"years_score={years_score:.1f}, keyword_score={keyword_score:.1f}, "
+          f"combined={combined:.1f}")
+
+    return round(combined, 2)
 
 
 def calculate_projects_keyword_match(
@@ -742,53 +1571,94 @@ def calculate_projects_keyword_match(
     expected_projects: List[str]
 ) -> float:
     """
-    Calculate projects relevance using keyword matching.
-    
-    Args:
-        resume_projects: List of project entries from resume
-        expected_projects: List of expected project types from job
-    
+    Calculate projects relevance using tighter keyword matching.
+
+    Fix: requires ALL significant words in an expected project type to appear
+    in the project text (AND logic), not just any single word (OR logic).
+    This prevents "API Development" from matching a project that only mentions
+    "development" without any API context.
+
+    Significant words = words longer than 3 chars that are not stop words.
+    Falls back to single-word match only when the requirement is a single word.
+
     Returns:
         Match score from 0-100
     """
     if not expected_projects:
         return 50.0  # No requirements, give half credit
-    
+
     if not resume_projects:
         return 0.0
-    
-    # Extract project texts - check both name AND details
-    matched_project_types = set()
-    
+
+    # Common stop words to ignore when splitting requirement phrases
+    _STOP = {'and', 'the', 'for', 'with', 'using', 'based', 'related',
+             'oriented', 'driven', 'focused', 'level', 'type', 'kind',
+             'system', 'systems', 'application', 'applications', 'solution',
+             'solutions', 'platform', 'service', 'services', 'tool', 'tools'}
+
+    def significant_words(phrase: str) -> List[str]:
+        """Extract meaningful words from a requirement phrase, preserving acronyms."""
+        words = []
+        for token in phrase.split():
+            w_lower = token.lower()
+            is_acronym = len(token) >= 2 and token.isupper()
+            if is_acronym or (len(w_lower) > 3 and w_lower not in _STOP):
+                words.append(w_lower)
+        return words
+
+    # Build combined text for all projects
+    all_project_texts = []
     for proj in resume_projects:
-        # Combine name and details - handle None values
-        name = str(proj.get('name') or '').lower()
+        name    = str(proj.get('name')    or '').lower()
         details = str(proj.get('details') or '').lower()
-        full_text = f"{name} {details}"
-        
-        for expected in expected_projects:
-            expected_normalized = expected.lower()
-            # Split compound terms like "API Development"
-            expected_words = expected_normalized.split()
-            
-            # Check if any key word from expected matches in project text
-            for word in expected_words:
-                if len(word) > 2 and word in full_text:  # Skip short words
-                    matched_project_types.add(expected_normalized)
-                    break
-            
-            # Also try partial matching (remove spaces/hyphens)
-            if expected_normalized.replace(' ', '') in full_text.replace(' ', '').replace('-', ''):
-                matched_project_types.add(expected_normalized)
-    
-    # Calculate percentage
-    match_percentage = (len(matched_project_types) / len(expected_projects)) * 100 if expected_projects else 0
-    
+        all_project_texts.append(f"{name} {details}")
+    combined_text = ' '.join(all_project_texts)
+
+    matched_project_types: set = set()
+
+    for expected in expected_projects:
+        exp_norm = expected.lower()
+        sig_words = significant_words(expected)  # pass original to preserve case for acronym detection
+
+        if not sig_words:
+            # Requirement is very short — fall back to substring check
+            if exp_norm.replace(' ', '') in combined_text.replace(' ', '').replace('-', ''):
+                matched_project_types.add(exp_norm)
+            continue
+
+        if len(sig_words) == 1:
+            # Single significant word — word-boundary match
+            word = sig_words[0]
+            try:
+                if re.search(r'\b' + re.escape(word) + r'\b', combined_text):
+                    matched_project_types.add(exp_norm)
+            except re.error:
+                if word in combined_text:
+                    matched_project_types.add(exp_norm)
+        else:
+            # Multiple significant words — ALL must appear (AND logic)
+            if all(
+                re.search(r'\b' + re.escape(w) + r'\b', combined_text)
+                for w in sig_words
+            ):
+                matched_project_types.add(exp_norm)
+            else:
+                # Partial credit only when majority (>= 75%) of words match
+                # AND at least 2 words matched (avoids single-word false positives
+                # on multi-word requirements like "API Development")
+                matched_count = sum(
+                    1 for w in sig_words
+                    if re.search(r'\b' + re.escape(w) + r'\b', combined_text)
+                )
+                if len(sig_words) >= 3 and matched_count / len(sig_words) >= 0.75:
+                    matched_project_types.add(exp_norm)
+
+    match_percentage = (len(matched_project_types) / len(expected_projects)) * 100
+
     print(f"[DEBUG] Projects match: {len(matched_project_types)}/{len(expected_projects)} = {match_percentage:.1f}%")
     print(f"[DEBUG]   Expected: {expected_projects}")
     print(f"[DEBUG]   Matched: {matched_project_types}")
-    print(f"[DEBUG]   Resume projects: {resume_projects}")
-    
+
     return round(match_percentage, 2)
 
 
@@ -1082,71 +1952,68 @@ def calculate_weighted_score(
 def calculate_count_based_score(
     parsed_resume_json: Dict,
     weights: Optional[Dict[str, float]] = None,
-    baseline_project_score: int = 2
+    baseline_project_score: int = 2,
+    job_posting: Optional[Dict] = None
 ) -> Dict[str, Any]:
     """
-    Calculate count-based score from parsed resume data.
-    Uses unified baselines for all applicants (no special treatment by job level).
-    
-    Args:
-        parsed_resume_json: Parsed resume data with skills, experience, education, projects
-        weights: Optional weights for scoring
-        baseline_project_score: Minimum projects for full score (default: 2)
-    
-    Returns:
-        Dictionary with count-based score and breakdown
+    Legacy 4-category count-based score (used by calculate_combined_score).
+    Uses unified baselines for all applicants.
+
+    Education fix: when job_posting is supplied, uses degree-match score
+    instead of raw entry count so the legacy path stays consistent.
     """
     if weights is None:
         weights = DEFAULT_COUNT_WEIGHTS.copy()
-    
+
     # Unified baselines for all applicants
-    baseline_skills = 20
+    baseline_skills     = 20
     baseline_experience = 5
-    baseline_projects = baseline_project_score
-    
-    # Calculate raw scores for each category (0-100 scale)
-    # Skills: Based on number of skills
-    skills_dict = parsed_resume_json.get('skills', {})
+    baseline_projects   = baseline_project_score
+
+    # Skills
+    skills_dict  = parsed_resume_json.get('skills', {})
     total_skills = len(skills_dict.get('hard_skills', [])) + len(skills_dict.get('soft_skills', []))
     skills_score = min((total_skills / baseline_skills) * 100, 100)
-    
-    # Experience: Based on number of experiences
-    experience_list = parsed_resume_json.get('experience', [])
+
+    # Experience
+    experience_list  = parsed_resume_json.get('experience', [])
     experience_score = min((len(experience_list) / baseline_experience) * 100, 100)
-    
-    # Education: Based on number of education entries (max 3 = 100 points)
+
+    # Education — use degree-match when job_posting available
     education_list = parsed_resume_json.get('education', [])
-    education_score = min((len(education_list) / 3) * 100, 100)
-    
-    # Projects: Based on number of projects relative to baseline
-    project_list = parsed_resume_json.get('projects', [])
+    if job_posting is not None:
+        job_edu_list   = parse_jsonb_field(job_posting.get('required_education', []))
+        education_score = calculate_education_keyword_match(education_list, job_edu_list)
+    else:
+        education_score = min((len(education_list) / 3) * 100, 100)
+
+    # Projects
+    project_list  = parsed_resume_json.get('projects', [])
     project_count = len(project_list)
     if project_count >= baseline_projects:
         projects_score = min((project_count / baseline_projects) * 100, 100)
     else:
-        # Proportional score below baseline
         projects_score = (project_count / baseline_projects) * 100
-    
-    # Calculate weighted total using weights
+
     count_score = (
-        skills_score * (weights.get('skills_weight', 30) / 100) +
+        skills_score     * (weights.get('skills_weight',     30) / 100) +
         experience_score * (weights.get('experience_weight', 40) / 100) +
-        education_score * (weights.get('education_weight', 20) / 100) +
-        projects_score * (weights.get('projects_weight', 10) / 100)
+        education_score  * (weights.get('education_weight',  20) / 100) +
+        projects_score   * (weights.get('projects_weight',   10) / 100)
     )
-    
+
     return {
         'count_score': round(count_score, 2),
         'baselines_used': {
-            'skills': baseline_skills,
+            'skills':     baseline_skills,
             'experience': baseline_experience,
-            'projects': baseline_projects
+            'projects':   baseline_projects
         },
         'breakdown': {
-            'skills': round(skills_score, 2),
+            'skills':     round(skills_score,     2),
             'experience': round(experience_score, 2),
-            'education': round(education_score, 2),
-            'projects': round(projects_score, 2)
+            'education':  round(education_score,  2),
+            'projects':   round(projects_score,   2),
         }
     }
 
@@ -1188,7 +2055,8 @@ def calculate_combined_score(
     count_result = calculate_count_based_score(
         parsed_resume_json=parsed_resume_json,
         weights=weights,
-        baseline_project_score=baseline_project_score
+        baseline_project_score=baseline_project_score,
+        job_posting=job_posting
     )
     count_score = count_result.get('count_score', 0)
     
@@ -1591,52 +2459,51 @@ def calculate_traincert_keyword_match(
 ) -> float:
     """
     Calculate trainings & certifications match using keyword matching.
-    
-    Args:
-        resume_traincerts: List of training/certification entries from resume
-        job_traincerts: List of expected trainings/certifications from job posting
-    
-    Returns:
-        Match score from 0-100 (percentage of job requirements matched)
+
+    Returns 50 (neutral) when the job has no requirements — traincerts are
+    commonly listed on job postings so a neutral score is appropriate.
+    Returns 0 when the job has requirements but the resume has none.
+    Uses word-boundary matching to avoid false positives.
     """
     if not job_traincerts:
-        return 50.0  # No requirements, give half credit
-    
+        return 50.0  # No requirements — neutral credit
+
     if not resume_traincerts:
         return 0.0
-    
+
     # Extract training/certification names from resume
     resume_tcert_names = []
     for tc in resume_traincerts:
         if isinstance(tc, dict):
             name = tc.get('name', '') or tc.get('title', '') or tc.get('certification', '')
             if name:
-                resume_tcert_names.append(name.lower())
+                resume_tcert_names.append(normalize_skill(name))
         elif isinstance(tc, str):
-            resume_tcert_names.append(tc.lower())
-    
+            resume_tcert_names.append(normalize_skill(tc))
+
     if not resume_tcert_names:
         return 0.0
-    
-    # Normalize job requirements
-    normalized_job_tc = {normalize_skill(s): s for s in job_traincerts if s}
-    required_tc = set(normalized_job_tc.keys())
-    
-    # Count matches
-    matched_tc = set()
-    
-    for resume_tc in resume_tcert_names:
-        for req_tc in required_tc:
+
+    required_tc = [normalize_skill(s) for s in job_traincerts if s]
+    matched_tc: set = set()
+
+    for req in required_tc:
+        for res in resume_tcert_names:
             # Exact match
-            if resume_tc == req_tc:
-                matched_tc.add(req_tc)
-            # Partial match
-            elif resume_tc in req_tc or req_tc in resume_tc:
-                matched_tc.add(req_tc)
-    
-    # Calculate percentage
+            if req == res:
+                matched_tc.add(req)
+                break
+            # Word-boundary containment (both sides must be >= 4 chars)
+            if len(req) >= 4 and len(res) >= 4:
+                try:
+                    if re.search(r'\b' + re.escape(req) + r'\b', res) or \
+                       re.search(r'\b' + re.escape(res) + r'\b', req):
+                        matched_tc.add(req)
+                        break
+                except re.error:
+                    pass
+
     match_percentage = (len(matched_tc) / len(required_tc)) * 100 if required_tc else 0
-    
     return round(match_percentage, 2)
 
 
@@ -1646,16 +2513,15 @@ def calculate_achievement_keyword_match(
 ) -> float:
     """
     Calculate achievements match using keyword matching.
-    
-    Args:
-        resume_achievements: List of achievement entries from resume
-        job_achievements: List of expected achievements from job posting
-    
-    Returns:
-        Match score from 0-100 (percentage of job requirements matched)
+
+    - When the job has preferred_achievements: match against them normally.
+    - When the job has NO preferred_achievements: give presence-based credit —
+      50 if the applicant listed any achievements, 0 if none. This rewards
+      effort without handing out free points to everyone.
     """
     if not job_achievements:
-        return 50.0  # No requirements, give half credit
+        # Presence-based: reward applicants who listed achievements
+        return 50.0 if resume_achievements else 0.0
     
     if not resume_achievements:
         return 0.0
@@ -1807,107 +2673,108 @@ def calculate_requirement_match_score(
 def calculate_category_count_score(
     parsed_resume_json: Dict,
     baselines: Optional[Dict[str, float]] = None,
-    job_level: str = None
+    job_level: str = None,
+    job_posting: Optional[Dict] = None
 ) -> Dict[str, Any]:
     """
     Calculate the Count Score (40% of final score).
     This measures whether the applicant meets the expected baseline quantity
     for each of the 6 categories.
-    
+
+    Education fix: when a job_posting is supplied the education count-score is
+    replaced by the degree-match score (same logic as the requirement-match side)
+    so that a single perfectly-matching degree is not penalised for not having
+    two education entries.
+
     NOTE: This function now uses UNIFIED scoring for all applicants.
     The job_level parameter is deprecated and ignored.
-    
-    Args:
-        parsed_resume_json: Parsed resume data
-        baselines: Optional custom baselines (if None, uses unified profile)
-        job_level: Deprecated parameter - kept for backward compatibility only
-    
-    Returns:
-        Dictionary with count_score and breakdown
     """
     # Get unified baselines if not provided
     if baselines is None:
         unified_profile = get_unified_scoring_profile()
         baselines = unified_profile['baselines']
-    
+
     # Get category counts from resume
     experience_list = parsed_resume_json.get('experience', [])
     skills_raw = parsed_resume_json.get('skills', {})
-    
+
     # Handle skills - can be dict or list
     if isinstance(skills_raw, dict):
-        # NER returns skills as dict with categories: {'Languages': 'PHP, C++', ...}
-        # Try to extract hard/soft skills from dict structure
         if 'hard_skills' in skills_raw and 'soft_skills' in skills_raw:
             skills_dict = skills_raw
             skills_count = len(skills_dict.get('hard_skills', [])) + len(skills_dict.get('soft_skills', []))
         else:
-            # Convert category-based dict to list
             all_skills = []
             for key, value in skills_raw.items():
                 if isinstance(value, str):
-                    # Split comma-separated values
                     skills_list = [s.strip() for s in value.split(',')]
                     all_skills.extend(skills_list)
                 elif isinstance(value, list):
                     all_skills.extend(value)
             skills_count = len(all_skills)
     elif isinstance(skills_raw, list):
-        # Skills is already a list
         skills_count = len(skills_raw)
     else:
         skills_count = 0
-    
+
     education_list = parsed_resume_json.get('education', [])
     project_list = parsed_resume_json.get('projects', [])
     traincert_list = parsed_resume_json.get('trainings', []) + parsed_resume_json.get('certifications', [])
     achievement_list = parsed_resume_json.get('achievements', [])
-    
+
     # Count items in each category
     experience_count = len(experience_list)
     education_count = len(education_list)
     projects_count = len(project_list)
     traincert_count = len(traincert_list)
     achievements_count = len(achievement_list)
-    
+
     # Calculate category count scores (capped at 100)
-    baseline_exp = baselines.get('baseline_experience', 2)
+    baseline_exp    = baselines.get('baseline_experience', 2)
     baseline_skills = baselines.get('baseline_skills', 10)
-    baseline_edu = baselines.get('baseline_education', 2)
-    baseline_proj = baselines.get('baseline_projects', 2)
-    baseline_tc = baselines.get('baseline_traincert', 2)
-    baseline_ach = baselines.get('baseline_achievements', 1)
-    
-    experience_count_score = min((experience_count / baseline_exp) * 100, 100) if baseline_exp > 0 else 0
-    skills_count_score = min((skills_count / baseline_skills) * 100, 100) if baseline_skills > 0 else 0
-    education_count_score = min((education_count / baseline_edu) * 100, 100) if baseline_edu > 0 else 0
-    projects_count_score = min((projects_count / baseline_proj) * 100, 100) if baseline_proj > 0 else 0
-    traincert_count_score = min((traincert_count / baseline_tc) * 100, 100) if baseline_tc > 0 else 0
-    achievements_count_score = min((achievements_count / baseline_ach) * 100, 100) if baseline_ach > 0 else 0
-    
+    baseline_edu    = baselines.get('baseline_education', 2)
+    baseline_proj   = baselines.get('baseline_projects', 2)
+    baseline_tc     = baselines.get('baseline_traincert', 2)
+    baseline_ach    = baselines.get('baseline_achievements', 1)
+
+    experience_count_score   = min((experience_count / baseline_exp)    * 100, 100) if baseline_exp    > 0 else 0
+    skills_count_score       = min((skills_count    / baseline_skills)  * 100, 100) if baseline_skills > 0 else 0
+    projects_count_score     = min((projects_count  / baseline_proj)    * 100, 100) if baseline_proj   > 0 else 0
+    traincert_count_score    = min((traincert_count / baseline_tc)      * 100, 100) if baseline_tc     > 0 else 0
+    achievements_count_score = min((achievements_count / baseline_ach)  * 100, 100) if baseline_ach    > 0 else 0
+
+    # Education count score: use degree-match when job_posting is available so
+    # that a single perfectly-matching degree is not penalised for count < baseline.
+    if job_posting is not None:
+        job_education = job_posting.get('required_education', [])
+        job_edu_list  = parse_jsonb_field(job_education)
+        education_count_score = calculate_education_keyword_match(education_list, job_edu_list)
+    else:
+        education_count_score = min((education_count / baseline_edu) * 100, 100) if baseline_edu > 0 else 0
+
     # Get weights (same as requirement match)
-    preset = get_job_level_preset(job_level)
+    preset  = get_job_level_preset(job_level)
     weights = preset['weights']
-    
+
     # Calculate weighted count score
     count_score = (
-        experience_count_score * (weights.get('experience_weight', 28) / 100) +
-        skills_count_score * (weights.get('skills_weight', 30) / 100) +
-        education_count_score * (weights.get('education_weight', 18) / 100) +
-        projects_count_score * (weights.get('projects_weight', 14) / 100) +
-        traincert_count_score * (weights.get('traincert_weight', 6) / 100) +
-        achievements_count_score * (weights.get('achievements_weight', 4) / 100)
+        experience_count_score   * (weights.get('experience_weight',   28) / 100) +
+        skills_count_score       * (weights.get('skills_weight',       30) / 100) +
+        education_count_score    * (weights.get('education_weight',    18) / 100) +
+        projects_count_score     * (weights.get('projects_weight',     14) / 100) +
+        traincert_count_score    * (weights.get('traincert_weight',     6) / 100) +
+        achievements_count_score * (weights.get('achievements_weight',  4) / 100)
     )
-    
+
     return {
         'count_score': round(count_score, 2),
         'breakdown': {
-            'experience': {'count': experience_count, 'score': round(experience_count_score, 2)},
-            'skills': {'count': skills_count, 'score': round(skills_count_score, 2)},
-            'education': {'count': education_count, 'score': round(education_count_score, 2)},
-            'projects': {'count': projects_count, 'score': round(projects_count_score, 2)},
-            'traincert': {'count': traincert_count, 'score': round(traincert_count_score, 2)},
-            'achievements': {'count': achievements_count, 'score': round(achievements_count_score, 2)}
+            'experience':   {'count': experience_count,   'score': round(experience_count_score,   2)},
+            'skills':       {'count': skills_count,       'score': round(skills_count_score,       2)},
+            'education':    {'count': education_count,    'score': round(education_count_score,    2)},
+            'projects':     {'count': projects_count,     'score': round(projects_count_score,     2)},
+            'traincert':    {'count': traincert_count,    'score': round(traincert_count_score,    2)},
+            'achievements': {'count': achievements_count, 'score': round(achievements_count_score, 2)},
         },
         'baselines_used': baselines
     }
@@ -1974,7 +2841,8 @@ def calculate_final_hybrid_score(
     # Calculate Count Score (40%)
     count_result = calculate_category_count_score(
         parsed_resume_json=parsed_resume_json,
-        baselines=scoring_baselines
+        baselines=scoring_baselines,
+        job_posting=job_posting
     )
     
     # Calculate final score
