@@ -31,15 +31,17 @@ load_dotenv()
 TOKEN_EXPIRY_HOURS = int(os.getenv("TOKEN_EXPIRY_HOURS", "24"))
 
 # Default scoring settings (fallback if database not available)
+# These match the UNIFIED_SCORING_PROFILE in job_alignment.py exactly.
+# No job-level differentiation — all applicants are scored against the same criteria.
 DEFAULT_SCORING_SETTINGS = {
-    "experience_weight": 40,
+    "experience_weight": 28,
     "skills_weight": 30,
-    "education_weight": 20,
-    "projects_weight": 10,
+    "education_weight": 18,
+    "projects_weight": 14,
     "traincert_weight": 6,
     "achievements_weight": 4,
-    "qualified_threshold": 78,
-    "review_threshold": 65,
+    "qualified_threshold": 65,
+    "review_threshold": 55,
     "baseline_experience": 2,
     "baseline_skills": 10,
     "baseline_education": 2,
@@ -320,8 +322,18 @@ def process_applicant_screening(
         
         # Step 3: Update database if client provided
         if supabase_client:
+            # Map decision to screening_status values expected by the frontend
+            # 'qualified'/'passed' → 'passed', 'needs_review' → 'in_review', else → 'failed'
+            if decision in ('passed', 'qualified'):
+                screening_status_value = 'passed'
+            elif decision == 'needs_review':
+                screening_status_value = 'in_review'
+            else:
+                screening_status_value = 'failed'
+
             update_data = {
                 "screening_score": score,
+                "screening_status": screening_status_value,
                 "screening_fit_category": fit_category,
                 "status": f"{decision}_screening" if decision != "passed" else "passed_screening",
                 "updated_at": datetime.now().isoformat()
