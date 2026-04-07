@@ -342,7 +342,6 @@ def process_applicant_screening(
             if access_token:
                 update_data["access_token"] = access_token
                 update_data["access_expires_at"] = token_expires.isoformat()
-                update_data["role"] = "applicant"  # Enforce role on token generation
             
             supabase_client.table("applicants").update(
                 update_data
