@@ -23,6 +23,43 @@ import {
 } from 'lucide-react';
 import { Applicant, Resume, ResumeParsedData, VideoAssessment, PersonalityTest } from '../lib/supabase';
 
+// ---- Local resume shape types ----
+interface ResumeEducation {
+  course_or_strand?: string;
+  degree?: string;
+  field?: string;
+  school?: string;
+  institution?: string;
+  year_range?: string;
+  years?: string;
+}
+
+interface ResumeExperience {
+  role?: string;
+  title?: string;
+  company?: string;
+  organization?: string;
+  years?: string;
+  duration?: string;
+  year_range?: string;
+  summary?: string;
+  description?: string;
+}
+
+interface ResumeProject {
+  name?: string;
+  title?: string;
+  details?: string | string[];
+}
+
+interface ResumeTraining {
+  title?: string;
+  date?: string;
+}
+
+// Extend ResumeParsedData locally to cover both old and new skill formats
+type SkillsMap = { hard_skills?: string[] } & Record<string, string | string[]>;
+
 interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
   video?: VideoAssessment;
@@ -177,7 +214,7 @@ export function ApplicantDetailModal({
       setApplicant(initialApplicant as ApplicantWithDetails);
       setFetchError(null);
     }
-  }, [initialApplicant?.id]);
+  }, [initialApplicant?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch data when modal opens or applicantId changes
   useEffect(() => {
@@ -188,7 +225,7 @@ export function ApplicantDetailModal({
         setApplicant(initialApplicant as ApplicantWithDetails);
       }
     }
-  }, [isOpen, applicantId]);
+  }, [isOpen, applicantId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Real-time subscription to applicant changes
   useEffect(() => {
@@ -221,7 +258,7 @@ export function ApplicantDetailModal({
         },
         (payload) => {
           if (payload.new) {
-            setApplicant(prev => prev ? { ...prev, resume: payload.new as any } : null);
+            setApplicant(prev => prev ? { ...prev, resume: payload.new as Resume } : null);
           }
         }
       )
@@ -235,7 +272,7 @@ export function ApplicantDetailModal({
         },
         (payload) => {
           if (payload.new) {
-            setApplicant(prev => prev ? { ...prev, video: payload.new as any } : null);
+            setApplicant(prev => prev ? { ...prev, video: payload.new as VideoAssessment } : null);
           }
         }
       )
@@ -249,7 +286,7 @@ export function ApplicantDetailModal({
         },
         (payload) => {
           if (payload.new) {
-            setApplicant(prev => prev ? { ...prev, test: payload.new as any } : null);
+            setApplicant(prev => prev ? { ...prev, test: payload.new as PersonalityTest } : null);
           }
         }
       )
@@ -266,7 +303,7 @@ export function ApplicantDetailModal({
   const isScreeningComplete = !!(applicant?.screening_score && applicant.screening_score > 0);
   const hasResume = !!applicant?.resume;
   const screeningScore = applicant?.screening_score ?? null;
-  const screeningStatus = (applicant as any)?.screening_status ?? null;
+  const screeningStatus = applicant?.screening_status ?? null;
 
   // Generate recent activity from available data
   const getRecentActivity = () => {
@@ -293,8 +330,8 @@ export function ApplicantDetailModal({
     }
     
     // Video assessment submitted
-    if ((applicant as any)?.video?.submitted_at) {
-      const date = new Date((applicant as any).video.submitted_at);
+    if (applicant?.video?.submitted_at) {
+      const date = new Date(applicant.video.submitted_at);
       activities.push({
         date: date.toLocaleDateString(),
         icon: <Video className="w-4 h-4" />,
@@ -303,8 +340,8 @@ export function ApplicantDetailModal({
     }
     
     // Personality test submitted
-    if ((applicant as any)?.test?.submitted_at) {
-      const date = new Date((applicant as any).test.submitted_at);
+    if (applicant?.test?.submitted_at) {
+      const date = new Date(applicant.test.submitted_at);
       activities.push({
         date: date.toLocaleDateString(),
         icon: <Brain className="w-4 h-4" />,
@@ -484,8 +521,8 @@ export function ApplicantDetailModal({
                     { step: 1, label: 'Applied', icon: User, complete: !!applicant?.created_at },
                     { step: 2, label: 'Resume', icon: FileText, complete: hasResume },
                     { step: 3, label: 'Screened', icon: Brain, complete: isScreeningComplete },
-                    { step: 4, label: 'Video', icon: Video, complete: !!(applicant as any)?.video?.submitted_at },
-                    { step: 5, label: 'Assessment', icon: ClipboardList, complete: !!(applicant as any)?.test?.submitted_at },
+                    { step: 4, label: 'Video', icon: Video, complete: !!applicant?.video?.submitted_at },
+                    { step: 5, label: 'Assessment', icon: ClipboardList, complete: !!applicant?.test?.submitted_at },
                   ].map((item, idx) => (
                     <div key={idx} className="flex flex-col items-center">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
@@ -512,8 +549,8 @@ export function ApplicantDetailModal({
                         if (applicant?.created_at) completed++;
                         if (hasResume) completed++;
                         if (isScreeningComplete) completed++;
-                        if ((applicant as any)?.video?.submitted_at) completed++;
-                        if ((applicant as any)?.test?.submitted_at) completed++;
+                        if (applicant?.video?.submitted_at) completed++;
+                        if (applicant?.test?.submitted_at) completed++;
                         return (completed / 5) * 100;
                       })()}%` 
                     }}
@@ -565,7 +602,7 @@ export function ApplicantDetailModal({
                       <div>
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Detected Skills</p>
                         <div className="flex flex-wrap gap-1.5">
-                          {((parsedResume.skills as any).hard_skills || Object.values(parsedResume.skills as any).flat()).slice(0, 12).map((skill: string, i: number) => (
+                          {((parsedResume.skills as SkillsMap).hard_skills || Object.values(parsedResume.skills as SkillsMap).flat()).slice(0, 12).map((skill: string, i: number) => (
                             <span key={i} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-medium border border-indigo-100">
                               {skill}
                             </span>
@@ -760,14 +797,14 @@ export function ApplicantDetailModal({
                     <h3 className="font-semibold text-gray-900">Education</h3>
                   </div>
                   <div className="p-5 space-y-4">
-                    {parsedResume.education.map((edu, idx) => (
+                    {(parsedResume.education as ResumeEducation[]).map((edu, idx) => (
                       <div key={idx} className="flex items-start gap-4">
                         <div className="w-2 h-2 rounded-full bg-emerald-400 mt-2 flex-shrink-0" />
                         <div>
-                          <p className="font-medium text-gray-900">{(edu as any).course_or_strand || (edu as any).degree || (edu as any).field || 'Education'}</p>
-                          <p className="text-sm text-gray-600">{(edu as any).school || (edu as any).institution || 'Unknown School'}</p>
-                          {(edu as any).year_range || (edu as any).years ? (
-                            <p className="text-xs text-gray-400 mt-1">{(edu as any).year_range || (edu as any).years}</p>
+                          <p className="font-medium text-gray-900">{edu.course_or_strand || edu.degree || edu.field || 'Education'}</p>
+                          <p className="text-sm text-gray-600">{edu.school || edu.institution || 'Unknown School'}</p>
+                          {(edu.year_range || edu.years) ? (
+                            <p className="text-xs text-gray-400 mt-1">{edu.year_range || edu.years}</p>
                           ) : null}
                         </div>
                       </div>
@@ -790,9 +827,9 @@ export function ApplicantDetailModal({
                   </div>
                   <div className="p-5">
                     {/* Handle old format (hard_skills) and new NER format (category-based dict) */}
-                    {(parsedResume.skills as any).hard_skills ? (
+                    {(parsedResume.skills as SkillsMap).hard_skills ? (
                       <div className="flex flex-wrap gap-2">
-                        {(parsedResume.skills as any).hard_skills.map((skill: string, idx: number) => (
+                        {(parsedResume.skills as SkillsMap).hard_skills!.map((skill: string, idx: number) => (
                           <span key={idx} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium border border-blue-100">
                             {skill}
                           </span>
@@ -800,8 +837,8 @@ export function ApplicantDetailModal({
                       </div>
                     ) : (
                       <div className="flex flex-wrap gap-2">
-                        {Object.entries(parsedResume.skills as any).map(([category, skills]) => (
-                          typeof skills === 'string' 
+                        {Object.entries(parsedResume.skills as SkillsMap).map(([category, skills]) => (
+                          typeof skills === 'string'
                             ? skills.split(',').map((skill: string, idx: number) => (
                                 <span key={`${category}-${idx}`} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium border border-blue-100">
                                   {skill.trim()}
@@ -831,17 +868,17 @@ export function ApplicantDetailModal({
                     <h3 className="font-semibold text-gray-900">Work Experience</h3>
                   </div>
                   <div className="p-5 space-y-5">
-                    {parsedResume.experience.map((exp, idx) => (
+                    {(parsedResume.experience as ResumeExperience[]).map((exp, idx) => (
                       <div key={idx} className="flex items-start gap-4">
                         <div className="w-2 h-2 rounded-full bg-violet-400 mt-2 flex-shrink-0" />
                         <div className="flex-1">
-                          <p className="font-medium text-gray-900">{(exp as any).role || (exp as any).title || 'Professional Experience'}</p>
-                          <p className="text-sm text-gray-600">{(exp as any).company || (exp as any).organization || ''}</p>
-                          {(exp as any).years || (exp as any).duration || (exp as any).year_range ? (
-                            <p className="text-xs text-gray-400 mt-1">{(exp as any).years || (exp as any).duration || (exp as any).year_range}</p>
+                          <p className="font-medium text-gray-900">{exp.role || exp.title || 'Professional Experience'}</p>
+                          <p className="text-sm text-gray-600">{exp.company || exp.organization || ''}</p>
+                          {(exp.years || exp.duration || exp.year_range) ? (
+                            <p className="text-xs text-gray-400 mt-1">{exp.years || exp.duration || exp.year_range}</p>
                           ) : null}
-                          {(exp as any).summary || (exp as any).description ? (
-                            <p className="text-sm text-gray-500 mt-2 leading-relaxed">{(exp as any).summary || (exp as any).description}</p>
+                          {(exp.summary || exp.description) ? (
+                            <p className="text-sm text-gray-500 mt-2 leading-relaxed">{exp.summary || exp.description}</p>
                           ) : null}
                         </div>
                       </div>
@@ -860,18 +897,18 @@ export function ApplicantDetailModal({
                     <h3 className="font-semibold text-gray-900">Projects</h3>
                   </div>
                   <div className="p-5 space-y-4">
-                    {parsedResume.projects.map((project, idx) => (
+                    {(parsedResume.projects as ResumeProject[]).map((project, idx) => (
                       <div key={idx} className="flex items-start gap-4">
                         <div className="w-2 h-2 rounded-full bg-purple-400 mt-2 flex-shrink-0" />
                         <div>
-                          <p className="font-medium text-gray-900">{(project as any).name || (project as any).title || 'Untitled Project'}</p>
-                          {(project as any).details && (
+                          <p className="font-medium text-gray-900">{project.name || project.title || 'Untitled Project'}</p>
+                          {project.details && (
                             <p className="text-sm text-gray-600 mt-1 leading-relaxed">
-                              {typeof (project as any).details === 'string' 
-                                ? (project as any).details 
-                                : Array.isArray((project as any).details) 
-                                  ? (project as any).details.join(' ') 
-                                  : JSON.stringify((project as any).details)}
+                              {typeof project.details === 'string'
+                                ? project.details
+                                : Array.isArray(project.details)
+                                  ? project.details.join(' ')
+                                  : JSON.stringify(project.details)}
                             </p>
                           )}
                         </div>
@@ -891,12 +928,12 @@ export function ApplicantDetailModal({
                     <h3 className="font-semibold text-gray-900">Certifications & Training</h3>
                   </div>
                   <div className="p-5 space-y-3">
-                    {parsedResume.trainings.map((training, idx) => (
+                    {(parsedResume.trainings as (ResumeTraining | string)[]).map((training, idx) => (
                       <div key={idx} className="flex items-center gap-3">
                         <Check className="w-4 h-4 text-amber-500 flex-shrink-0" />
                         <p className="text-sm text-gray-700 font-medium">
-                          {typeof training === 'string' 
-                            ? training 
+                          {typeof training === 'string'
+                            ? training
                             : training.title || JSON.stringify(training)}
                         </p>
                         {typeof training !== 'string' && training.date && (

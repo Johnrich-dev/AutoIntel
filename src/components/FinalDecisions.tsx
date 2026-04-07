@@ -164,8 +164,8 @@ function OfferEmailModal({
         .eq('id', record.id);
 
       onSent();
-    } catch (err: any) {
-      setError(err.message || 'Failed to send offer email.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send offer email.');
     } finally {
       setSending(false);
     }
@@ -327,8 +327,8 @@ function RejectionEmailModal({
         .eq('id', record.id);
 
       onSent();
-    } catch (err: any) {
-      setError(err.message || 'Failed to send rejection email.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send rejection email.');
     } finally {
       setSending(false);
     }
@@ -612,7 +612,7 @@ export function FinalDecisions() {
         if (!interviewMap.has(i.applicant_id)) {
           interviewMap.set(i.applicant_id, {
             interview_date: i.interview_date,
-            interviewer_name: (i.interviewer as any)?.name,
+            interviewer_name: (i.interviewer as { name?: string })?.name,
           });
         }
       });

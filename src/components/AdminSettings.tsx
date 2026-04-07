@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
   Settings,
-  User,
   Mail,
   Bell,
   Shield,
@@ -10,32 +9,19 @@ import {
   Save,
   CheckCircle,
   AlertCircle,
-  Key,
-  Users,
   Clock,
   FileText,
-  Globe,
-  Lock,
-  Smartphone,
   Moon,
   Sun,
   RefreshCw,
   Download,
   Trash2,
   ChevronRight,
-  ToggleLeft,
-  ToggleRight,
-  CreditCard,
-  Building2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
-interface AdminSettingsProps {
-  // Props if needed
-}
-
-export function AdminSettings({}: AdminSettingsProps) {
+export function AdminSettings() {
   const { adminSession } = useAuth();
   const [activeSection, setActiveSection] = useState<'general' | 'notifications' | 'security' | 'integrations' | 'appearance' | 'advanced'>('general');
   const [saved, setSaved] = useState(false);
@@ -141,7 +127,7 @@ export function AdminSettings({}: AdminSettingsProps) {
     };
 
     fetchSettings();
-  }, [adminSession?.user_id]);
+  }, [adminSession?.user_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = async () => {
     if (!adminSession?.user_id) {

@@ -27,9 +27,9 @@ export function AdminLogin({ onLoginSuccess, onCancel }: AdminLoginProps) {
       } else {
         setError(result.error || 'Login failed. Please check your credentials.');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Admin login error:', err);
-      setError(err.message || 'Login failed. Please check your credentials.');
+      setError(err instanceof Error ? err.message : 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }

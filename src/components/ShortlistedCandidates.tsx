@@ -45,14 +45,6 @@ interface ApplicantWithDetails extends Applicant {
   profileFit?: number;
   overall?: number;
   // status is inherited from Applicant: 'shortlisted' | 'final_interview' | 'rejected' | 'hired'
-  notes?: CandidateNote[];
-}
-
-interface CandidateNote {
-  id: string;
-  text: string;
-  createdAt: string;
-  author: string;
 }
 
 type SortField = 'name' | 'overall' | 'resume' | 'video' | 'profile' | 'date';
@@ -136,7 +128,7 @@ function calculateVideoScore(video?: VideoAssessment): number {
 function calculateProfileFit(test?: PersonalityTest, jobRole?: string): number {
   if (!test || test.status !== 'submitted') return 0;
   if (!test.answers || !Array.isArray(test.answers) || test.answers.length === 0) return 0;
-  const answers: WorkStyleAnswer[] = test.answers.map((a: any) => ({
+  const answers: WorkStyleAnswer[] = test.answers.map((a) => ({
     question: a.question,
     answer: a.answer,
   }));
@@ -280,7 +272,6 @@ function RejectConfirmDialog({ name, onConfirm, onCancel }: { name: string; onCo
 }
 
 function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onScheduleInterview }: QuickProfilePanelProps) {
-  const [activeTab] = useState<'overview'>('overview');
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
 
   if (!candidate || !isOpen) return null;
@@ -290,15 +281,15 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onSched
   // Extract skills — handle both old format and NER format
   let topSkills: string[] = [];
   if (parsedResume?.skills) {
-    const skills = parsedResume.skills as any;
+    const skills = parsedResume.skills as { hard_skills?: string[]; all?: string[] } & Record<string, string | string[]>;
     if (skills.hard_skills && Array.isArray(skills.hard_skills)) {
       topSkills = skills.hard_skills.slice(0, 8);
     } else if (skills.all && Array.isArray(skills.all)) {
       topSkills = skills.all.slice(0, 8);
     } else if (typeof skills === 'object') {
       const allSkills: string[] = [];
-      Object.values(skills).forEach((value: any) => {
-        if (typeof value === 'string') allSkills.push(...value.split(',').map((s: string) => s.trim()));
+      Object.values(skills as Record<string, string | string[]>).forEach((value) => {
+        if (typeof value === 'string') allSkills.push(...value.split(',').map((s) => s.trim()));
         else if (Array.isArray(value)) allSkills.push(...value);
       });
       topSkills = allSkills.slice(0, 8);
@@ -362,8 +353,7 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onSched
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
-        {activeTab === 'overview' && (
-          <div className="space-y-6">
+        <div className="space-y-6">
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Sparkles className="w-5 h-5 text-blue-600" />
@@ -421,7 +411,6 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onSched
               {!parsedResume?.experience?.length && <p className="text-sm text-gray-400">No experience data available</p>}
             </div>
           </div>
-        )}
 
       </div>
 
@@ -569,11 +558,10 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
           .select('title, department')
           .eq('is_active', true);
         if (jobsData) {
-          const depts = Array.from(new Set(jobsData.map((j: any) => j.department).filter(Boolean))) as string[];
+          const depts = Array.from(new Set(jobsData.map((j) => j.department).filter(Boolean))) as string[];
           setDepartments(depts.sort());
-          // Build lookup: job title (lowercase) → department
           const map: Record<string, string> = {};
-          jobsData.forEach((j: any) => {
+          jobsData.forEach((j) => {
             if (j.title && j.department) map[j.title.toLowerCase()] = j.department;
           });
           setJobDepartmentMap(map);

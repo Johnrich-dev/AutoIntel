@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   Search,
-  ChevronDown,
   FileText,
   RefreshCw,
   ChevronLeft,
@@ -14,7 +13,7 @@ import {
   Filter,
   X,
 } from 'lucide-react';
-import { Applicant, Resume, getSupabaseAdminClient } from '../lib/supabase';
+import { Applicant, Resume, ResumeParsedData, getSupabaseAdminClient } from '../lib/supabase';
 import { FilterDropdown } from './FilterDropdown';
 import { ScreeningDetailModal } from './ScreeningDetailModal';
 
@@ -42,7 +41,6 @@ interface ScreenedApplicant extends Omit<Applicant, 'screening_status' | 'screen
 interface JobOption {
   id: string;
   title: string;
-  department: string;
   count: number;
 }
 
@@ -237,30 +235,30 @@ export function ScreeningResults() {
           educationScore = null;
         }
 
-        let parsedData: any = null;
+        let parsedData: ResumeParsedData | null = null;
         if (resume?.parsed_data) {
           parsedData = typeof resume.parsed_data === 'object'
             ? resume.parsed_data
-            : (() => { try { return JSON.parse(resume.parsed_data); } catch { return null; } })();
+            : (() => { try { return JSON.parse(resume.parsed_data as string) as ResumeParsedData; } catch { return null; } })();
         }
 
         if (parsedData) {
           // Collect ALL skills from parsed_data — no cap
           const allResumeSkills: string[] = [];
           if (Array.isArray(parsedData.skills)) {
-            allResumeSkills.push(...parsedData.skills);
+            allResumeSkills.push(...(parsedData.skills as unknown as string[]));
           } else if (parsedData.skills?.hard_skills && Array.isArray(parsedData.skills.hard_skills)) {
             allResumeSkills.push(...parsedData.skills.hard_skills);
           } else if (parsedData.skills && typeof parsedData.skills === 'object') {
-            Object.values(parsedData.skills).forEach((v: any) => {
+            Object.values(parsedData.skills as Record<string, string | string[]>).forEach((v) => {
               if (Array.isArray(v)) allResumeSkills.push(...v);
               else if (typeof v === 'string') allResumeSkills.push(v);
             });
           }
           // Also pull tech keywords mentioned in experience descriptions
           if (Array.isArray(parsedData.experience)) {
-            parsedData.experience.forEach((exp: any) => {
-              const desc = [exp.description, exp.role, exp.company].filter(Boolean).join(' ');
+            parsedData.experience.forEach((exp) => {
+              const desc = [exp.summary, exp.role, exp.company].filter(Boolean).join(' ');
               const techMatches = desc.match(/\b(ETL|AWS|GCP|Azure|Spark|Hadoop|Airflow|Kafka|Docker|Kubernetes|MongoDB|Redis|Linux|Scala|Terraform|Ansible|Jenkins|CI\/CD|n8n|Talend|SAP|Flask|Django|FastAPI|React|Angular|Vue|TypeScript|PostgreSQL|MySQL|MSSQL|Git|GitHub)\b/gi) || [];
               allResumeSkills.push(...techMatches);
             });
@@ -403,7 +401,7 @@ export function ScreeningResults() {
       }, {} as Record<string, number>);
 
       setJobs((Object.entries(positionCounts) as [string, number][])
-        .map(([position, count]) => ({ id: position, title: position, department: 'General', count }))
+        .map(([position, count]) => ({ id: position, title: position, count }))
         .sort((a, b) => a.title.localeCompare(b.title)));
     } catch (error) {
       console.error('Error loading screening results:', error);
@@ -729,7 +727,7 @@ export function ScreeningResults() {
 
       {showDetailModal && selectedApplicant && (
         <ScreeningDetailModal
-          applicant={selectedApplicant as any}
+          applicant={selectedApplicant}
           onClose={() => { setShowDetailModal(false); setSelectedApplicantIndex(-1); }}
           onUpdateStatus={handleUpdateStatus}
           onPrev={selectedApplicantIndex > 0 ? handlePrev : undefined}

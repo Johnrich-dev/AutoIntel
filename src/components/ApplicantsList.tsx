@@ -26,7 +26,7 @@ interface PositionOption {
 interface ApplicantWithResume extends Applicant {
   resume?: Resume;
   video?: VideoAssessment;
-  test?: PersonalityTest | any;
+  test?: PersonalityTest;
 }
 
 interface StatusConfig {
@@ -222,7 +222,7 @@ export function ApplicantsList() {
       }
 
       // Fetch video assessments for these applicants
-      let videoMap: Record<string, any> = {};
+      let videoMap: Record<string, VideoAssessment> = {};
       if (applicantIds.length > 0) {
         const { data: videoData } = await adminClient
           .from('video_assessments')
@@ -233,12 +233,12 @@ export function ApplicantsList() {
           videoMap = videoData.reduce((acc, video) => {
             acc[video.applicant_id] = video;
             return acc;
-          }, {} as Record<string, any>);
+          }, {} as Record<string, VideoAssessment>);
         }
       }
       
       // Fetch work style assessments for these applicants
-      let workStyleMap: Record<string, any> = {};
+      let workStyleMap: Record<string, PersonalityTest> = {};
       if (applicantIds.length > 0) {
         const { data: workStyleData } = await adminClient
           .from('work_style_assessments')
@@ -249,7 +249,7 @@ export function ApplicantsList() {
           workStyleMap = workStyleData.reduce((acc, ws) => {
             acc[ws.applicant_id] = ws;
             return acc;
-          }, {} as Record<string, any>);
+          }, {} as Record<string, PersonalityTest>);
         }
       }
       
@@ -289,7 +289,7 @@ export function ApplicantsList() {
   // Fetch applicants when job is selected
   useEffect(() => {
     fetchApplicantsList();
-  }, [selectedJobId]);
+  }, [selectedJobId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Get application status from applicant/resume
   const getApplicationStatus = (applicant: ApplicantWithResume): string => {

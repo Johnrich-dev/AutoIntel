@@ -20,6 +20,7 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
 
   useEffect(() => {
     loadAssessmentStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applicant, accessToken]);
 
   const loadAssessmentStatus = async () => {
@@ -80,7 +81,7 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
       const fileExt = file.name.split('.').pop();
       const fileName = `${applicant.id}-${Date.now()}.${fileExt}`;
 
-      const { data: uploadData, error: uploadError } = await client.storage
+      const { error: uploadError } = await client.storage
         .from('applicant-photos')
         .upload(fileName, file);
 

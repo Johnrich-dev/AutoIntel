@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from 'react';
-import { Briefcase, Plus, Search, Edit2, Power, PowerOff, Copy, X, Filter, ChevronDown, ChevronUp } from 'lucide-react';
+import { Briefcase, Plus, Search, Edit2, Power, PowerOff, Copy, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { getSupabaseAdminClient, JobPosting, JobPostingFormData } from '../lib/supabase';
 import { FilterDropdown } from './FilterDropdown';
 import { TagInput } from './TagInput';
@@ -29,7 +29,7 @@ const DEFAULT_FORM_DATA: JobPostingFormData = {
 };
 
 // Helper to check if error is due to table not existing
-const isTableNotExistError = (error: any): boolean => {
+const isTableNotExistError = (error: { code?: string; message?: string; status?: number }): boolean => {
   return error?.code === '42P01' || 
          error?.message?.includes('does not exist') ||
          error?.status === 404;
@@ -351,7 +351,7 @@ export function AdminJobManagement() {
     setFormErrors({});
   };
 
-  const renderJobForm = (isEdit: boolean) => (
+  const renderJobForm = () => (
     <div className="space-y-6">
       {/* Title */}
       <div>
@@ -834,7 +834,7 @@ export function AdminJobManagement() {
             </div>
 
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-              {renderJobForm(false)}
+              {renderJobForm()}
             </div>
 
             <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
@@ -884,7 +884,7 @@ export function AdminJobManagement() {
             </div>
 
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-              {renderJobForm(true)}
+              {renderJobForm()}
             </div>
 
             <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">

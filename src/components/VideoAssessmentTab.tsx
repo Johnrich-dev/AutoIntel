@@ -27,8 +27,8 @@ interface VideoAssessmentData {
   completeness_justification?: string;
   validation_status?: string;
   submitted_at?: string;
-  questions?: any[];
-  responses?: any[];
+  questions?: unknown[];
+  responses?: unknown[];
 }
 
 interface ApplicantData {
@@ -44,13 +44,8 @@ interface TimestampComment {
   type: 'positive' | 'concern' | 'neutral';
 }
 
-interface AICategoryScore {
-  category: string;
-  score: number;
-  feedback: string;
-}
 
-export function VideoAssessmentTab({ applicantId, videoScore, onClose }: VideoAssessmentTabProps) {
+export function VideoAssessmentTab({ applicantId, onClose }: VideoAssessmentTabProps) {
   const [videoData, setVideoData] = useState<VideoAssessmentData | null>(null);
   const [applicantData, setApplicantData] = useState<ApplicantData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,29 +80,6 @@ export function VideoAssessmentTab({ applicantId, videoScore, onClose }: VideoAs
   // Active sub-tab
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'video_transcript' | 'ai_evaluation'>('overview');
 
-  // AI Category Scores (from real video assessment data)
-  const aiCategoryScores: AICategoryScore[] = videoData ? [
-    { 
-      category: 'Relevance to Job', 
-      score: videoData.relevance_score ? Math.round(videoData.relevance_score * 10) : 0, 
-      feedback: videoData.relevance_justification || 'Assessment of how well the response relates to the position' 
-    },
-    { 
-      category: 'Experience Alignment', 
-      score: videoData.experience_score ? Math.round(videoData.experience_score * 10) : 0, 
-      feedback: videoData.experience_justification || 'Assessment of relevant work experience mentioned' 
-    },
-    { 
-      category: 'Skill Evidence', 
-      score: videoData.skills_score ? Math.round(videoData.skills_score * 10) : 0, 
-      feedback: videoData.skills_justification || 'Assessment of skills demonstrated or mentioned' 
-    },
-    { 
-      category: 'Completeness', 
-      score: videoData.completeness_score ? Math.round(videoData.completeness_score * 10) : 0, 
-      feedback: videoData.completeness_justification || 'Assessment of response completeness and structure' 
-    },
-  ] : [];
 
   useEffect(() => {
     const fetchData = async () => {
@@ -258,11 +230,6 @@ export function VideoAssessmentTab({ applicantId, videoScore, onClose }: VideoAs
     return 'Weak';
   };
 
-  const getScoreBarColor = (score: number) => {
-    if (score >= 80) return 'bg-green-500';
-    if (score >= 60) return 'bg-amber-500';
-    return 'bg-red-500';
-  };
 
   if (loading) {
     return (

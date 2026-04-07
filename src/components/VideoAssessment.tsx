@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Video, Upload, ArrowLeft, CheckCircle, Camera, Mic, MicOff, Video as VideoIcon, VideoOff, RefreshCw, Square, Download, Save, X, User } from 'lucide-react';
+import { Video, Upload, ArrowLeft, CheckCircle, Camera, Mic, MicOff, Video as VideoIcon, VideoOff, RefreshCw, Square, Download, Save, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase';
+import { getSupabaseAdminClient } from '../lib/supabase';
 
 interface VideoAssessmentProps {
   onComplete: () => void;
@@ -9,7 +9,7 @@ interface VideoAssessmentProps {
 }
 
 export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
-  const { applicant, accessToken } = useAuth();
+  const { applicant } = useAuth();
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordingTime, setRecordingTime] = useState<number>(0);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
@@ -415,7 +415,7 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
           } else {
             console.warn('Transcription trigger returned non-ok status:', response.status);
           }
-        } catch (apiError) {
+        } catch {
           // API might not be running - that's ok, background worker will pick it up
           console.log('Transcription API not available, background worker will process it automatically');
         }

@@ -84,7 +84,7 @@ export function AdminDashboard() {
   const [applicants, setApplicants] = useState<ApplicantWithDetails[]>([]);
   const [selectedApplicant, setSelectedApplicant] = useState<ApplicantWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [_error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeMenu, setActiveMenu] = useState<MenuId>('dashboard');
@@ -584,14 +584,14 @@ export function AdminDashboard() {
                               {(() => {
                                 const seen = new Set<string>();
                                 const uniqueEducation = parsedData.education
-                                  .filter((edu: any) => edu.education_type === 'College' || edu.education_type === 'Senior High School')
-                                  .filter((edu: any) => {
+                                  .filter((edu) => edu.education_type === 'College' || edu.education_type === 'Senior High School')
+                                  .filter((edu) => {
                                     const key = `${(edu.school || '').toLowerCase().trim()}-${(edu.course_or_strand || '').toLowerCase().trim()}-${(edu.year_range || '').toLowerCase().trim()}`;
                                     if (seen.has(key)) return false;
                                     seen.add(key);
                                     return true;
                                   });
-                                return uniqueEducation.map((edu: any, idx: number) => (
+                                return uniqueEducation.map((edu, idx: number) => (
                                   <div key={idx} className="text-sm bg-white p-2 rounded border border-gray-200">
                                     <p className="font-medium text-gray-900">
                                       {edu.education_type === 'College' ? 'College' : 'Senior High School'}
@@ -617,7 +617,7 @@ export function AdminDashboard() {
                           <div>
                             <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Work Experience</h4>
                             <div className="space-y-2">
-                              {parsedData.experience.slice(0, 3).map((exp: any, idx: number) => (
+                              {parsedData.experience.slice(0, 3).map((exp, idx: number) => (
                                 <div key={idx} className="text-sm bg-white p-2 rounded border border-gray-200">
                                   <p className="font-medium text-gray-900">
                                     {exp.role || 'Professional Experience'}
@@ -640,7 +640,7 @@ export function AdminDashboard() {
                           <div>
                             <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Projects</h4>
                             <div className="space-y-2">
-                              {parsedData.projects.slice(0, 5).map((proj: any, idx: number) => (
+                              {parsedData.projects.slice(0, 5).map((proj, idx: number) => (
                                 <div key={idx} className="text-sm bg-white p-2 rounded border border-gray-200">
                                   <p className="font-medium text-gray-900">{proj.name}</p>
                                   {proj.details && (
@@ -661,12 +661,10 @@ export function AdminDashboard() {
                           <div>
                             <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Certificates / Trainings</h4>
                             <div className="space-y-2">
-                              {parsedData.trainings.slice(0, 5).map((training: any, idx: number) => (
+                              {parsedData.trainings.slice(0, 5).map((training, idx: number) => (
                                 <div key={idx} className="text-sm bg-white p-2 rounded border border-gray-200">
                                   <p className="font-medium text-gray-900">
-                                    {typeof training === 'string' 
-                                      ? training 
-                                      : training.title || JSON.stringify(training)}
+                                    {training.title ?? 'Untitled'}
                                   </p>
                                   {training.date && (
                                     <p className="text-xs text-gray-500">{training.date}</p>

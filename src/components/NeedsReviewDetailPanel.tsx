@@ -30,13 +30,112 @@ import {
 } from 'lucide-react';
 import { getSupabaseAdminClient } from '../lib/supabase';
 
+// ---- Local types for parsed resume data ----
+interface ResumeEducation {
+  course_or_strand?: string;
+  degree?: string;
+  field?: string;
+  school?: string;
+  institution?: string;
+  year_range?: string;
+  years?: string;
+  education_type?: string;
+}
+
+interface ResumeExperience {
+  role?: string;
+  title?: string;
+  company?: string;
+  organization?: string;
+  years?: string;
+  duration?: string;
+  year_range?: string;
+  summary?: string;
+  description?: string;
+}
+
+interface ResumeProject {
+  name?: string;
+  title?: string;
+  details?: string | string[];
+}
+
+interface ResumeTraining {
+  title?: string;
+  date?: string;
+}
+
+interface ParsedResumeData {
+  education?: ResumeEducation[];
+  experience?: ResumeExperience[];
+  projects?: ResumeProject[];
+  trainings?: (ResumeTraining | string)[];
+  skills?: Record<string, string | string[]> & { hard_skills?: string[] };
+  [key: string]: unknown;
+}
+
+interface ResumeRecord {
+  parsed_data?: ParsedResumeData | string | null;
+  resume_url?: string;
+}
+
+interface VideoRecord {
+  video_url?: string | null;
+  transcription?: string | null;
+  transcript_score?: number | null;
+  relevance_score?: number | null;
+  experience_score?: number | null;
+  skills_score?: number | null;
+  completeness_score?: number | null;
+}
+
+interface AiInsight {
+  type: 'strength' | 'weakness' | 'opportunity';
+  title: string;
+  description: string;
+}
+
+interface AiSuggestion {
+  action: string;
+  priority: 'high' | 'medium' | 'low';
+  reason: string;
+}
+
+interface AiInsightsData {
+  status: string;
+  insights?: AiInsight[];
+  suggestions?: AiSuggestion[];
+  summary?: string;
+}
+
+interface WorkStyleDimension {
+  dimension?: string;
+  score?: number;
+  hybrid_score?: number;
+  reasoning?: string;
+}
+
+interface WorkStyleRecord {
+  semantic_score?: number;
+  role_family?: string;
+  scoring_method?: string;
+  dimension_scores?: WorkStyleDimension[];
+  essay_response?: string;
+  essay_score?: number;
+  essay_feedback?: string;
+  strong_areas?: string[];
+  moderate_areas?: string[];
+  development_areas?: string[];
+  essay_insights?: string;
+}
+
 // Interfaces - separate from Applicant to avoid requiring all base fields
-interface NeedsReviewApplicant {
+export interface NeedsReviewApplicant {
   id: string;
   name?: string;
   email?: string;
   position?: string;
-  resume?: any;
+  resume?: ResumeRecord;
   overall_score?: number;
   skills_score?: number;
   experience_score?: number;
@@ -93,15 +192,15 @@ export function NeedsReviewDetailPanel({
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
-  const [videoData, setVideoData] = useState<any>(null);
+  const [videoData, setVideoData] = useState<VideoRecord | null>(null);
   const [loadingVideo, setLoadingVideo] = useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const [loadingPhoto, setLoadingPhoto] = useState(false);
   const [videoSnapshotUrl, setVideoSnapshotUrl] = useState<string | null>(null);
-  const [aiInsights, setAiInsights] = useState<any>(null);
+  const [aiInsights, setAiInsights] = useState<AiInsightsData | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [verifyingVideo, setVerifyingVideo] = useState(false);
-  const [workStyleData, setWorkStyleData] = useState<any>(null);
+  const [workStyleData, setWorkStyleData] = useState<WorkStyleRecord | null>(null);
   const [loadingWorkStyle, setLoadingWorkStyle] = useState(false);
   const [resumeScores, setResumeScores] = useState<{ skills_score: number; experience_score: number; education_score: number; project_score: number } | null>(null);
   const [hrNotes, setHrNotes] = useState('');
@@ -274,7 +373,7 @@ export function NeedsReviewDetailPanel({
     if (isOpen && applicant) {
       fetchVideoData();
     }
-  }, [isOpen, applicant?.id]);
+  }, [isOpen, applicant?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch profile photo URL when panel opens
   useEffect(() => {
@@ -303,7 +402,7 @@ export function NeedsReviewDetailPanel({
     if (isOpen && applicant) {
       fetchProfilePhoto();
     }
-  }, [isOpen, applicant?.id]);
+  }, [isOpen, applicant?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Capture video frame when video data is loaded
   useEffect(() => {
@@ -401,7 +500,7 @@ export function NeedsReviewDetailPanel({
     if (isOpen && applicant && resumeScores !== undefined) {
       fetchAiInsights();
     }
-  }, [isOpen, applicant?.id, resumeScores]);
+  }, [isOpen, applicant?.id, resumeScores]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch work style assessment data when work tab is active
   useEffect(() => {
@@ -430,16 +529,16 @@ export function NeedsReviewDetailPanel({
     if (isOpen && applicant && activeTab === 'work') {
       fetchWorkStyleData();
     }
-  }, [isOpen, applicant?.id, activeTab]);
+  }, [isOpen, applicant?.id, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isOpen || !applicant) return null;
 
   // Helper function to parse resume data
-  const getParsedResumeData = (resume: any) => {
+  const getParsedResumeData = (resume: ResumeRecord | undefined): ParsedResumeData | null => {
     if (!resume?.parsed_data) return null;
-    if (typeof resume.parsed_data === 'object') return resume.parsed_data;
+    if (typeof resume.parsed_data === 'object') return resume.parsed_data as ParsedResumeData;
     try {
-      return JSON.parse(resume.parsed_data);
+      return JSON.parse(resume.parsed_data) as ParsedResumeData;
     } catch {
       return null;
     }
@@ -744,7 +843,7 @@ export function NeedsReviewDetailPanel({
                   </div>
                 ) : aiInsights?.insights ? (
                   <div className="space-y-3">
-                    {aiInsights.insights.map((insight: any, index: number) => (
+                    {aiInsights.insights.map((insight, index: number) => (
                       <div key={index} className="flex items-start gap-2">
                         {insight.type === 'strength' && <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />}
                         {insight.type === 'weakness' && <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />}
@@ -789,7 +888,7 @@ export function NeedsReviewDetailPanel({
                   </div>
                 ) : aiInsights?.suggestions ? (
                   <div className="space-y-3">
-                    {aiInsights.suggestions.map((suggestion: any, index: number) => (
+                    {aiInsights.suggestions.map((suggestion, index: number) => (
                       <div key={index} className="p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center justify-between mb-1">
                           <p className="text-sm font-medium text-gray-900">{suggestion.action}</p>
@@ -898,14 +997,14 @@ export function NeedsReviewDetailPanel({
                   <h3 className="font-semibold text-gray-900">Education</h3>
                 </div>
                 <div className="p-5 space-y-4">
-                  {parsedResume.education.map((edu: any, idx: number) => (
+                  {parsedResume.education.map((edu, idx: number) => (
                     <div key={idx} className="flex items-start gap-4">
                       <div className="w-2 h-2 rounded-full bg-emerald-400 mt-2 flex-shrink-0" />
                       <div>
-                        <p className="font-medium text-gray-900">{(edu as any).course_or_strand || (edu as any).degree || (edu as any).field || 'Education'}</p>
-                        <p className="text-sm text-gray-600">{(edu as any).school || (edu as any).institution || 'Unknown School'}</p>
-                        {(edu as any).year_range || (edu as any).years ? (
-                          <p className="text-xs text-gray-400 mt-1">{(edu as any).year_range || (edu as any).years}</p>
+                        <p className="font-medium text-gray-900">{edu.course_or_strand || edu.degree || edu.field || 'Education'}</p>
+                        <p className="text-sm text-gray-600">{edu.school || edu.institution || 'Unknown School'}</p>
+                        {(edu.year_range || edu.years) ? (
+                          <p className="text-xs text-gray-400 mt-1">{edu.year_range || edu.years}</p>
                         ) : null}
                       </div>
                     </div>
@@ -929,9 +1028,9 @@ export function NeedsReviewDetailPanel({
                 </div>
                 <div className="p-5">
                   {/* Handle old format (hard_skills) and new NER format (category-based dict) */}
-                  {(parsedResume.skills as any).hard_skills ? (
+                  {(parsedResume.skills as { hard_skills?: string[] }).hard_skills ? (
                     <div className="flex flex-wrap gap-2">
-                      {(parsedResume.skills as any).hard_skills.map((skill: string, idx: number) => (
+                      {(parsedResume.skills as { hard_skills: string[] }).hard_skills.map((skill: string, idx: number) => (
                         <span key={idx} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium border border-blue-100">
                           {skill}
                         </span>
@@ -939,8 +1038,8 @@ export function NeedsReviewDetailPanel({
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-2">
-                      {Object.entries(parsedResume.skills as any).map(([category, skills]) => (
-                        typeof skills === 'string' 
+                      {Object.entries(parsedResume.skills as Record<string, string | string[]>).map(([category, skills]) => (
+                        typeof skills === 'string'
                           ? skills.split(',').map((skill: string, idx: number) => (
                               <span key={`${category}-${idx}`} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium border border-blue-100">
                                 {skill.trim()}
@@ -970,17 +1069,17 @@ export function NeedsReviewDetailPanel({
                   <h3 className="font-semibold text-gray-900">Work Experience</h3>
                 </div>
                 <div className="p-5 space-y-5">
-                  {parsedResume.experience.map((exp: any, idx: number) => (
+                  {parsedResume.experience.map((exp, idx: number) => (
                     <div key={idx} className="flex items-start gap-4">
                       <div className="w-2 h-2 rounded-full bg-violet-400 mt-2 flex-shrink-0" />
                       <div className="flex-1">
-                        <p className="font-medium text-gray-900">{(exp as any).role || (exp as any).title || 'Professional Experience'}</p>
-                        <p className="text-sm text-gray-600">{(exp as any).company || (exp as any).organization || ''}</p>
-                        {(exp as any).years || (exp as any).duration || (exp as any).year_range ? (
-                          <p className="text-xs text-gray-400 mt-1">{(exp as any).years || (exp as any).duration || (exp as any).year_range}</p>
+                        <p className="font-medium text-gray-900">{exp.role || exp.title || 'Professional Experience'}</p>
+                        <p className="text-sm text-gray-600">{exp.company || exp.organization || ''}</p>
+                        {(exp.years || exp.duration || exp.year_range) ? (
+                          <p className="text-xs text-gray-400 mt-1">{exp.years || exp.duration || exp.year_range}</p>
                         ) : null}
-                        {(exp as any).summary || (exp as any).description ? (
-                          <p className="text-sm text-gray-500 mt-2 leading-relaxed">{(exp as any).summary || (exp as any).description}</p>
+                        {(exp.summary || exp.description) ? (
+                          <p className="text-sm text-gray-500 mt-2 leading-relaxed">{exp.summary || exp.description}</p>
                         ) : null}
                       </div>
                     </div>
@@ -999,18 +1098,18 @@ export function NeedsReviewDetailPanel({
                   <h3 className="font-semibold text-gray-900">Projects</h3>
                 </div>
                 <div className="p-5 space-y-4">
-                  {parsedResume.projects.map((project: any, idx: number) => (
+                  {parsedResume.projects.map((project, idx: number) => (
                     <div key={idx} className="flex items-start gap-4">
                       <div className="w-2 h-2 rounded-full bg-purple-400 mt-2 flex-shrink-0" />
                       <div>
-                        <p className="font-medium text-gray-900">{(project as any).name || (project as any).title || 'Untitled Project'}</p>
-                        {(project as any).details && (
+                        <p className="font-medium text-gray-900">{project.name || project.title || 'Untitled Project'}</p>
+                        {project.details && (
                           <p className="text-sm text-gray-600 mt-1 leading-relaxed">
-                            {typeof (project as any).details === 'string' 
-                              ? (project as any).details 
-                              : Array.isArray((project as any).details) 
-                                ? (project as any).details.join(' ') 
-                                : JSON.stringify((project as any).details)}
+                            {typeof project.details === 'string'
+                              ? project.details
+                              : Array.isArray(project.details)
+                                ? project.details.join(' ')
+                                : JSON.stringify(project.details)}
                           </p>
                         )}
                       </div>
@@ -1030,12 +1129,12 @@ export function NeedsReviewDetailPanel({
                   <h3 className="font-semibold text-gray-900">Certifications & Training</h3>
                 </div>
                 <div className="p-5 space-y-3">
-                  {parsedResume.trainings.map((training: any, idx: number) => (
+                  {parsedResume.trainings.map((training, idx: number) => (
                     <div key={idx} className="flex items-center gap-3">
                       <Check className="w-4 h-4 text-amber-500 flex-shrink-0" />
                       <p className="text-sm text-gray-700 font-medium">
-                        {typeof training === 'string' 
-                          ? training 
+                        {typeof training === 'string'
+                          ? training
                           : training.title || JSON.stringify(training)}
                       </p>
                       {typeof training !== 'string' && training.date && (
@@ -1159,8 +1258,7 @@ export function NeedsReviewDetailPanel({
                             const wordsPerSecond = wordsPerMinute / 60;
                             let currentTime = 0;
                             
-                            return sentences.map((sentence: string, index: number) => {
-                              const words = sentence.trim().split(/\s+/).length;
+                            return sentences.map((sentence: string, index: number) => {                              const words = sentence.trim().split(/\s+/).length;
                               const duration = Math.max(3, Math.min(6, words / wordsPerSecond));
                               const startTime = currentTime;
                               const endTime = currentTime + duration;
@@ -1371,7 +1469,7 @@ export function NeedsReviewDetailPanel({
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                      {workStyleData.dimension_scores.map((dimension: any, index: number) => {
+                      {workStyleData.dimension_scores.map((dimension, index: number) => {
                         const dimensionKey = dimension.dimension?.toLowerCase().replace(/ /g, '_') || '';
                         const dimensionLabels: Record<string, { high: string; low: string }> = {
                           collaboration: { high: 'Strong team player', low: 'Prefers solo work' },
@@ -1429,7 +1527,7 @@ export function NeedsReviewDetailPanel({
                 {/* Strong Areas and Essay Insights */}
                 <div className="grid grid-cols-2 gap-4">
                   {/* Strong Areas */}
-                  {workStyleData.strong_areas?.length > 0 && (
+                  {workStyleData.strong_areas && workStyleData.strong_areas.length > 0 && (
                     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
                       <div className="flex items-center gap-2 mb-4">
                         <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
@@ -1463,10 +1561,10 @@ export function NeedsReviewDetailPanel({
                 </div>
 
                 {/* Moderate and Development Areas */}
-                {(workStyleData.moderate_areas?.length > 0 || workStyleData.development_areas?.length > 0) && (
+                {(workStyleData.moderate_areas && workStyleData.moderate_areas.length > 0) || (workStyleData.development_areas && workStyleData.development_areas.length > 0) ? (
                   <div className="grid grid-cols-2 gap-4">
                     {/* Moderate Areas */}
-                    {workStyleData.moderate_areas?.length > 0 && (
+                    {workStyleData.moderate_areas && workStyleData.moderate_areas.length > 0 && (
                       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
                         <div className="flex items-center gap-2 mb-4">
                           <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
@@ -1486,7 +1584,7 @@ export function NeedsReviewDetailPanel({
                     )}
 
                     {/* Development Areas */}
-                    {workStyleData.development_areas?.length > 0 && (
+                    {workStyleData.development_areas && workStyleData.development_areas.length > 0 && (
                       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
                         <div className="flex items-center gap-2 mb-4">
                           <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
@@ -1505,7 +1603,7 @@ export function NeedsReviewDetailPanel({
                       </div>
                     )}
                   </div>
-                )}
+                ) : null}
               </>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-gray-400">

@@ -1,8 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   Search,
-  Filter,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -12,20 +10,15 @@ import {
   MapPin,
   Users,
   X,
-  Edit2,
-  Trash2,
   CheckCircle,
-  Eye,
   CalendarDays,
   List,
   Briefcase,
   User,
-  Mail,
   FileText,
-  Check,
   ExternalLink
 } from 'lucide-react';
-import { getSupabaseAdminClient, Applicant, Resume } from '../lib/supabase';
+import { getSupabaseAdminClient, Applicant } from '../lib/supabase';
 import { FilterDropdown } from './FilterDropdown';
 
 // ============================================================================
@@ -121,48 +114,6 @@ function StatusBadge({ status }: { status: InterviewDisplayStatus }) {
 }
 
 // ============================================================================
-// Google Meet Link Generator
-// ============================================================================
-
-function generateMeetingLink(): string {
-  // Return a placeholder indicating Teams meeting will be generated
-  // The actual Teams link will be created by the backend via Microsoft Graph API
-  return 'Teams Meeting (auto-generated after scheduling)';
-}
-
-// ============================================================================
-// Action Button Component
-// ============================================================================
-
-function ActionButton({
-  onClick,
-  icon: Icon,
-  title,
-  variant = 'default'
-}: {
-  onClick: () => void;
-  icon: React.ElementType;
-  title: string;
-  variant?: 'default' | 'danger' | 'success';
-}) {
-  const variants = {
-    default: 'text-gray-400 hover:text-gray-600 hover:bg-gray-100',
-    danger: 'text-gray-400 hover:text-red-600 hover:bg-red-50',
-    success: 'text-gray-400 hover:text-green-600 hover:bg-green-50'
-  };
-
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      className={`p-1.5 rounded-lg transition-colors ${variants[variant]}`}
-    >
-      <Icon className="w-4 h-4" />
-    </button>
-  );
-}
-
-// ============================================================================
 // Interview Modal Component — Full scheduling form
 // ============================================================================
 
@@ -212,7 +163,7 @@ function InterviewModal({
         notes: interview.notes || ''
       });
     }
-  }, [interview]);
+  }, [interview]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const validateEmails = (raw: string): string[] | null => {
     if (!raw.trim()) return [];
@@ -748,11 +699,6 @@ function ViewDetailsModal({
   );
 }
 
-// Helper Link component
-function Link({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <span className={className}>{children}</span>;
-}
-
 // ============================================================================
 // Calendar View Component
 // ============================================================================
@@ -797,12 +743,6 @@ function CalendarViewComponent({
         interviewDate.getFullYear() === day.getFullYear()
       );
     });
-  };
-
-  const getInterviewPosition = (time: string) => {
-    const [hours, minutes] = time.split(':').map(Number);
-    const top = ((hours - 8) * 60 + minutes) * (60 / 60); // 60px per hour
-    return top;
   };
 
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -968,7 +908,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
         onPreSelectedConsumed?.();
       }
     }
-  }, [preSelectedApplicantId, applicants, jobs]);
+  }, [preSelectedApplicantId, applicants, jobs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadData = async () => {
     try {
@@ -1009,7 +949,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
       }
 
       // Load scheduled interviews — exclude applicants who have already been hired/rejected
-      const { data: scheduledData, error: scheduledError } = await adminClient
+      const { data: scheduledData } = await adminClient
         .from('scheduled_interviews')
         .select(`
           *,
@@ -1038,7 +978,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
             interviewTime: record.interview_time,
             interviewType: record.interview_type,
             meetingLink: record.meeting_link || undefined,
-            meetingId: (record as any).meeting_id || undefined,
+            meetingId: (record as { meeting_id?: string }).meeting_id || undefined,
             meetingPasscode: record.meeting_passcode || undefined,
             location: record.location || undefined,
             interviewerId: record.interviewer_id,
@@ -1230,35 +1170,6 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
     }
   };
 
-  const handleCancelInterview = async (interviewId: string) => {
-    if (confirm('Are you sure you want to cancel this interview?')) {
-      // Update in database
-      try {
-        const adminClient = getSupabaseAdminClient();
-        await adminClient
-          .from('scheduled_interviews')
-          .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-          .eq('id', interviewId);
-      } catch (dbError) {
-        console.log('Could not update scheduled_interviews table:', dbError);
-      }
-      
-      setInterviews((prev) =>
-        prev.map((interview) =>
-          interview.id === interviewId ? { ...interview, status: 'cancelled' as const } : interview
-        )
-      );
-    }
-  };
-
-  const handleMarkCompleted = (interviewId: string) => {
-    setInterviews((prev) =>
-      prev.map((interview) =>
-        interview.id === interviewId ? { ...interview, status: 'completed' as const } : interview
-      )
-    );
-  };
-
   const handleMarkHired = async (applicantId: string) => {
     if (!confirm('Mark this applicant as HIRED? They will move to Final Decisions where you can send the offer email.')) {
       return;
@@ -1317,11 +1228,6 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
       console.error('Error marking applicant as rejected:', error);
       setNotification({ type: 'error', message: 'Failed to mark applicant as rejected.' });
     }
-  };
-
-  const handleEditInterview = (interview: ScheduledInterview) => {
-    setEditingInterview(interview);
-    setShowScheduleModal(true);
   };
 
   const navigateCalendar = (direction: 'prev' | 'next') => {

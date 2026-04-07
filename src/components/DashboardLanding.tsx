@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Users, FileText, Video, TrendingUp, CheckCircle, AlertCircle, XCircle, Calendar, ChevronDown, Search, UserPlus } from 'lucide-react';
+import { Users, FileText, Video, TrendingUp, CheckCircle, AlertCircle, XCircle, Calendar, Search, UserPlus } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest, getSupabaseAdminClient } from '../lib/supabase';
 import { FilterDropdown } from './FilterDropdown';
 
@@ -42,7 +42,7 @@ function resolveScreeningStatus(
     return applicant.screening_status;
   }
 
-  const dbStatus = (applicant as any).status as string | undefined;
+  const dbStatus = applicant.status;
   if (dbStatus) {
     if (
       ['passed_screening', 'shortlisted', 'hired', 'assessments_done',
@@ -94,8 +94,8 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
           .select('status');
 
         if (pipelineData) {
-          setShortlistedCount(pipelineData.filter((a: any) => a.status === 'shortlisted').length);
-          setHiredCount(pipelineData.filter((a: any) => a.status === 'hired').length);
+          setShortlistedCount(pipelineData.filter((a) => a.status === 'shortlisted').length);
+          setHiredCount(pipelineData.filter((a) => a.status === 'hired').length);
         }
       } catch (err) {
         console.error('Error fetching dashboard stats:', err);

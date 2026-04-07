@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
   Search,
-  ChevronDown,
   Eye,
   RefreshCw,
   ChevronLeft,
@@ -16,16 +15,14 @@ import {
   Square,
   Loader2,
   AlertTriangle,
-  Video,
-  ClipboardCheck,
   FolderOpen,
   UserCheck,
   UserX,
   Clock
 } from 'lucide-react';
-import { Resume, JobPosting, getSupabaseAdminClient } from '../lib/supabase';
+import { Resume, getSupabaseAdminClient } from '../lib/supabase';
 import { FilterDropdown } from './FilterDropdown';
-import { NeedsReviewDetailPanel } from './NeedsReviewDetailPanel';
+import { NeedsReviewDetailPanel, NeedsReviewApplicant } from './NeedsReviewDetailPanel';
 
 // Toast notification component
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
@@ -45,110 +42,13 @@ function Toast({ message, type, onClose }: { message: string; type: 'success' | 
 }
 
 // Interfaces - separate from Applicant to avoid requiring all base fields
-interface NeedsReviewApplicant {
-  id: string;
-  name?: string;
-  email?: string;
-  position?: string;
-  resume?: Resume;
-  overall_score?: number;
-  skills_score?: number;
-  experience_score?: number;
-  education_score?: number;
-  projects_score?: number;
-  screening_status?: 'in_review';
-  screened_at?: string;
-  matched_skills?: string[];
-  missing_skills?: string[];
-  key_issue?: string;
-  reason_for_review?: string;
-  job_requirements?: string[];
-  video_score?: number;
-  profileFit?: number;
-  video_completed?: boolean;
-  profiling_completed?: boolean;
-  // Additional fields from database
-  status?: string;
-  screening_score?: number;
-  screening_fit_category?: string;
-  video_assessment_score?: number;
-  work_style_score?: number;
-  created_at?: string;
-  updated_at?: string;
-}
-
 interface JobOption {
   id: string;
   title: string;
-  department: string;
   count: number;
 }
 
 type SortOption = 'score_desc' | 'score_asc' | 'date_desc' | 'date_asc' | 'name_asc';
-
-// Score bar component
-function ScoreBar({ score, className = '' }: { score: number; className?: string }) {
-  const getScoreColor = (s: number) => {
-    if (s >= 80) return 'bg-green-500';
-    if (s >= 60) return 'bg-yellow-500';
-    return 'bg-red-500';
-  };
-
-  return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${getScoreColor(score)}`}
-          style={{ width: `${score}%` }}
-        />
-      </div>
-      <span className="text-sm font-semibold text-gray-700 w-12 text-right">{score}%</span>
-    </div>
-  );
-}
-
-// Loading skeleton
-function TableSkeleton() {
-  return (
-    <>
-      {[...Array(5)].map((_, i) => (
-        <tr key={i} className="border-b border-gray-100 hover:bg-amber-50/30 transition-colors">
-          <td className="px-4 py-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gray-200 rounded-lg animate-pulse" />
-              <div className="space-y-2">
-                <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
-                <div className="h-3 w-24 bg-gray-100 rounded animate-pulse" />
-              </div>
-            </div>
-          </td>
-          <td className="px-4 py-5">
-            <div className="h-4 w-28 bg-gray-200 rounded animate-pulse mx-auto" />
-          </td>
-          <td className="px-4 py-5">
-            <div className="h-8 w-16 bg-gray-200 rounded-lg animate-pulse mx-auto" />
-          </td>
-          <td className="px-4 py-5">
-            <div className="h-6 w-32 bg-gray-200 rounded-full animate-pulse mx-auto" />
-          </td>
-          <td className="px-4 py-5">
-            <div className="h-4 w-20 bg-gray-200 rounded animate-pulse mx-auto" />
-          </td>
-          <td className="px-4 py-5">
-            <div className="h-4 w-24 bg-gray-200 rounded animate-pulse mx-auto" />
-          </td>
-          <td className="px-4 py-5">
-            <div className="flex items-center justify-center gap-2">
-              <div className="h-8 w-8 bg-gray-200 rounded-lg animate-pulse" />
-              <div className="h-8 w-8 bg-gray-200 rounded-lg animate-pulse" />
-              <div className="h-8 w-8 bg-gray-200 rounded-lg animate-pulse" />
-            </div>
-          </td>
-        </tr>
-      ))}
-    </>
-  );
-}
 
 // Empty state component
 function EmptyState() {
@@ -236,9 +136,9 @@ export function NeedsReview() {
     }, {} as Record<string, number>);
 
     const jobOptionsArray: JobOption[] = [
-      { id: 'all', title: 'All Jobs', department: '', count: applicants.length },
+      { id: 'all', title: 'All Jobs', count: applicants.length },
       ...(Object.entries(positionCounts) as [string, number][])
-        .map(([position, count]) => ({ id: position, title: position, department: 'General', count }))
+        .map(([position, count]) => ({ id: position, title: position, count }))
         .sort((a, b) => a.title.localeCompare(b.title)),
     ];
     setJobs(jobOptionsArray);
@@ -266,11 +166,11 @@ export function NeedsReview() {
 
         // Fetch resumes for these applicants
         const applicantIds = (applicantsData || []).map(a => a.id);
-        let resumesMap: Record<string, Resume> = {};
-        let videoAssessmentsMap: Record<string, boolean> = {};
-        let personalityTestsMap: Record<string, boolean> = {};
-        let videoScoresMap: Record<string, number> = {};
-        let workStyleScoresMap: Record<string, number> = {};
+        const resumesMap: Record<string, Resume> = {};
+        const videoAssessmentsMap: Record<string, boolean> = {};
+        const personalityTestsMap: Record<string, boolean> = {};
+        const videoScoresMap: Record<string, number> = {};
+        const workStyleScoresMap: Record<string, number> = {};
         
         if (applicantIds.length > 0) {
           const { data: resumesData } = await adminClient
@@ -337,7 +237,7 @@ export function NeedsReview() {
               video_assessment_score: videoScoresMap[applicant.id],
               work_style_score: workStyleScoresMap[applicant.id],
               // Determine key issue based on screening_fit_category or score
-              key_issue: applicant.screening_fit_category || determineKeyIssue(applicant.screening_score || 0),
+              key_issue: applicant.screening_fit_category || determineKeyIssue(),
             }))
             .filter(applicant => applicant.video_completed && applicant.profiling_completed);
 
@@ -353,12 +253,10 @@ export function NeedsReview() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Key issue is taken from screening_fit_category if available, otherwise a neutral label
-  const determineKeyIssue = (_score: number): string => {
-    return 'Borderline score';
-  };
+  const determineKeyIssue = (): string => 'Borderline score';
 
   // Filter and sort applicants
   useEffect(() => {

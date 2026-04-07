@@ -6,7 +6,7 @@ interface WorkProfilingTabProps {
   onClose: () => void;
 }
 
-export function WorkProfilingTab({ applicantId, workStyleScore, onClose }: WorkProfilingTabProps) {
+export function WorkProfilingTab({ workStyleScore, onClose }: WorkProfilingTabProps) {
   return (
     <div className="h-full flex flex-col">
       {/* Tab Header */}
