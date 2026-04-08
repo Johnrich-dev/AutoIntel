@@ -23,6 +23,20 @@ function getRoute(): 'applicant-login' | 'admin-login' | 'applicant-app' | 'not-
 }
 
 // ─── Applicant flow ───────────────────────────────────────────────────────────
+const SCORING_API = import.meta.env.VITE_SCORING_API_URL || 'http://localhost:5000';
+
+async function fireAssessmentNotification(applicantId: string, completed: string[]) {
+  try {
+    await fetch(`${SCORING_API}/api/notify-assessment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ applicant_id: applicantId, completed }),
+    });
+  } catch {
+    // Non-fatal — notification failure should never block the applicant flow
+  }
+}
+
 function ApplicantApp() {
   const { applicant, loading, logout } = useAuth();
   const [view, setView] = useState<ApplicantView>('dashboard');
@@ -74,7 +88,10 @@ function ApplicantApp() {
   if (view === 'video') {
     return (
       <VideoAssessment
-        onComplete={() => setView('dashboard')}
+        onComplete={() => {
+          if (applicant?.id) fireAssessmentNotification(applicant.id, ['Video Assessment']);
+          setView('dashboard');
+        }}
         onBack={() => setView('dashboard')}
       />
     );
@@ -83,7 +100,10 @@ function ApplicantApp() {
   if (view === 'test') {
     return (
       <PersonalityTest
-        onComplete={() => setView('dashboard')}
+        onComplete={() => {
+          if (applicant?.id) fireAssessmentNotification(applicant.id, ['Personality Test']);
+          setView('dashboard');
+        }}
         onBack={() => setView('dashboard')}
       />
     );

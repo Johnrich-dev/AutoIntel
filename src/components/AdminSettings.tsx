@@ -11,11 +11,8 @@ import {
   AlertCircle,
   Clock,
   FileText,
-  Moon,
-  Sun,
   RefreshCw,
   Download,
-  Trash2,
   ChevronRight,
 } from 'lucide-react';
 import { getSupabaseAdminClient } from '../lib/supabase';
@@ -57,15 +54,12 @@ export function AdminSettings() {
     autoShortlistThreshold: '85',
     
     // Appearance
-    theme: 'light',
     sidebarCollapsed: false,
     compactView: false,
     
     // Advanced
     dataRetention: '365',
     autoArchive: true,
-    apiAccess: false,
-    debugMode: false,
   });
 
   // Fetch settings from Supabase
@@ -109,15 +103,11 @@ export function AdminSettings() {
             ipWhitelist: data.ip_whitelist || '',
             autoRejectThreshold: String(data.auto_reject_threshold || 30),
             autoShortlistThreshold: String(data.auto_shortlist_threshold || 85),
-            theme: data.theme || 'light',
             sidebarCollapsed: data.sidebar_collapsed ?? false,
             compactView: data.compact_view ?? false,
             dataRetention: data.data_retention || '365',
             autoArchive: data.auto_archive ?? true,
-            apiAccess: data.api_access ?? false,
-            debugMode: data.debug_mode ?? false,
           });
-          applyTheme(data.theme || 'light');
         }
       } catch (error) {
         console.error('Error fetching settings:', error);
@@ -162,13 +152,10 @@ export function AdminSettings() {
           ip_whitelist: settings.ipWhitelist,
           auto_reject_threshold: parseInt(settings.autoRejectThreshold),
           auto_shortlist_threshold: parseInt(settings.autoShortlistThreshold),
-          theme: settings.theme,
           sidebar_collapsed: settings.sidebarCollapsed,
           compact_view: settings.compactView,
           data_retention: settings.dataRetention,
           auto_archive: settings.autoArchive,
-          api_access: settings.apiAccess,
-          debug_mode: settings.debugMode,
         })
         .eq('id', adminSession.user_id)
         .select('id');
@@ -180,13 +167,11 @@ export function AdminSettings() {
         return;
       }
 
-      // Apply theme when saving and propagate to SettingsContext
-      applyTheme(settings.theme);
+      // Propagate to SettingsContext
       updateSettings({
         timezone: settings.timezone,
         dateFormat: settings.dateFormat,
         language: settings.language,
-        theme: settings.theme,
         browserNotifications: settings.browserNotifications,
       });
 
@@ -194,6 +179,16 @@ export function AdminSettings() {
       window.dispatchEvent(new CustomEvent('autointel:settings-saved', {
         detail: { sessionTimeout: settings.sessionTimeout },
       }));
+
+      // Run auto-archive if enabled
+      if (settings.autoArchive && settings.dataRetention !== 'forever') {
+        try {
+          const archived = await archiveOldApplicants();
+          if (archived > 0) console.log(`[Settings] Auto-archived ${archived} applicant(s).`);
+        } catch (archiveErr) {
+          console.warn('[Settings] Auto-archive failed:', archiveErr);
+        }
+      }
 
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -204,13 +199,56 @@ export function AdminSettings() {
     }
   };
 
-  // Apply theme to document
-  const applyTheme = (theme: string) => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+  const archiveOldApplicants = async (): Promise<number> => {
+    if (settings.dataRetention === 'forever') return 0;
+    const days = parseInt(settings.dataRetention);
+    if (isNaN(days)) return 0;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const adminClient = getSupabaseAdminClient();
+    const { data, error } = await adminClient
+      .from('applicants')
+      .update({ status: 'archived' })
+      .lt('created_at', cutoff.toISOString())
+      .neq('status', 'archived')
+      .select('id');
+    if (error) throw new Error(error.message);
+    return data?.length ?? 0;
+  };
+
+  const exportAllData = async () => {
+    const adminClient = getSupabaseAdminClient();
+    const { data, error } = await adminClient
+      .from('applicants')
+      .select('id, name, email, position, status, overall_score, screening_score, created_at, decision_date')
+      .order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) {
+      alert('No applicant data to export.');
+      return;
     }
+    const headers = ['ID', 'Name', 'Email', 'Position', 'Status', 'Overall Score', 'Screening Score', 'Applied At', 'Decision Date'];
+    const rows = data.map(a => [
+      a.id,
+      a.name,
+      a.email,
+      a.position,
+      a.status ?? '',
+      a.overall_score ?? '',
+      a.screening_score ?? '',
+      a.created_at ? new Date(a.created_at).toLocaleDateString() : '',
+      a.decision_date ? new Date(a.decision_date).toLocaleDateString() : '',
+    ]);
+    const csv = [headers, ...rows]
+      .map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `applicants_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const sections = [
@@ -659,37 +697,6 @@ export function AdminSettings() {
                 
                 <div className="space-y-4">
                   {renderSettingItem(
-                    'Theme',
-                    'Choose your preferred color scheme',
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setSettings({ ...settings, theme: 'light' });
-                          document.documentElement.classList.remove('dark');
-                        }}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
-                          settings.theme === 'light' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        <Sun className="w-4 h-4" />
-                        Light
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSettings({ ...settings, theme: 'dark' });
-                          document.documentElement.classList.add('dark');
-                        }}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
-                          settings.theme === 'dark' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        <Moon className="w-4 h-4" />
-                        Dark
-                      </button>
-                    </div>
-                  )}
-                  
-                  {renderSettingItem(
                     'Compact View',
                     'Show more content with less spacing',
                     renderToggle('compactView')
@@ -715,7 +722,7 @@ export function AdminSettings() {
                 <div className="space-y-4">
                   {renderSettingItem(
                     'Data Retention',
-                    'Keep applicant data for days before auto-archive',
+                    'Applicants older than this period will be auto-archived when saving',
                     <select
                       value={settings.dataRetention}
                       onChange={(e) => setSettings({ ...settings, dataRetention: e.target.value })}
@@ -731,60 +738,32 @@ export function AdminSettings() {
                   
                   {renderSettingItem(
                     'Auto-Archive Old Data',
-                    'Automatically archive applicants after retention period',
+                    'When enabled, applicants past the retention period are archived on save',
                     renderToggle('autoArchive')
-                  )}
-                  
-                  {renderSettingItem(
-                    'API Access',
-                    'Enable API access for external integrations',
-                    renderToggle('apiAccess')
-                  )}
-                  
-                  {renderSettingItem(
-                    'Debug Mode',
-                    'Enable detailed error logging (developers only)',
-                    renderToggle('debugMode')
                   )}
                 </div>
 
                 <div className="mt-8 pt-6 border-t border-gray-200">
-                  <h3 className="text-sm font-semibold text-red-500 uppercase tracking-wider mb-4">Danger Zone</h3>
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Data Export</h3>
                   
-                  <div className="space-y-4">
-                    <div className="flex items-start justify-between p-4 bg-red-50 rounded-lg border border-red-100">
-                      <div>
-                        <h4 className="font-medium text-red-900">Export All Data</h4>
-                        <p className="text-sm text-red-600 mt-1">Download a complete backup of all your data</p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (confirm('This will download all applicant data. Continue?')) {
-                            alert('Export feature coming soon.');
-                          }
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 bg-white text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">
-                        <Download className="w-4 h-4" />
-                        Export
-                      </button>
+                  <div className="flex items-start justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div>
+                      <h4 className="font-medium text-gray-900">Export All Applicants</h4>
+                      <p className="text-sm text-gray-500 mt-1">Download a CSV of all applicant records including scores and status</p>
                     </div>
-                    
-                    <div className="flex items-start justify-between p-4 bg-red-50 rounded-lg border border-red-100">
-                      <div>
-                        <h4 className="font-medium text-red-900">Clear All Data</h4>
-                        <p className="text-sm text-red-600 mt-1">Permanently delete all applicants and settings. This cannot be undone.</p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (confirm('WARNING: This will permanently delete ALL applicant data. This cannot be undone. Are you absolutely sure?')) {
-                            alert('Delete All feature coming soon.');
-                          }
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                        Delete All
-                      </button>
-                    </div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await exportAllData();
+                        } catch (err) {
+                          alert(`Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                        }
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export CSV
+                    </button>
                   </div>
                 </div>
               </div>

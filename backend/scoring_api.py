@@ -1960,6 +1960,59 @@ def send_rejection_email_endpoint():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route('/api/notify-assessment', methods=['POST'])
+def notify_assessment():
+    """
+    Fire a Teams notification when an applicant completes an assessment.
+
+    Request Body:
+    {
+        "applicant_id": "string (required)",
+        "completed": ["Video Assessment", "Personality Test"]  // list of completed items
+    }
+    """
+    if notify_assessment_complete is None:
+        return jsonify({"success": False, "error": "Teams notify module not available"}), 500
+
+    try:
+        from supabase import create_client
+        from dotenv import load_dotenv
+        load_dotenv()
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No JSON data provided"}), 400
+
+        applicant_id = data.get('applicant_id')
+        completed = data.get('completed', [])
+
+        if not applicant_id:
+            return jsonify({"success": False, "error": "applicant_id is required"}), 400
+
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if not supabase_url or not supabase_key:
+            return jsonify({"success": False, "error": "Supabase configuration missing"}), 500
+
+        supabase = create_client(supabase_url, supabase_key)
+        result = supabase.table("applicants").select("name, email, position").eq("id", applicant_id).maybeSingle().execute()
+        if not result.data:
+            return jsonify({"success": False, "error": "Applicant not found"}), 404
+
+        applicant = result.data
+        sent = notify_assessment_complete(
+            applicant_name=applicant["name"],
+            applicant_email=applicant["email"],
+            position=applicant["position"],
+            completed=completed,
+        )
+
+        return jsonify({"success": sent}), 200
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("AutoIntel Scoring API")
