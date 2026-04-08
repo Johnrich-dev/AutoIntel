@@ -48,7 +48,9 @@ DEFAULT_SCORING_SETTINGS = {
     "baseline_projects": 2,
     "baseline_traincert": 2,
     "baseline_achievements": 1,
-    "scoring_type": "hybrid"
+    "scoring_type": "hybrid",
+    "requirement_weight": 0.6,
+    "count_weight": 0.4,
 }
 
 
@@ -93,6 +95,9 @@ def load_scoring_settings(supabase_client: Any) -> Dict[str, Any]:
                 "baseline_traincert": settings.get("baseline_traincert", 2),
                 "baseline_achievements": settings.get("baseline_achievements", 1),
                 "scoring_type": settings.get("scoring_type", "hybrid"),
+                # Resume formula split (stored as 0-100 in DB, used as 0.0-1.0 in scoring)
+                "requirement_weight": (settings.get("requirement_weight") or 60) / 100,
+                "count_weight": (settings.get("count_weight") or 40) / 100,
             }
     except Exception as e:
         print(f"Warning: Could not load scoring settings from database: {e}")
@@ -248,8 +253,8 @@ def process_applicant_screening(
         # Initialize variables for score breakdown (to be used in email)
         requirement_match_score = None
         count_score = None
-        requirement_weight = 0.6
-        count_weight = 0.4
+        requirement_weight = scoring_settings.get("requirement_weight", 0.6)
+        count_weight = scoring_settings.get("count_weight", 0.4)
         
         if parsed_resume_json and job_posting:
             # Calculate final hybrid score using UNIFIED scoring for all applicants
@@ -259,8 +264,8 @@ def process_applicant_screening(
                 job_posting=job_posting,
                 weights=weights,
                 baselines=baselines,
-                requirement_weight=0.6,
-                count_weight=0.4,
+                requirement_weight=requirement_weight,
+                count_weight=count_weight,
                 qualified_threshold=qualified_threshold,
                 review_threshold=review_threshold
             )

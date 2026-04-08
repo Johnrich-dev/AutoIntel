@@ -21,12 +21,17 @@ const DEFAULT_SETTINGS = {
   resume_weight: 50,
   video_weight: 40,
   profile_weight: 10,
+  // Resume formula split
+  requirement_weight: 60,
+  count_weight: 40,
 };
 
 type FormValues = typeof DEFAULT_SETTINGS;
 
 interface ValidationErrors {
   weights?: string;
+  overall_weights?: string;
+  formula_weights?: string;
   qualified_threshold?: string;
   review_threshold?: string;
   baseline?: string;
@@ -121,6 +126,18 @@ export function AdminScoringSettings() {
       errors.weights = `Weights must sum to 100 (currently: ${weightsSum})`;
     }
 
+    // Overall score composition must sum to 100
+    const overallSum = (formValues.resume_weight || 0) + (formValues.video_weight || 0) + (formValues.profile_weight || 0);
+    if (overallSum !== 100) {
+      errors.overall_weights = `Overall score weights must sum to 100 (currently: ${overallSum})`;
+    }
+
+    // Resume formula split must sum to 100
+    const formulaSum = (formValues.requirement_weight || 0) + (formValues.count_weight || 0);
+    if (formulaSum !== 100) {
+      errors.formula_weights = `Resume formula weights must sum to 100 (currently: ${formulaSum})`;
+    }
+
     const weights = [
       { name: 'Experience', value: expWeight },
       { name: 'Skills', value: skillWeight },
@@ -211,6 +228,8 @@ export function AdminScoringSettings() {
           resume_weight: data.resume_weight ?? 50,
           video_weight: data.video_weight ?? 40,
           profile_weight: data.profile_weight ?? 10,
+          requirement_weight: data.requirement_weight ?? 60,
+          count_weight: data.count_weight ?? 40,
         });
       } else {
         setSettings(null);
@@ -253,6 +272,8 @@ export function AdminScoringSettings() {
         resume_weight: formValues.resume_weight,
         video_weight: formValues.video_weight,
         profile_weight: formValues.profile_weight,
+        requirement_weight: formValues.requirement_weight,
+        count_weight: formValues.count_weight,
       };
 
       if (settings) {
@@ -317,6 +338,8 @@ export function AdminScoringSettings() {
         resume_weight: settings.resume_weight ?? 50,
         video_weight: settings.video_weight ?? 40,
         profile_weight: settings.profile_weight ?? 10,
+        requirement_weight: settings.requirement_weight ?? 60,
+        count_weight: settings.count_weight ?? 40,
       });
     } else {
       setFormValues(DEFAULT_SETTINGS);
@@ -402,24 +425,79 @@ export function AdminScoringSettings() {
               <div className={`p-3 rounded-lg border-2 flex items-center justify-between ${
                 formValues.resume_weight + formValues.video_weight + formValues.profile_weight === 100
                   ? 'bg-green-50 border-green-200'
-                  : 'bg-amber-50 border-amber-200'
+                  : 'bg-red-50 border-red-200'
               }`}>
                 <span className="text-sm font-medium text-gray-700">Total:</span>
                 <span className={`text-lg font-bold ${
                   formValues.resume_weight + formValues.video_weight + formValues.profile_weight === 100
                     ? 'text-green-600'
-                    : 'text-amber-600'
+                    : 'text-red-600'
                 }`}>
                   {formValues.resume_weight + formValues.video_weight + formValues.profile_weight}%
-                  {formValues.resume_weight + formValues.video_weight + formValues.profile_weight !== 100 && (
-                    <span className="text-sm font-normal ml-2">(weights will be normalized automatically)</span>
-                  )}
                 </span>
               </div>
+              {validationErrors.overall_weights && (
+                <p className="text-red-600 text-sm mt-2 flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {validationErrors.overall_weights}
+                </p>
+              )}
+              {formValues.resume_weight + formValues.video_weight + formValues.profile_weight === 100 && (
+                <p className="text-green-600 text-sm mt-2 flex items-center gap-1">
+                  <CheckCircle className="w-4 h-4" />
+                  Weights are properly balanced
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Resume Component Weights */}
+          {/* Resume Formula Split */}
+          <div className="lg:col-span-2 bg-white rounded-lg shadow">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <Sliders className="w-6 h-6 text-blue-600" />
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Resume Formula Split</h2>
+                  <p className="text-sm text-gray-500">
+                    How much semantic requirement matching vs raw count scoring contributes to the resume score.
+                    Formula: <span className="font-mono text-xs bg-gray-100 px-1 rounded">Resume Score = (Requirement Match × req%) + (Count Score × count%)</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <WeightInput label="Requirement Match Weight" icon={Target} value={formValues.requirement_weight} onChange={(v) => setFormValues({ ...formValues, requirement_weight: v })} color="bg-blue-600" />
+              <WeightInput label="Count Score Weight" icon={FolderGit2} value={formValues.count_weight} onChange={(v) => setFormValues({ ...formValues, count_weight: v })} color="bg-orange-600" />
+            </div>
+            <div className="px-6 pb-6">
+              <div className={`p-3 rounded-lg border-2 flex items-center justify-between ${
+                formValues.requirement_weight + formValues.count_weight === 100
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-red-50 border-red-200'
+              }`}>
+                <span className="text-sm font-medium text-gray-700">Total:</span>
+                <span className={`text-lg font-bold ${
+                  formValues.requirement_weight + formValues.count_weight === 100
+                    ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {formValues.requirement_weight + formValues.count_weight}%
+                </span>
+              </div>
+              {validationErrors.formula_weights && (
+                <p className="text-red-600 text-sm mt-2 flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {validationErrors.formula_weights}
+                </p>
+              )}
+              {formValues.requirement_weight + formValues.count_weight === 100 && (
+                <p className="text-green-600 text-sm mt-2 flex items-center gap-1">
+                  <CheckCircle className="w-4 h-4" />
+                  Weights are properly balanced
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* Resume Component Weights */}
           <div className="bg-white rounded-lg shadow">
             <div className="p-6 border-b border-gray-200">

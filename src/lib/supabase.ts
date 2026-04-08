@@ -235,6 +235,9 @@ export interface ScoringSettings {
   resume_weight?: number;
   video_weight?: number;
   profile_weight?: number;
+  // Resume formula split
+  requirement_weight?: number;
+  count_weight?: number;
   // Thresholds
   qualified_threshold: number;
   review_threshold: number;

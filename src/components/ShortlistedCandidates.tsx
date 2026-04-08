@@ -42,7 +42,7 @@ interface ApplicantWithDetails extends Applicant {
   video?: VideoAssessment;
   test?: PersonalityTest;
   resumeScore?: number;
-  videoScore?: number;
+  videoScore?: number | null;
   profileFit?: number;
   overall?: number;
   // status is inherited from Applicant: 'shortlisted' | 'final_interview' | 'rejected' | 'hired'
@@ -98,12 +98,12 @@ function calculateResumeScore(applicant?: ApplicantWithDetails, settings?: Scori
   if (!parsed) return 0;
   const config = settings || DEFAULT_SCORING_SETTINGS;
   const totalSkills = parsed.skills?.hard_skills?.length || 0;
-  const skillsScore = Math.min((totalSkills / 20) * 100, 100);
-  const experienceScore = Math.min(((parsed.experience?.length || 0) / 5) * 100, 100);
+  const skillsScore = Math.min((totalSkills / (config.baseline_skills || 20)) * 100, 100);
+  const experienceScore = Math.min(((parsed.experience?.length || 0) / (config.baseline_experience || 5)) * 100, 100);
   // Prefer the stored education_score (requirement-match based) over count-based fallback
   const educationScore = (applicant?.education_score != null && applicant.education_score > 0)
     ? applicant.education_score
-    : Math.min(((parsed.education?.length || 0) / 3) * 100, 100);
+    : Math.min(((parsed.education?.length || 0) / (config.baseline_education || 3)) * 100, 100);
   const projectCount = parsed.projects?.length || 0;
   const projectsScore = projectCount >= config.baseline_projects
     ? Math.min((projectCount / config.baseline_projects) * 100, 100)
@@ -116,14 +116,16 @@ function calculateResumeScore(applicant?: ApplicantWithDetails, settings?: Scori
   ), 100);
 }
 
-function calculateVideoScore(video?: VideoAssessment): number {
-  if (!video) return 0;
+function calculateVideoScore(video?: VideoAssessment): number | null {
+  if (!video) return null;
   if (video.transcript_score !== null && video.transcript_score !== undefined) {
     return Math.round(video.transcript_score * 10);
   }
-  if (video.status === 'completed' || video.transcription_status === 'completed') return 50;
-  if (video.status === 'submitted') return 30;
-  return 0;
+  // Video exists but hasn't been scored yet — return null so it shows as Pending
+  if (video.status === 'completed' || video.transcription_status === 'completed' || video.status === 'submitted') {
+    return null;
+  }
+  return null;
 }
 
 function calculateProfileFit(test?: PersonalityTest, jobRole?: string): number {
@@ -146,11 +148,20 @@ function calculateProfileFit(test?: PersonalityTest, jobRole?: string): number {
 
 function calculateOverallScore(
   resumeScore: number,
-  videoScore: number,
+  videoScore: number | null,
   profileFit: number,
   weights?: { resume: number; video: number; profile: number }
 ): number {
   const w = weights ?? { resume: 50, video: 40, profile: 10 };
+  // If video is pending, exclude it and redistribute its weight proportionally
+  if (videoScore === null) {
+    const nonVideoTotal = w.resume + w.profile;
+    if (nonVideoTotal === 0) return 0;
+    return Math.round(
+      (resumeScore * (w.resume / nonVideoTotal)) +
+      (profileFit * (w.profile / nonVideoTotal))
+    );
+  }
   const total = w.resume + w.video + w.profile;
   if (total === 0) return 0;
   return Math.round(
@@ -169,13 +180,20 @@ function getDaysInStage(applicant: { created_at: string; screened_at?: string })
 // Sub-Components
 // ============================================================================
 
-function ScoreBadge({ score, size = 'md' }: { score: number; size?: 'sm' | 'md' | 'lg' }) {
+function ScoreBadge({ score, size = 'md' }: { score: number | null; size?: 'sm' | 'md' | 'lg' }) {
+  const sizeClasses = { sm: 'px-2 py-0.5 text-xs', md: 'px-2.5 py-1 text-sm', lg: 'px-3 py-1.5 text-base' };
+  if (score === null) {
+    return (
+      <span className={`inline-flex items-center rounded-lg font-semibold text-gray-500 bg-gray-100 ${sizeClasses[size]}`}>
+        Pending
+      </span>
+    );
+  }
   let colorClass = 'text-gray-600 bg-gray-100';
   if (score >= 80) colorClass = 'text-emerald-700 bg-emerald-100';
   else if (score >= 60) colorClass = 'text-blue-700 bg-blue-100';
   else if (score >= 40) colorClass = 'text-amber-700 bg-amber-100';
   else if (score > 0) colorClass = 'text-red-700 bg-red-100';
-  const sizeClasses = { sm: 'px-2 py-0.5 text-xs', md: 'px-2.5 py-1 text-sm', lg: 'px-3 py-1.5 text-base' };
   return (
     <span className={`inline-flex items-center rounded-lg font-semibold ${colorClass} ${sizeClasses[size]}`}>
       {score > 0 ? score : '-'}
@@ -213,7 +231,7 @@ interface QuickProfilePanelProps {
 function buildAISummary(candidate: ApplicantWithDetails, parsedResume: ResumeParsedData | null, topSkills: string[]): string {
   const name = candidate.name.split(' ')[0];
   const resumeScore = candidate.resumeScore || 0;
-  const videoScore = candidate.videoScore || 0;
+  const videoScore = candidate.videoScore ?? null;
   const profileFit = candidate.profileFit || 0;
   const overall = candidate.overall || 0;
 
@@ -223,7 +241,9 @@ function buildAISummary(candidate: ApplicantWithDetails, parsedResume: ResumePar
 
   const strengthTier = overall >= 80 ? 'a strong' : overall >= 65 ? 'a solid' : 'a developing';
   const resumeTier = resumeScore >= 80 ? 'excellent' : resumeScore >= 65 ? 'good' : 'moderate';
-  const videoNote = videoScore >= 70
+  const videoNote = videoScore === null
+    ? 'Video assessment is pending scoring.'
+    : videoScore >= 70
     ? 'Video assessment reflects strong communication and articulation.'
     : videoScore >= 50
     ? 'Video assessment shows adequate communication skills.'
@@ -393,7 +413,7 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onSched
             <div className="h-12 w-px bg-blue-400/50" />
             <div className="flex gap-4 text-sm">
               <div><span className="text-blue-200">Resume:</span> <span className="font-semibold">{candidate.resumeScore}</span></div>
-              <div><span className="text-blue-200">Video:</span> <span className="font-semibold">{candidate.videoScore}</span></div>
+              <div><span className="text-blue-200">Video:</span> <span className="font-semibold">{candidate.videoScore ?? 'Pending'}</span></div>
               <div><span className="text-blue-200">Profile:</span> <span className="font-semibold">{candidate.profileFit}</span></div>
             </div>
           </div>
@@ -1005,9 +1025,9 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-center"><ScoreBadge score={applicant.resumeScore || 0} /></td>
-                  <td className="px-4 py-4 text-center"><ScoreBadge score={applicant.videoScore || 0} /></td>
-                  <td className="px-4 py-4 text-center"><ScoreBadge score={applicant.profileFit || 0} /></td>
+                  <td className="px-4 py-4 text-center"><ScoreBadge score={applicant.resumeScore ?? 0} /></td>
+                  <td className="px-4 py-4 text-center"><ScoreBadge score={applicant.videoScore ?? null} /></td>
+                  <td className="px-4 py-4 text-center"><ScoreBadge score={applicant.profileFit ?? 0} /></td>
                   <td className="px-4 py-4 text-center">
                     <span className="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold">{applicant.overall}</span>
                   </td>
