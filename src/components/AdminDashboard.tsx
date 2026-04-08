@@ -110,7 +110,7 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => settings.sidebarCollapsed);
   const [activeMenu, setActiveMenu] = useState<MenuId>('dashboard');
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(['job-postings', 'recruitment-pipeline']));
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -133,6 +133,11 @@ export function AdminDashboard() {
     loadApplicants();
     loadNavBadges();
   }, []);
+
+  // Sync sidebar collapsed state when settings change (e.g. after saving in AdminSettings)
+  useEffect(() => {
+    setSidebarCollapsed(settings.sidebarCollapsed);
+  }, [settings.sidebarCollapsed]);
 
   // Browser notification subscription — fires when a new applicant row is inserted
   useEffect(() => {
@@ -590,7 +595,7 @@ export function AdminDashboard() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 overflow-y-auto bg-gray-50 p-4 lg:p-4 space-y-6 min-h-screen">
+        <div className={`flex-1 overflow-y-auto bg-gray-50 min-h-screen ${settings.compactView ? 'p-2 lg:p-3 space-y-3' : 'p-4 lg:p-4 space-y-6'}`}>
           {activeMenu === 'dashboard' && <DashboardLanding applicants={applicants} onMenuChange={setActiveMenu} />}
           
           {/* Job Management */}

@@ -10,6 +10,8 @@ interface AppSettings {
   theme: string;
   browserNotifications: boolean;
   sessionTimeout: string;
+  sidebarCollapsed: boolean;
+  compactView: boolean;
 }
 
 interface SettingsContextType {
@@ -24,6 +26,8 @@ const defaults: AppSettings = {
   theme: 'light',
   browserNotifications: false,
   sessionTimeout: '30',
+  sidebarCollapsed: false,
+  compactView: false,
 };
 
 const SettingsContext = createContext<SettingsContextType>({
@@ -43,7 +47,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       try {
         const { data } = await getSupabaseAdminClient()
           .from('admin_users')
-          .select('timezone, date_format, language, theme, browser_notifications, session_timeout')
+          .select('timezone, date_format, language, theme, browser_notifications, session_timeout, sidebar_collapsed, compact_view')
           .eq('id', adminSession.user_id)
           .maybeSingle();
 
@@ -55,6 +59,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             theme: data.theme || defaults.theme,
             browserNotifications: data.browser_notifications ?? false,
             sessionTimeout: data.session_timeout || '30',
+            sidebarCollapsed: data.sidebar_collapsed ?? false,
+            compactView: data.compact_view ?? false,
           };
           setSettings(loaded);
           i18n.changeLanguage(loaded.language);

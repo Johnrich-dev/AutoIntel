@@ -173,6 +173,8 @@ export function AdminSettings() {
         dateFormat: settings.dateFormat,
         language: settings.language,
         browserNotifications: settings.browserNotifications,
+        sidebarCollapsed: settings.sidebarCollapsed,
+        compactView: settings.compactView,
       });
 
       // Notify AuthContext of session timeout change
