@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useFormatDate } from '../hooks/useFormatDate';
 import { 
   Search, 
   FileText, 
@@ -124,6 +125,7 @@ function EmptyState({ selectedJob }: { selectedJob: string | null }) {
 }
 
 export function ApplicantsList() {
+  const formatDate = useFormatDate();
   // State
   const [positions, setPositions] = useState<PositionOption[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -427,15 +429,6 @@ export function ApplicantsList() {
         {config.label}
       </span>
     );
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric' 
-    });
   };
 
   return (

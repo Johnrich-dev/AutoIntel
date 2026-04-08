@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { SettingsProvider } from './contexts/SettingsContext';
 import { ApplicantLogin } from './components/ApplicantLogin';
 import { RulesAndTerms } from './components/RulesAndTerms';
 import { AssessmentDashboard } from './components/AssessmentDashboard';
@@ -185,7 +186,9 @@ VITE_SUPABASE_ANON_KEY=...
 
   return (
     <AuthProvider>
-      <AppRouter />
+      <SettingsProvider>
+        <AppRouter />
+      </SettingsProvider>
     </AuthProvider>
   );
 }

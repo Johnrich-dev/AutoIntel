@@ -18,13 +18,18 @@ import {
   Trash2,
   ChevronRight,
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { getSupabaseAdminClient } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
+import { useTranslation } from 'react-i18next';
 
 export function AdminSettings() {
   const { adminSession } = useAuth();
+  const { updateSettings } = useSettings();
+  const { t } = useTranslation();
   const [activeSection, setActiveSection] = useState<'general' | 'notifications' | 'security' | 'integrations' | 'appearance' | 'advanced'>('general');
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState({
     // General
@@ -72,7 +77,8 @@ export function AdminSettings() {
       }
 
       try {
-        const { data, error } = await supabase
+        const adminClient = getSupabaseAdminClient();
+        const { data, error } = await adminClient
           .from('admin_users')
           .select('*')
           .eq('id', adminSession.user_id)
@@ -124,14 +130,21 @@ export function AdminSettings() {
   }, [adminSession?.user_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = async () => {
+    setSaveError(null);
+
     if (!adminSession?.user_id) {
-      console.error('No admin session found');
+      setSaveError('No admin session — please log in again.');
       return;
     }
 
     try {
-      // Prepare data for Supabase - update admin_users table
-      const { error } = await supabase
+      const adminClient = getSupabaseAdminClient();
+
+      // Debug: confirm what we're targeting
+      console.log('[Settings] Saving for user_id:', adminSession.user_id);
+      console.log('[Settings] language:', settings.language, 'timezone:', settings.timezone);
+
+      const { error, count } = await adminClient
         .from('admin_users')
         .update({
           company_name: settings.companyName,
@@ -157,19 +170,37 @@ export function AdminSettings() {
           api_access: settings.apiAccess,
           debug_mode: settings.debugMode,
         })
-        .eq('id', adminSession.user_id);
+        .eq('id', adminSession.user_id)
+        .select('id');
+
+      console.log('[Settings] Update result — error:', error, 'count:', count);
 
       if (error) {
-        console.error('Error saving settings:', error);
+        setSaveError(`DB error: ${error.message}`);
         return;
       }
 
-      // Apply theme when saving
+      // Apply theme when saving and propagate to SettingsContext
       applyTheme(settings.theme);
+      updateSettings({
+        timezone: settings.timezone,
+        dateFormat: settings.dateFormat,
+        language: settings.language,
+        theme: settings.theme,
+        browserNotifications: settings.browserNotifications,
+      });
+
+      // Notify AuthContext of session timeout change
+      window.dispatchEvent(new CustomEvent('autointel:settings-saved', {
+        detail: { sessionTimeout: settings.sessionTimeout },
+      }));
+
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch (error) {
-      console.error('Error saving settings:', error);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unexpected error saving settings.';
+      console.error('[Settings] Save exception:', err);
+      setSaveError(msg);
     }
   };
 
@@ -183,12 +214,12 @@ export function AdminSettings() {
   };
 
   const sections = [
-    { id: 'general', label: 'General', icon: Settings },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'security', label: 'Security', icon: Shield },
-    { id: 'integrations', label: 'Integrations', icon: Database },
-    { id: 'appearance', label: 'Appearance', icon: Palette },
-    { id: 'advanced', label: 'Advanced', icon: Clock },
+    { id: 'general', label: t('settings.general'), icon: Settings },
+    { id: 'notifications', label: t('settings.notifications'), icon: Bell },
+    { id: 'security', label: t('settings.security'), icon: Shield },
+    { id: 'integrations', label: t('settings.integrations'), icon: Database },
+    { id: 'appearance', label: t('settings.appearance'), icon: Palette },
+    { id: 'advanced', label: t('settings.advanced'), icon: Clock },
   ];
 
   const renderSettingItem = (
@@ -239,14 +270,20 @@ export function AdminSettings() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-          <p className="text-gray-600 mt-1">Manage your account and application preferences</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('settings.title')}</h1>
+          <p className="text-gray-600 mt-1">{t('settings.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
           {saved && (
             <span className="flex items-center gap-2 text-green-600 bg-green-50 px-3 py-1.5 rounded-lg">
               <CheckCircle className="w-4 h-4" />
-              Settings saved
+              {t('settings.saved')}
+            </span>
+          )}
+          {saveError && (
+            <span className="flex items-center gap-2 text-red-600 bg-red-50 px-3 py-1.5 rounded-lg text-sm max-w-xs truncate" title={saveError}>
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {saveError}
             </span>
           )}
           <button
@@ -254,7 +291,7 @@ export function AdminSettings() {
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Save className="w-4 h-4" />
-            Save Changes
+            {t('settings.save_changes')}
           </button>
         </div>
       </div>
@@ -304,13 +341,13 @@ export function AdminSettings() {
               <div className="p-6">
                 <h2 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
                   <Settings className="w-5 h-5 text-blue-600" />
-                  General Settings
+                  {t('settings.general')}
                 </h2>
                 
                 <div className="space-y-4">
                   {renderSettingItem(
-                    'Company Name',
-                    'This will be displayed on reports and emails',
+                    t('settings.company_name'),
+                    t('settings.company_name_desc'),
                     <input
                       type="text"
                       value={settings.companyName}
@@ -320,8 +357,8 @@ export function AdminSettings() {
                   )}
                   
                   {renderSettingItem(
-                    'Admin Email',
-                    'Login email address (read-only)',
+                    t('settings.admin_email'),
+                    t('settings.admin_email_desc'),
                     <input
                       type="email"
                       value={settings.adminEmail}
@@ -331,8 +368,8 @@ export function AdminSettings() {
                   )}
                   
                   {renderSettingItem(
-                    'Timezone',
-                    'All dates and times will be displayed in this timezone',
+                    t('settings.timezone'),
+                    t('settings.timezone_desc'),
                     <select
                       value={settings.timezone}
                       onChange={(e) => setSettings({ ...settings, timezone: e.target.value })}
@@ -349,8 +386,8 @@ export function AdminSettings() {
                   )}
                   
                   {renderSettingItem(
-                    'Date Format',
-                    'Choose your preferred date format',
+                    t('settings.date_format'),
+                    t('settings.date_format_desc'),
                     <select
                       value={settings.dateFormat}
                       onChange={(e) => setSettings({ ...settings, dateFormat: e.target.value })}
@@ -364,8 +401,8 @@ export function AdminSettings() {
                   )}
                   
                   {renderSettingItem(
-                    'Language',
-                    'Interface language',
+                    t('settings.language'),
+                    t('settings.language_desc'),
                     <select
                       value={settings.language}
                       onChange={(e) => setSettings({ ...settings, language: e.target.value })}
@@ -394,13 +431,13 @@ export function AdminSettings() {
                 <div className="space-y-4">
                   {renderSettingItem(
                     'New Applicant Alerts',
-                    'Receive email when a new applicant applies',
+                    'Send a Teams notification when a new applicant submits their resume',
                     renderToggle('emailNewApplicant')
                   )}
                   
                   {renderSettingItem(
                     'Assessment Completion',
-                    'Receive email when an applicant completes all assessments',
+                    'Send a Teams notification when an applicant completes all assessments',
                     renderToggle('emailAssessmentComplete')
                   )}
                   
@@ -412,21 +449,56 @@ export function AdminSettings() {
                   
                   {renderSettingItem(
                     'Browser Notifications',
-                    'Show desktop notifications for important events',
-                    renderToggle('browserNotifications')
+                    'Show desktop notifications when a new applicant arrives',
+                    <button
+                      onClick={() => {
+                        const next = !settings.browserNotifications;
+                        setSettings({ ...settings, browserNotifications: next });
+                        if (next && 'Notification' in window) {
+                          Notification.requestPermission().then(perm => {
+                            if (perm !== 'granted') {
+                              setSettings(s => ({ ...s, browserNotifications: false }));
+                            }
+                          });
+                        }
+                      }}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        settings.browserNotifications ? 'bg-blue-600' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        settings.browserNotifications ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
+                    </button>
                   )}
                   
-                  {renderSettingItem(
-                    'Webhook URL',
-                    'Send notifications to a custom endpoint',
-                    <input
-                      type="text"
-                      value={settings.webhook}
-                      onChange={(e) => setSettings({ ...settings, webhook: e.target.value })}
-                      placeholder="https://hooks.slack.com/..."
-                      className="w-64 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  )}
+                  <div className="py-4 border-b border-gray-100">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 pr-4">
+                        <h4 className="font-medium text-gray-900">Microsoft Teams Webhook</h4>
+                        <p className="text-sm text-gray-500 mt-1">
+                          Receive notifications in a Teams channel when applicants apply, are screened, or complete assessments.
+                        </p>
+                        <p className="text-xs text-blue-600 mt-2">
+                          To get a URL: Teams channel → ··· → Connectors → Incoming Webhook → Configure
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <input
+                          type="url"
+                          value={settings.webhook}
+                          onChange={(e) => setSettings({ ...settings, webhook: e.target.value })}
+                          placeholder="https://outlook.office.com/webhook/..."
+                          className="w-72 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        />
+                        {settings.webhook && (
+                          <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" /> Webhook configured
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

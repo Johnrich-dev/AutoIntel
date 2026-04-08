@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useFormatDate } from '../hooks/useFormatDate';
 import { supabase } from '../lib/supabase';
 import {
   X,
@@ -119,6 +120,7 @@ export function ApplicantDetailModal({
   currentIndex,
   totalCount,
 }: ApplicantDetailModalProps) {
+  const formatDate = useFormatDate();
   const [activeTab, setActiveTab] = useState<'summary' | 'resume'>('summary');
   
   // Data fetching state
@@ -311,9 +313,8 @@ export function ApplicantDetailModal({
     
     // Applicant created (application submitted)
     if (applicant?.created_at) {
-      const date = new Date(applicant.created_at);
       activities.push({
-        date: date.toLocaleDateString(),
+        date: formatDate(applicant.created_at),
         icon: <User className="w-4 h-4" />,
         text: 'Application submitted'
       });
@@ -321,9 +322,8 @@ export function ApplicantDetailModal({
     
     // Resume uploaded
     if (applicant?.resume?.uploaded_at) {
-      const date = new Date(applicant.resume.uploaded_at);
       activities.push({
-        date: date.toLocaleDateString(),
+        date: formatDate(applicant.resume.uploaded_at),
         icon: <FileText className="w-4 h-4" />,
         text: 'Resume uploaded'
       });
@@ -331,9 +331,8 @@ export function ApplicantDetailModal({
     
     // Video assessment submitted
     if (applicant?.video?.submitted_at) {
-      const date = new Date(applicant.video.submitted_at);
       activities.push({
-        date: date.toLocaleDateString(),
+        date: formatDate(applicant.video.submitted_at),
         icon: <Video className="w-4 h-4" />,
         text: 'Video assessment completed'
       });
@@ -341,9 +340,8 @@ export function ApplicantDetailModal({
     
     // Personality test submitted
     if (applicant?.test?.submitted_at) {
-      const date = new Date(applicant.test.submitted_at);
       activities.push({
-        date: date.toLocaleDateString(),
+        date: formatDate(applicant.test.submitted_at),
         icon: <Brain className="w-4 h-4" />,
         text: 'Personality test completed'
       });
@@ -694,11 +692,7 @@ export function ApplicantDetailModal({
                       <div>
                         <p className="text-xs text-gray-500">Applied Date</p>
                         <p className="text-sm font-medium text-gray-900">
-                          {new Date(applicant.created_at).toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric',
-                            year: 'numeric'
-                          })}
+                          {formatDate(applicant.created_at)}
                         </p>
                       </div>
                     </div>

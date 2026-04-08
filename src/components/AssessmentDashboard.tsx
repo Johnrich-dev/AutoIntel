@@ -23,8 +23,35 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applicant, accessToken]);
 
-  const loadAssessmentStatus = async () => {
-    if (!applicant) return;
+  // Derived state — computed here so the Teams notification useEffect can reference them
+  const videoCompleted = videoStatus?.status === 'submitted';
+  const testCompleted = testStatus?.status === 'submitted';
+  const allCompleted = videoCompleted && testCompleted;
+
+  // Fire Teams notification once when all assessments are completed
+  useEffect(() => {
+    if (!allCompleted || !applicant) return;
+    const notified = sessionStorage.getItem(`notified_complete_${applicant.id}`);
+    if (notified) return;
+    sessionStorage.setItem(`notified_complete_${applicant.id}`, 'true');
+
+    const completed: string[] = [];
+    if (videoCompleted) completed.push('Video Assessment');
+    if (testCompleted) completed.push('Personality Test');
+
+    fetch('http://localhost:5000/api/notify-assessment-complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        applicant_name: applicant.name,
+        applicant_email: applicant.email,
+        position: applicant.position,
+        completed,
+      }),
+    }).catch(() => { /* non-critical */ });
+  }, [allCompleted]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadAssessmentStatus = async () => {    if (!applicant) return;
 
     try {
       // Use admin client to bypass RLS
@@ -152,9 +179,6 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
     );
   }
 
-  const videoCompleted = videoStatus?.status === 'submitted';
-  const testCompleted = testStatus?.status === 'submitted';
-  const allCompleted = videoCompleted && testCompleted;
   const completedCount = (videoCompleted ? 1 : 0) + (testCompleted ? 1 : 0);
   const totalAssessments = 2;
   const progressPercent = Math.round((completedCount / totalAssessments) * 100);

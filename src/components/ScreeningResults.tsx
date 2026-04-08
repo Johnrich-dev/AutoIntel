@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useFormatDate } from '../hooks/useFormatDate';
 import {
   Search,
   FileText,
@@ -123,6 +124,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function ScreeningResults() {
+  const formatDate = useFormatDate();
   const [applicants, setApplicants] = useState<ScreenedApplicant[]>([]);
   const [jobs, setJobs] = useState<JobOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -689,7 +691,7 @@ export function ScreeningResults() {
                     <td className="px-4 py-5">
                       <div className="flex items-center gap-2 text-sm text-gray-500">
                         <Calendar className="w-4 h-4" />
-                        {new Date(applicant.screened_at || applicant.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {formatDate(applicant.screened_at || applicant.created_at)}
                       </div>
                     </td>
                   </tr>

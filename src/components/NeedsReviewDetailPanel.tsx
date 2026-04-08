@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useFormatDate } from '../hooks/useFormatDate';
 import {
   X,
   TrendingUp,
@@ -190,6 +191,7 @@ export function NeedsReviewDetailPanel({
   totalCount?: number;
   onDecision?: (type: 'verified' | 'mismatch') => void;
 }) {
+  const formatDate = useFormatDate();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [videoData, setVideoData] = useState<VideoRecord | null>(null);
@@ -776,7 +778,7 @@ export function NeedsReviewDetailPanel({
                 <div>
                   <p className="text-xs text-gray-500">Date Screened</p>
                   <p className="text-sm font-medium text-gray-900">
-                    {applicant.screened_at ? new Date(applicant.screened_at).toLocaleDateString() : 'N/A'}
+                    {applicant.screened_at ? formatDate(applicant.screened_at) : 'N/A'}
                   </p>
                 </div>
               </div>

@@ -54,7 +54,7 @@ CREATE TABLE public.admin_users (
     email_assessment_complete boolean DEFAULT true,
     email_daily_digest boolean DEFAULT false,
     browser_notifications boolean DEFAULT true,
-    webhook character varying,
+    slack_webhook character varying,
     two_factor_auth boolean DEFAULT false,
     password_expiry character varying DEFAULT '90'::character varying,
     session_timeout character varying DEFAULT '30'::character varying,

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useFormatDate } from '../hooks/useFormatDate';
 import {
   Search,
   Eye,
@@ -70,13 +71,13 @@ function EmptyState() {
 }
 
 // Days since screened badge — highlights stale reviews
-function DaysAgoBadge({ dateStr }: { dateStr?: string }) {
+function DaysAgoBadge({ dateStr, formatDate }: { dateStr?: string; formatDate: (d: string) => string }) {
   if (!dateStr) return <span className="text-sm text-gray-400">N/A</span>;
   const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
   const urgent = days >= 5;
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <span className="text-sm text-gray-600">{new Date(dateStr).toLocaleDateString()}</span>
+      <span className="text-sm text-gray-600">{formatDate(dateStr)}</span>
       <span className={`text-xs font-medium flex items-center gap-1 ${urgent ? 'text-red-500' : 'text-gray-400'}`}>
         {urgent && <Clock className="w-3 h-3" />}
         {days === 0 ? 'Today' : `${days}d ago`}
@@ -108,6 +109,7 @@ function KeyIssueBadge({ issue }: { issue: string }) {
 
 
 export function NeedsReview() {
+  const formatDate = useFormatDate();
   const [applicants, setApplicants] = useState<NeedsReviewApplicant[]>([]);
   const [filteredApplicants, setFilteredApplicants] = useState<NeedsReviewApplicant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -649,7 +651,7 @@ export function NeedsReview() {
                         <KeyIssueBadge issue={applicant.key_issue || 'Borderline score'} />
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <DaysAgoBadge dateStr={applicant.screened_at} />
+                        <DaysAgoBadge dateStr={applicant.screened_at} formatDate={formatDate} />
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex items-center justify-center gap-1">
