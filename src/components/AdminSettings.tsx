@@ -48,9 +48,6 @@ export function AdminSettings() {
     ipWhitelist: '',
     
     // Scoring
-    resumeWeight: '40',
-    videoWeight: '35',
-    profileWeight: '25',
     autoRejectThreshold: '30',
     autoShortlistThreshold: '85',
     
@@ -99,14 +96,11 @@ export function AdminSettings() {
             emailAssessmentComplete: data.email_assessment_complete ?? true,
             emailDailyDigest: data.email_daily_digest ?? false,
             browserNotifications: data.browser_notifications ?? true,
-            webhook: data.webhook || '',
+            webhook: data.slack_webhook || '',
             twoFactorAuth: data.two_factor_auth ?? false,
             passwordExpiry: data.password_expiry || '90',
             sessionTimeout: data.session_timeout || '30',
             ipWhitelist: data.ip_whitelist || '',
-            resumeWeight: String(data.resume_weight || 40),
-            videoWeight: String(data.video_weight || 35),
-            profileWeight: String(data.profile_weight || 25),
             autoRejectThreshold: String(data.auto_reject_threshold || 30),
             autoShortlistThreshold: String(data.auto_shortlist_threshold || 85),
             theme: data.theme || 'light',
@@ -153,9 +147,6 @@ export function AdminSettings() {
           password_expiry: settings.passwordExpiry,
           session_timeout: settings.sessionTimeout,
           ip_whitelist: settings.ipWhitelist,
-          resume_weight: parseInt(settings.resumeWeight),
-          video_weight: parseInt(settings.videoWeight),
-          profile_weight: parseInt(settings.profileWeight),
           auto_reject_threshold: parseInt(settings.autoRejectThreshold),
           auto_shortlist_threshold: parseInt(settings.autoShortlistThreshold),
           theme: settings.theme,
@@ -330,12 +321,12 @@ export function AdminSettings() {
                   
                   {renderSettingItem(
                     'Admin Email',
-                    'Primary contact email for notifications',
+                    'Login email address (read-only)',
                     <input
                       type="email"
                       value={settings.adminEmail}
-                      onChange={(e) => setSettings({ ...settings, adminEmail: e.target.value })}
-                      className="w-64 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      readOnly
+                      className="w-64 px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
                     />
                   )}
                   
@@ -521,59 +512,6 @@ export function AdminSettings() {
                 </h2>
                 
                 <div className="mb-8">
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Scoring Weights</h3>
-                  <div className="space-y-4">
-                    {renderSettingItem(
-                      'Resume Score Weight',
-                      'Percentage weight for resume evaluation',
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={settings.resumeWeight}
-                          onChange={(e) => setSettings({ ...settings, resumeWeight: e.target.value })}
-                          className="w-32"
-                        />
-                        <span className="text-sm font-medium w-12">{settings.resumeWeight}%</span>
-                      </div>
-                    )}
-                    
-                    {renderSettingItem(
-                      'Video Assessment Weight',
-                      'Percentage weight for video interview',
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={settings.videoWeight}
-                          onChange={(e) => setSettings({ ...settings, videoWeight: e.target.value })}
-                          className="w-32"
-                        />
-                        <span className="text-sm font-medium w-12">{settings.videoWeight}%</span>
-                      </div>
-                    )}
-                    
-                    {renderSettingItem(
-                      'Profile Fit Weight',
-                      'Percentage weight for personality test',
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={settings.profileWeight}
-                          onChange={(e) => setSettings({ ...settings, profileWeight: e.target.value })}
-                          className="w-32"
-                        />
-                        <span className="text-sm font-medium w-12">{settings.profileWeight}%</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mb-8">
                   <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Auto-Actions</h3>
                   <div className="space-y-4">
                     {renderSettingItem(
@@ -747,7 +685,13 @@ export function AdminSettings() {
                         <h4 className="font-medium text-red-900">Export All Data</h4>
                         <p className="text-sm text-red-600 mt-1">Download a complete backup of all your data</p>
                       </div>
-                      <button className="flex items-center gap-2 px-4 py-2 bg-white text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">
+                      <button
+                        onClick={() => {
+                          if (confirm('This will download all applicant data. Continue?')) {
+                            alert('Export feature coming soon.');
+                          }
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-white text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">
                         <Download className="w-4 h-4" />
                         Export
                       </button>
@@ -758,7 +702,13 @@ export function AdminSettings() {
                         <h4 className="font-medium text-red-900">Clear All Data</h4>
                         <p className="text-sm text-red-600 mt-1">Permanently delete all applicants and settings. This cannot be undone.</p>
                       </div>
-                      <button className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                      <button
+                        onClick={() => {
+                          if (confirm('WARNING: This will permanently delete ALL applicant data. This cannot be undone. Are you absolutely sure?')) {
+                            alert('Delete All feature coming soon.');
+                          }
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
                         <Trash2 className="w-4 h-4" />
                         Delete All
                       </button>

@@ -144,8 +144,20 @@ function calculateProfileFit(test?: PersonalityTest, jobRole?: string): number {
   return score;
 }
 
-function calculateOverallScore(resumeScore: number, videoScore: number, profileFit: number): number {
-  return Math.round((resumeScore * 0.5) + (videoScore * 0.4) + (profileFit * 0.1));
+function calculateOverallScore(
+  resumeScore: number,
+  videoScore: number,
+  profileFit: number,
+  weights?: { resume: number; video: number; profile: number }
+): number {
+  const w = weights ?? { resume: 50, video: 40, profile: 10 };
+  const total = w.resume + w.video + w.profile;
+  if (total === 0) return 0;
+  return Math.round(
+    (resumeScore * (w.resume / total)) +
+    (videoScore * (w.video / total)) +
+    (profileFit * (w.profile / total))
+  );
 }
 
 function getDaysInStage(applicant: { created_at: string; screened_at?: string }): number {
@@ -572,6 +584,7 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [scoringSettings, setScoringSettings] = useState<ScoringSettings | null>(null);
+  const [overallWeights, setOverallWeights] = useState<{ resume: number; video: number; profile: number }>({ resume: 50, video: 40, profile: 10 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   // Departments fetched from job_postings
@@ -591,6 +604,15 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
         .limit(1)
         .single();
       if (settingsData) setScoringSettings(settingsData);
+
+      // Read overall score weights from scoring_settings
+      if (settingsData) {
+        setOverallWeights({
+          resume: settingsData.resume_weight ?? 50,
+          video: settingsData.video_weight ?? 40,
+          profile: settingsData.profile_weight ?? 10,
+        });
+      }
 
       const { data: jobsData } = await supabase
         .from('job_postings')
@@ -652,12 +674,11 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
       const resumeScore = calculateResumeScore(applicant, scoringSettings);
       const videoScore = calculateVideoScore(applicant.video);
       const profileFit = calculateProfileFit(applicant.test, applicant.position);
-      const overall = calculateOverallScore(resumeScore, videoScore, profileFit);
-      // Only show active pipeline stages — exclude rejected/hired
+      const overall = calculateOverallScore(resumeScore, videoScore, profileFit, overallWeights);
       const status = applicant.status || 'shortlisted';
       return { ...applicant, resumeScore, videoScore, profileFit, overall, status };
     }).filter(a => a.status === 'shortlisted' || a.status === 'final_interview');
-  }, [applicants, scoringSettings]);
+  }, [applicants, scoringSettings, overallWeights]);
 
   // Derive department from position by matching job_postings (best-effort via position string)
   // We use position as a proxy for department label when no direct mapping exists

@@ -17,6 +17,10 @@ const DEFAULT_SETTINGS = {
   baseline_projects: 2,
   baseline_traincert: 2,
   baseline_achievements: 1,
+  // Overall score composition
+  resume_weight: 50,
+  video_weight: 40,
+  profile_weight: 10,
 };
 
 type FormValues = typeof DEFAULT_SETTINGS;
@@ -204,6 +208,9 @@ export function AdminScoringSettings() {
           baseline_projects: data.baseline_projects ?? 2,
           baseline_traincert: data.baseline_traincert ?? 2,
           baseline_achievements: data.baseline_achievements ?? 1,
+          resume_weight: data.resume_weight ?? 50,
+          video_weight: data.video_weight ?? 40,
+          profile_weight: data.profile_weight ?? 10,
         });
       } else {
         setSettings(null);
@@ -243,6 +250,9 @@ export function AdminScoringSettings() {
         baseline_projects: formValues.baseline_projects,
         baseline_traincert: formValues.baseline_traincert,
         baseline_achievements: formValues.baseline_achievements,
+        resume_weight: formValues.resume_weight,
+        video_weight: formValues.video_weight,
+        profile_weight: formValues.profile_weight,
       };
 
       if (settings) {
@@ -304,6 +314,9 @@ export function AdminScoringSettings() {
         baseline_projects: settings.baseline_projects || 2,
         baseline_traincert: settings.baseline_traincert || 2,
         baseline_achievements: settings.baseline_achievements || 1,
+        resume_weight: settings.resume_weight ?? 50,
+        video_weight: settings.video_weight ?? 40,
+        profile_weight: settings.profile_weight ?? 10,
       });
     } else {
       setFormValues(DEFAULT_SETTINGS);
@@ -369,14 +382,52 @@ export function AdminScoringSettings() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Weight Configuration */}
+          {/* Overall Score Composition — full width above the grid */}
+          <div className="lg:col-span-2 bg-white rounded-lg shadow">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <Target className="w-6 h-6 text-indigo-600" />
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Overall Score Composition</h2>
+                  <p className="text-sm text-gray-500">How much each assessment type contributes to the final candidate score</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <WeightInput label="Resume Score" icon={Briefcase} value={formValues.resume_weight} onChange={(v) => setFormValues({ ...formValues, resume_weight: v })} color="bg-blue-600" />
+              <WeightInput label="Video Assessment" icon={BookOpen} value={formValues.video_weight} onChange={(v) => setFormValues({ ...formValues, video_weight: v })} color="bg-purple-600" />
+              <WeightInput label="Profile Fit" icon={Award} value={formValues.profile_weight} onChange={(v) => setFormValues({ ...formValues, profile_weight: v })} color="bg-emerald-600" />
+            </div>
+            <div className="px-6 pb-6">
+              <div className={`p-3 rounded-lg border-2 flex items-center justify-between ${
+                formValues.resume_weight + formValues.video_weight + formValues.profile_weight === 100
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-amber-50 border-amber-200'
+              }`}>
+                <span className="text-sm font-medium text-gray-700">Total:</span>
+                <span className={`text-lg font-bold ${
+                  formValues.resume_weight + formValues.video_weight + formValues.profile_weight === 100
+                    ? 'text-green-600'
+                    : 'text-amber-600'
+                }`}>
+                  {formValues.resume_weight + formValues.video_weight + formValues.profile_weight}%
+                  {formValues.resume_weight + formValues.video_weight + formValues.profile_weight !== 100 && (
+                    <span className="text-sm font-normal ml-2">(weights will be normalized automatically)</span>
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Resume Component Weights */}
+          {/* Resume Component Weights */}
           <div className="bg-white rounded-lg shadow">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 <Sliders className="w-6 h-6 text-blue-600" />
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Scoring Weights</h2>
-                  <p className="text-sm text-gray-500">How much each factor contributes to the final score</p>
+                  <h2 className="text-lg font-semibold text-gray-900">Resume Scoring Weights</h2>
+                  <p className="text-sm text-gray-500">How much each factor contributes to the resume score</p>
                 </div>
               </div>
             </div>

@@ -224,13 +224,17 @@ export interface JobPosting {
 
 export interface ScoringSettings {
   settings_id: string;
-  // Weights for 6 categories
+  // Weights for 6 resume categories
   experience_weight: number;
   skills_weight: number;
   education_weight: number;
   projects_weight: number;
   traincert_weight: number;
   achievements_weight: number;
+  // Overall score weights (resume vs video vs profile fit)
+  resume_weight?: number;
+  video_weight?: number;
+  profile_weight?: number;
   // Thresholds
   qualified_threshold: number;
   review_threshold: number;
