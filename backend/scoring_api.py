@@ -2013,6 +2013,118 @@ def notify_assessment():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route('/api/change-hr-password', methods=['POST'])
+def change_hr_password():
+    """
+    Change HR user password and clear must_change_password flag.
+    Request Body: { "user_id": "string", "new_password": "string" }
+    """
+    try:
+        from supabase import create_client
+        from dotenv import load_dotenv
+        load_dotenv()
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No JSON data provided"}), 400
+
+        user_id = data.get('user_id', '').strip()
+        new_password = data.get('new_password', '').strip()
+
+        if not user_id or not new_password:
+            return jsonify({"success": False, "error": "user_id and new_password are required"}), 400
+
+        if len(new_password) < 8:
+            return jsonify({"success": False, "error": "Password must be at least 8 characters"}), 400
+
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if not supabase_url or not supabase_key:
+            return jsonify({"success": False, "error": "Supabase configuration missing"}), 500
+
+        supabase = create_client(supabase_url, supabase_key)
+        supabase.table("admin_users").update({
+            "password_hash": new_password,
+            "must_change_password": False
+        }).eq("id", user_id).execute()
+
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/create-hr-user', methods=['POST'])
+def create_hr_user():
+    """
+    Create an HR user account and email their credentials.
+    Request Body: { "name": "string", "email": "string" }
+    """
+    try:
+        import email_service
+        import random
+        import string
+        from supabase import create_client
+        from dotenv import load_dotenv
+        load_dotenv()
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No JSON data provided"}), 400
+
+        name = data.get('name', '').strip()
+        email = data.get('email', '').strip()
+
+        if not name or not email:
+            return jsonify({"success": False, "error": "name and email are required"}), 400
+
+        # Generate a random password
+        chars = string.ascii_letters + string.digits + "!@#$%"
+        password = ''.join(random.choices(chars, k=12))
+
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if not supabase_url or not supabase_key:
+            return jsonify({"success": False, "error": "Supabase configuration missing"}), 500
+
+        supabase = create_client(supabase_url, supabase_key)
+
+        # Check for duplicate email
+        existing = supabase.table("admin_users").select("id").eq("email", email).limit(1).execute()
+        if existing.data and len(existing.data) > 0:
+            return jsonify({"success": False, "error": "An account with this email already exists"}), 409
+
+        # Insert HR user
+        supabase.table("admin_users").insert({
+            "name": name,
+            "email": email,
+            "password_hash": password,
+            "role": "hr",
+            "must_change_password": True
+        }).execute()
+
+        # Send credentials email
+        body = f"""
+<div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px;">
+  <h2 style="color:#1d4ed8;">Your HR Portal Access</h2>
+  <p>Hi {name},</p>
+  <p>Your HR account for <strong>AutoIntel</strong> has been created. Use the credentials below to log in:</p>
+  <div style="background:#f3f4f6;padding:16px;border-radius:8px;margin:16px 0;">
+    <p style="margin:4px 0;"><strong>Login URL:</strong> <a href="https://www.autointel.online/hr">https://www.autointel.online/hr</a></p>
+    <p style="margin:4px 0;"><strong>Email:</strong> {email}</p>
+    <p style="margin:4px 0;"><strong>Password:</strong> <code style="background:#e5e7eb;padding:2px 6px;border-radius:4px;">{password}</code></p>
+  </div>
+  <p style="color:#6b7280;font-size:13px;">Please keep these credentials secure. Contact your administrator if you need help.</p>
+</div>
+"""
+        email_sent = email_service.send_email(email, "Your AutoIntel HR Account Credentials", body)
+
+        return jsonify({"success": True, "email_sent": email_sent, "password": password}), 200
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("AutoIntel Scoring API")

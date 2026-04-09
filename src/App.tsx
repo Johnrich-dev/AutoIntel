@@ -8,6 +8,7 @@ import { VideoAssessment } from './components/VideoAssessment';
 import { PersonalityTest } from './components/PersonalityTest';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AdminLogin } from './components/AdminLogin';
+import { ChangePassword } from './components/ChangePassword';
 import { getSupabaseConfigError } from './lib/supabase';
 
 type ApplicantView = 'rules' | 'dashboard' | 'video' | 'test';
@@ -120,7 +121,7 @@ function ApplicantApp() {
 
 // ─── Admin flow ───────────────────────────────────────────────────────────────
 function AdminApp({ loginLabel = 'Admin Login' }: { loginLabel?: string }) {
-  const { isAdminAuthenticated, loading } = useAuth();
+  const { isAdminAuthenticated, mustChangePassword, loading } = useAuth();
 
   if (loading) {
     return (
@@ -144,6 +145,10 @@ function AdminApp({ loginLabel = 'Admin Login' }: { loginLabel?: string }) {
         }}
       />
     );
+  }
+
+  if (mustChangePassword) {
+    return <ChangePassword />;
   }
 
   return <AdminDashboard />;

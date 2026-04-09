@@ -6,12 +6,14 @@ interface AdminSession {
   expires_at: number;
   user_id: string;
   email: string | null;
+  must_change_password?: boolean;
 }
 
 interface AuthContextType {
   applicant: Applicant | null;
   adminSession: AdminSession | null;
   isAdminAuthenticated: boolean;
+  mustChangePassword: boolean;
   accessToken: string | null;
   loading: boolean;
   userType: 'applicant' | 'admin' | null;
@@ -130,7 +132,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const parsed = JSON.parse(adminData);
           if (parsed.access_token === accessToken && parsed.expires_at * 1000 > Date.now()) {
-            setAdminSession(parsed);
+            // Re-fetch must_change_password from DB to ensure it's current
+            Promise.resolve(
+              getSupabaseAdminClient()
+                .from('admin_users')
+                .select('must_change_password')
+                .eq('id', parsed.user_id)
+                .maybeSingle()
+            ).then(({ data }) => {
+              const updated = { ...parsed, must_change_password: data?.must_change_password === true };
+              setAdminSession(updated);
+              localStorage.setItem('admin_session', JSON.stringify(updated));
+            }).catch(() => setAdminSession(parsed));
             setUserRole(parsed.role || 'admin');
             setIsMaintenancePreview(parsed.isMaintenancePreview || false);
             setLoading(false);
@@ -269,19 +282,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (adminUser) {
         console.log('Admin user found!', adminUser);
 
-        // ── Password expiry check ───────────────────────────────────────────
+        // ── Password expiry / must-change check ────────────────────────────
+        let mustChange = false;
         try {
           const { data: secData } = await getSupabaseAdminClient()
             .from('admin_users')
-            .select('password_expiry, last_login_at')
+            .select('password_expiry, last_login_at, must_change_password')
             .eq('id', adminUser.id)
             .maybeSingle();
 
           if (secData) {
+            mustChange = secData.must_change_password === true;
+            console.log('[Auth] must_change_password from DB:', secData.must_change_password, '→ mustChange:', mustChange);
             const expiry = secData.password_expiry;
             const lastLogin = secData.last_login_at;
 
-            if (expiry && expiry !== 'never' && lastLogin) {
+            if (!mustChange && expiry && expiry !== 'never' && lastLogin) {
               const expiryDays = parseInt(expiry, 10);
               const daysSinceLogin = Math.floor(
                 (Date.now() - new Date(lastLogin).getTime()) / (1000 * 60 * 60 * 24)
@@ -312,9 +328,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const role: 'admin' | 'hr' = adminUser.role === 'hr' ? 'hr' : 'admin';
         const adminSession: AdminSession = {
           access_token: `admin_${adminUser.id}_${Date.now()}`,
-          expires_at: Math.floor(Date.now() / 1000) + 86400, // 24 hours
+          expires_at: Math.floor(Date.now() / 1000) + 86400,
           user_id: adminUser.id,
           email: adminUser.email,
+          must_change_password: mustChange,
         };
         const sessionData = { ...adminSession, role };
         setAdminSession(adminSession);
@@ -385,6 +402,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applicant,
       adminSession,
       isAdminAuthenticated: !!adminSession,
+      mustChangePassword: adminSession?.must_change_password === true,
       accessToken,
       loading,
       userType: adminSession ? 'admin' : applicant ? 'applicant' : null,

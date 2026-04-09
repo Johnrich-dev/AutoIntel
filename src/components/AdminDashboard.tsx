@@ -1,4 +1,4 @@
-import { Calendar, CheckCircle, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, Briefcase, Sliders, ChevronLeft, ChevronRight, ClipboardList, UserCheck, Search, Eye, ListChecks, CalendarDays, Award, TrendingUp, AlertCircle, XCircle } from 'lucide-react';
+import { Calendar, CheckCircle, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, Briefcase, Sliders, ChevronLeft, ChevronRight, ClipboardList, UserCheck, Search, Eye, ListChecks, CalendarDays, Award, TrendingUp, AlertCircle, XCircle, UserPlus, Trash2, KeyRound } from 'lucide-react';
 import { AdminJobManagement } from './AdminJobManagement';
 import { AdminScoringSettings } from './AdminScoringSettings';
 import { DashboardLanding } from './DashboardLanding';
@@ -68,19 +68,170 @@ const menuItems = [
   { id: 'scoring-config', label: 'Scoring Configuration', icon: Sliders, category: 'ANALYTICS' },
   
   // SYSTEM Section
+  { id: 'hr-management', label: 'Manage HR Users', icon: UserPlus, category: 'SYSTEM', adminOnly: true },
   { id: 'system-settings', label: 'System Settings', icon: Settings, category: 'SYSTEM' },
 ];
 
 type MenuId = string;
 
-// Group menu items by category
-const groupedMenuItems = menuItems.reduce((acc, item) => {
-  if (!acc[item.category]) {
-    acc[item.category] = [];
-  }
-  acc[item.category].push(item);
-  return acc;
-}, {} as Record<string, typeof menuItems>);
+// ─── Manage HR Users (admin-only) ────────────────────────────────────────────
+interface HRUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  created_at: string;
+}
+
+function ManageHRUsers() {
+  const [hrUsers, setHrUsers] = useState<HRUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: '', email: '' });
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await getSupabaseAdminClient()
+      .from('admin_users')
+      .select('id, email, name, role, created_at')
+      .eq('role', 'hr')
+      .order('created_at', { ascending: false });
+    setHrUsers(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleCreate = async () => {
+    if (!form.name || !form.email) {
+      setToast({ message: 'Name and email are required.', type: 'error' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/create-hr-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: form.name, email: form.email }),
+      });
+      const result = await res.json();
+      if (!result.success) {
+        setToast({ message: result.error || 'Failed to create account.', type: 'error' });
+      } else {
+        const emailNote = result.email_sent ? ' Credentials sent via email.' : ` Email not sent — password: ${result.password}`;
+        setToast({ message: `HR account created for ${form.email}.${emailNote}`, type: 'success' });
+        setForm({ name: '', email: '' });
+        setShowForm(false);
+        load();
+      }
+    } catch {
+      setToast({ message: 'Network error. Is the backend running?', type: 'error' });
+    }
+    setSaving(false);
+  };
+
+  const handleDelete = async (id: string, email: string) => {
+    if (!confirm(`Remove HR account for ${email}?`)) return;
+    const { error } = await getSupabaseAdminClient().from('admin_users').delete().eq('id', id);
+    if (error) {
+      setToast({ message: `Failed to delete: ${error.message}`, type: 'error' });
+    } else {
+      setToast({ message: `Removed ${email}`, type: 'success' });
+      load();
+    }
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">Manage HR Users</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Create and manage HR login credentials</p>
+        </div>
+        <button
+          onClick={() => setShowForm(v => !v)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <UserPlus className="w-4 h-4" />
+          Add HR User
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2"><KeyRound className="w-4 h-4 text-blue-500" /> New HR Account</h3>
+          <div className="grid grid-cols-1 gap-3">
+            <input
+              type="text"
+              placeholder="Full name"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <input
+              type="email"
+              placeholder="Email address"
+              value={form.email}
+              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <p className="text-xs text-gray-400">A password will be auto-generated and sent to this email.</p>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+            <button
+              onClick={handleCreate}
+              disabled={saving}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? 'Creating...' : 'Create Account'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+        {loading ? (
+          <div className="p-6 text-center text-gray-400 text-sm">Loading...</div>
+        ) : hrUsers.length === 0 ? (
+          <div className="p-6 text-center text-gray-400 text-sm">No HR users yet. Add one above.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Name</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Email</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Created</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {hrUsers.map(u => (
+                <tr key={u.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900">{u.name}</td>
+                  <td className="px-4 py-3 text-gray-600">{u.email}</td>
+                  <td className="px-4 py-3 text-gray-400">{new Date(u.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => handleDelete(u.id, u.email)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Remove HR user"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // Toast notification component
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'warning'; onClose: () => void }) {
@@ -105,6 +256,7 @@ function Toast({ message, type, onClose }: { message: string; type: 'success' | 
 
 export function AdminDashboard() {
   const { adminLogout } = useAuth();
+  const { userRole } = useAuth();
   const { settings } = useSettings();
   const notifiedApplicants = useRef<Set<string>>(new Set());
   const [applicants, setApplicants] = useState<ApplicantWithDetails[]>([]);
@@ -385,7 +537,15 @@ export function AdminDashboard() {
 
         {/* Navigation Menu */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
-          {!sidebarCollapsed && Object.entries(groupedMenuItems).map(([category, items]) => (
+          {!sidebarCollapsed && Object.entries(
+            menuItems
+              .filter(item => !('adminOnly' in item) || !item.adminOnly || userRole === 'admin')
+              .reduce((acc, item) => {
+                if (!acc[item.category]) acc[item.category] = [];
+                acc[item.category].push(item);
+                return acc;
+              }, {} as Record<string, typeof menuItems>)
+          ).map(([category, items]) => (
             <div key={category} className="mb-4">
               {/* Category headers hidden - showing flat menu structure */}
               <ul className="space-y-0.5">
@@ -483,7 +643,7 @@ export function AdminDashboard() {
           {/* Collapsed view - show icons only */}
           {sidebarCollapsed && (
             <ul className="space-y-0.5">
-              {menuItems.map((item) => {
+              {menuItems.filter(item => !('adminOnly' in item) || !item.adminOnly || userRole === 'admin').map((item) => {
                 const Icon = item.icon;
                 const isActive = activeMenu === item.id;
                 const hasChildren = item.children && item.children.length > 0;
@@ -567,7 +727,7 @@ export function AdminDashboard() {
           <button
             onClick={() => {
               adminLogout();
-              window.location.href = '/?loggedout=true';
+              window.location.href = userRole === 'hr' ? '/hr' : '/admin';
             }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-all duration-200 group ${sidebarCollapsed ? 'lg:justify-center' : ''}`}
             title={sidebarCollapsed ? 'Logout' : undefined}
@@ -624,6 +784,8 @@ export function AdminDashboard() {
           
           {/* System Settings */}
           {activeMenu === 'system-settings' && <AdminSettings />}
+          {/* HR Management - admin only */}
+          {activeMenu === 'hr-management' && userRole === 'admin' && <ManageHRUsers />}
         </div>
       </main>
 
