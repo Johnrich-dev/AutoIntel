@@ -3,7 +3,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string | undefined;
 
 export function getSupabaseConfigError(): string | null {
   const missing: string[] = [];
@@ -17,7 +16,6 @@ export function isSupabaseConfigured(): boolean {
 }
 
 let cachedDefaultClient: SupabaseClient | null = null;
-let cachedAdminClient: SupabaseClient | null = null;
 const cachedTokenClients = new Map<string, SupabaseClient>();
 
 function createConfiguredClient(accessToken?: string): SupabaseClient {
@@ -65,23 +63,10 @@ export const getSupabaseClient = (accessToken?: string) => {
 };
 
 export const getSupabaseAdminClient = () => {
-  const err = getSupabaseConfigError();
-  if (err) throw new Error(err);
-  if (!supabaseServiceRoleKey) {
-    throw new Error('Missing required frontend env var: VITE_SUPABASE_SERVICE_ROLE_KEY');
-  }
-  // Reuse existing admin client if available
-  if (cachedAdminClient) {
-    return cachedAdminClient;
-  }
-  cachedAdminClient = createClient(supabaseUrl as string, supabaseServiceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-      storageKey: 'supabase-admin',
-    },
-  });
-  return cachedAdminClient;
+  // NOTE: The service role key has been removed from the frontend for security.
+  // This now returns the standard anon client. Admin operations that require
+  // elevated privileges should be moved to the Flask backend.
+  return getSupabaseClient();
 };
 
 export interface Applicant {
@@ -232,12 +217,12 @@ export interface ScoringSettings {
   traincert_weight: number;
   achievements_weight: number;
   // Overall score weights (resume vs video vs profile fit)
-  resume_weight?: number;
-  video_weight?: number;
-  profile_weight?: number;
+  resume_weight: number;
+  video_weight: number;
+  profile_weight: number;
   // Resume formula split
-  requirement_weight?: number;
-  count_weight?: number;
+  requirement_weight: number;
+  count_weight: number;
   // Thresholds
   qualified_threshold: number;
   review_threshold: number;
@@ -248,13 +233,8 @@ export interface ScoringSettings {
   baseline_projects: number;
   baseline_traincert: number;
   baseline_achievements: number;
-  // Job level
-  job_level: 'fresh_grad' | 'entry_level' | 'mid_level' | 'unified';
-  // Scoring type
+  // Scoring type (managed by backend, not user-editable)
   scoring_type: 'semantic' | 'hybrid';
-  // Presets
-  weights_by_level?: Record<string, any>;
-  baselines_by_level?: Record<string, any>;
   created_at: string;
   updated_at: string;
 }
