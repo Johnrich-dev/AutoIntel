@@ -5,20 +5,12 @@ import path from 'node:path';
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const rootDir = path.resolve(__dirname);
-  const env = loadEnv(mode, rootDir, ['VITE_', 'SUPABASE_']);
+  const env = loadEnv(mode, rootDir, 'VITE_');
 
   return {
     plugins: [react()],
     envDir: rootDir,
-    envPrefix: ['VITE_', 'SUPABASE_'],
-    define: {
-      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(
-        env.VITE_SUPABASE_URL ?? env.SUPABASE_URL ?? ''
-      ),
-      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(
-        env.VITE_SUPABASE_ANON_KEY ?? env.SUPABASE_ANON_KEY ?? ''
-      ),
-    },
+    envPrefix: 'VITE_',
     optimizeDeps: {
       exclude: ['lucide-react'],
     },
