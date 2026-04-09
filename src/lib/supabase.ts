@@ -99,7 +99,6 @@ export interface Applicant {
   status?: string;
   screening_score?: number;
   screening_fit_category?: string;
-  resume_reviewed_at?: string | null;
   screening_status?: 'passed' | 'in_review' | 'failed' | 'not_scored';
   screening_stage?: string;
   screened_at?: string;
@@ -118,11 +117,9 @@ export interface Resume {
   resume_url: string | null;
   status: string;
   uploaded_at: string;
-  reviewed_at: string | null;
   raw_extracted_content: string | null;
   parsed_data: ResumeParsedData | string | null;
   ner_status: string | null;
-  // Note: screening_score is stored on applicants table, not resumes
 }
 
 export interface ResumeParsedData {
@@ -181,8 +178,7 @@ export interface PersonalityTest {
   created_at: string;
   // Semantic scoring fields
   semantic_score?: number;
-  dimension_scores?: any;
-  department?: string;
+  dimension_scores?: Array<{ dimension: string; score: number; hybrid_score?: number; reasoning?: string }> | null;
   strong_areas?: string[];
   moderate_areas?: string[];
   development_areas?: string[];
@@ -248,13 +244,8 @@ export interface ScoringSettings {
   baseline_projects: number;
   baseline_traincert: number;
   baseline_achievements: number;
-  // Job level
-  job_level: 'fresh_grad' | 'entry_level' | 'mid_level' | 'unified';
   // Scoring type
   scoring_type: 'semantic' | 'hybrid';
-  // Presets
-  weights_by_level?: Record<string, any>;
-  baselines_by_level?: Record<string, any>;
   created_at: string;
   updated_at: string;
 }

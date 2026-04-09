@@ -38,7 +38,7 @@ interface ScheduledInterview {
   jobTitle: string;
   interviewDate?: string;
   interviewTime?: string;
-  interviewType?: 'online' | 'in-person' | 'hybrid';
+  interviewType?: 'online' | 'in-person';
   meetingLink?: string;
   meetingId?: string;
   meetingPasscode?: string;
@@ -75,7 +75,7 @@ interface InterviewFormData {
   jobId: string;
   interviewDate: string;
   interviewTime: string;
-  interviewType: '' | 'online' | 'in-person' | 'hybrid';
+  interviewType: '' | 'online' | 'in-person';
   durationMinutes: number;
   timeZone: string;
   meetingLink: string;
@@ -154,7 +154,7 @@ function InterviewModal({
         jobId: jobs.find(j => j.title === interview.jobTitle)?.job_id || '',
         interviewDate: interview.interviewDate || '',
         interviewTime: interview.interviewTime || '',
-        interviewType: (interview.interviewType || '') as '' | 'online' | 'in-person' | 'hybrid',
+        interviewType: (interview.interviewType || '') as '' | 'online' | 'in-person',
         durationMinutes: interview.durationMinutes || 60,
         timeZone: interview.timeZone || 'Asia/Manila',
         meetingLink: interview.meetingLink || '',
@@ -192,8 +192,8 @@ function InterviewModal({
     onClose();
   };
 
-  const needsMeetingLink = formData.interviewType === 'online' || formData.interviewType === 'hybrid';
-  const needsLocation = formData.interviewType === 'in-person' || formData.interviewType === 'hybrid';
+  const needsMeetingLink = formData.interviewType === 'online';
+  const needsLocation = formData.interviewType === 'in-person';
   const selectedApp = applicants.find(a => a.id === formData.applicantId);
 
   if (!isOpen) return null;
@@ -325,7 +325,7 @@ function InterviewModal({
                 Interview Type <span className="text-red-500">*</span>
               </label>
               <div className="grid grid-cols-3 gap-2">
-                {(['online', 'in-person', 'hybrid'] as const).map(type => (
+                {(['online', 'in-person'] as const).map(type => (
                   <button
                     key={type}
                     type="button"
@@ -336,7 +336,7 @@ function InterviewModal({
                         : 'border-gray-300 text-gray-700 hover:border-blue-400'
                     }`}
                   >
-                    {type === 'online' ? '🎥 Online' : type === 'in-person' ? '📍 In-Person' : '🔀 Hybrid'}
+                    {type === 'online' ? '🎥 Online' : '📍 In-Person'}
                   </button>
                 ))}
               </div>
@@ -869,7 +869,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
     jobId: '',
     interviewDate: '',
     interviewTime: '',
-    interviewType: '' as '' | 'online' | 'in-person' | 'hybrid',
+    interviewType: '' as '' | 'online' | 'in-person',
     durationMinutes: 60,
     timeZone: 'Asia/Manila',
     meetingLink: '',
@@ -900,7 +900,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
           jobId: matchedJob?.job_id || '',
           interviewDate: '',
           interviewTime: '',
-          interviewType: '' as '' | 'online' | 'in-person' | 'hybrid',
+          interviewType: '' as '' | 'online' | 'in-person',
           durationMinutes: 60,
           timeZone: 'Asia/Manila',
           meetingLink: '',
@@ -1108,7 +1108,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
           jobTitle,
           interviewDate: data.interviewDate,
           interviewTime: data.interviewTime,
-          interviewType: data.interviewType as 'online' | 'in-person' | 'hybrid',
+          interviewType: data.interviewType as 'online' | 'in-person',
           meetingLink: result.meet_link || data.meetingLink || undefined,
           meetingId: data.meetingId || undefined,
           meetingPasscode: data.meetingPasscode || undefined,
@@ -1605,7 +1605,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
             jobId: '',
             interviewDate: '',
             interviewTime: '',
-            interviewType: '' as '' | 'online' | 'in-person' | 'hybrid',
+            interviewType: '' as '' | 'online' | 'in-person',
             durationMinutes: 60,
             timeZone: 'Asia/Manila',
             meetingLink: '',

@@ -1235,7 +1235,7 @@ export function AdminDashboard() {
                       const adminClient = getSupabaseAdminClient();
                       await adminClient
                         .from('applicants')
-                        .update({ status: 'interview_scheduled' })
+                        .update({ status: 'final_interview' })
                         .eq('id', selectedApplicant.id);
                       
                       // Log the action

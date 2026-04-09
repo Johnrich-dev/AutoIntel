@@ -263,23 +263,6 @@ export function ApplicantsList() {
         }
       }
       
-      // Also check personality_tests for legacy data
-      if (applicantIds.length > 0) {
-        const { data: personalityData } = await adminClient
-          .from('personality_tests')
-          .select('*')
-          .in('applicant_id', applicantIds);
-        
-        if (personalityData) {
-          personalityData.forEach(pt => {
-            // Only add if work_style_assessments doesn't already have it
-            if (!workStyleMap[pt.applicant_id]) {
-              workStyleMap[pt.applicant_id] = pt;
-            }
-          });
-        }
-      }
-      
       // Combine applicants with all their data
       const applicantsWithResumes = (applicantsData || []).map(applicant => ({
         ...applicant,

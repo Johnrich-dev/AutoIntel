@@ -166,7 +166,6 @@ export function ScreeningResults() {
       const { data: jobPostingsData } = await adminClient.from('job_postings').select('job_id, title, skills');
       const { data: videoAssessmentsData } = await adminClient.from('video_assessments').select('*');
       const { data: workStyleAssessmentsData } = await adminClient.from('work_style_assessments').select('*');
-      const { data: personalityTestsData } = await adminClient.from('personality_tests').select('applicant_id, status, submitted_at');
 
       if (!applicantsData) return;
 
@@ -180,8 +179,7 @@ export function ScreeningResults() {
           videoAssessment.status === 'completed' ||
           !!videoAssessment.submitted_at
         ));
-        const workStyleRecord = workStyleAssessment
-          || personalityTestsData?.find((pt) => pt.applicant_id === applicant.id);
+        const workStyleRecord = workStyleAssessment;
         const hasWorkStyleCompleted = !!(workStyleRecord && (
           workStyleRecord.status === 'submitted' ||
           workStyleRecord.status === 'completed' ||

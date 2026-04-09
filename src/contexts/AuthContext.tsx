@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (parsed.expires_at * 1000 > Date.now()) {
             return parsed.access_token;
           }
-        } catch (e) {
+        } catch {
           // Invalid session data
         }
       }
@@ -122,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setLoading(false);
             return;
           }
-        } catch (e) {
+        } catch {
           // Invalid session
         }
       }
@@ -315,11 +315,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('=== ADMIN LOGIN END ===');
       setLoading(false);
       return { success: false, error: 'Invalid email or password' };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Admin login EXCEPTION:', error);
       console.log('=== ADMIN LOGIN END (error) ===');
       setLoading(false);
-      return { success: false, error: error.message || 'Login failed' };
+      return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
     }
   };
 

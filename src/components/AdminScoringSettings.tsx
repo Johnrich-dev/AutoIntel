@@ -253,10 +253,8 @@ export function AdminScoringSettings() {
       const adminClient = getSupabaseAdminClient();
 
       const saveData = {
-        job_level: 'unified',
         scoring_type: 'hybrid',
         experience_weight: formValues.experience_weight,
-        skills_weight: formValues.skills_weight,
         education_weight: formValues.education_weight,
         projects_weight: formValues.projects_weight,
         traincert_weight: formValues.traincert_weight,

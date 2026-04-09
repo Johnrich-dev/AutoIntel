@@ -428,11 +428,13 @@ function DecisionModal({
   onClose,
   onOpenOffer,
   onOpenRejection,
+  formatDate,
 }: {
   record: FinalDecisionRecord;
   onClose: () => void;
   onOpenOffer: () => void;
   onOpenRejection: () => void;
+  formatDate: (d: string) => string;
 }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -875,6 +877,7 @@ export function FinalDecisions() {
           onClose={() => setSelectedRecord(null)}
           onOpenOffer={() => setOfferTarget(selectedRecord)}
           onOpenRejection={() => setRejectionTarget(selectedRecord)}
+          formatDate={formatDate}
         />
       )}
 

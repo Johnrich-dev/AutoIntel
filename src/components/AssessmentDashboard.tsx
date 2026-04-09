@@ -63,21 +63,12 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
           .select('*')
           .eq('applicant_id', applicant.id)
           .maybeSingle(),
-        // Check new work_style_assessments table first, fallback to old personality_tests
+        // Only query work_style_assessments
         client
           .from('work_style_assessments')
           .select('*')
           .eq('applicant_id', applicant.id)
-          .maybeSingle()
-          .then(({ data }) => {
-            if (data) return { data };
-            // Fallback to old personality_tests table
-            return client
-              .from('personality_tests')
-              .select('*')
-              .eq('applicant_id', applicant.id)
-              .maybeSingle();
-          }),
+          .maybeSingle(),
       ]);
 
       if (videoResult.data) setVideoStatus(videoResult.data);

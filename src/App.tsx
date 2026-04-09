@@ -38,7 +38,7 @@ async function fireAssessmentNotification(applicantId: string, completed: string
 }
 
 function ApplicantApp() {
-  const { applicant, loading, logout } = useAuth();
+  const { applicant, loading } = useAuth();
   const [view, setView] = useState<ApplicantView>('dashboard');
 
   // Apply saved theme on mount
@@ -48,7 +48,7 @@ function ApplicantApp() {
       try {
         const settings = JSON.parse(savedSettings);
         document.documentElement.classList.toggle('dark', settings.theme === 'dark');
-      } catch (_) { /* ignore */ }
+      } catch { /* ignore */ }
     }
   }, []);
 
