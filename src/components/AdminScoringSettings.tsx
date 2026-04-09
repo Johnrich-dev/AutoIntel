@@ -405,104 +405,110 @@ export function AdminScoringSettings() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Overall Score Composition — full width above the grid */}
+          {/* Score Thresholds — full width at the top */}
           <div className="lg:col-span-2 bg-white rounded-lg shadow">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center gap-3">
-                <Target className="w-6 h-6 text-indigo-600" />
+                <div className="p-2 bg-blue-50 rounded-lg">
+                  <Target className="w-5 h-5 text-blue-600" />
+                </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Overall Score Composition</h2>
-                  <p className="text-sm text-gray-500">How much each assessment type contributes to the final candidate score</p>
+                  <h2 className="text-lg font-semibold text-gray-900">Score Thresholds</h2>
+                  <p className="text-sm text-gray-500">Set the score boundaries that determine each applicant's qualification status</p>
                 </div>
               </div>
             </div>
-            <div className="p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <WeightInput label="Resume Score" icon={Briefcase} value={formValues.resume_weight} onChange={(v) => setFormValues({ ...formValues, resume_weight: v })} color="bg-blue-600" />
-              <WeightInput label="Video Assessment" icon={BookOpen} value={formValues.video_weight} onChange={(v) => setFormValues({ ...formValues, video_weight: v })} color="bg-purple-600" />
-              <WeightInput label="Profile Fit" icon={Award} value={formValues.profile_weight} onChange={(v) => setFormValues({ ...formValues, profile_weight: v })} color="bg-emerald-600" />
-            </div>
-            <div className="px-6 pb-6">
-              <div className={`p-3 rounded-lg border-2 flex items-center justify-between ${
-                formValues.resume_weight + formValues.video_weight + formValues.profile_weight === 100
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-red-50 border-red-200'
-              }`}>
-                <span className="text-sm font-medium text-gray-700">Total:</span>
-                <span className={`text-lg font-bold ${
-                  formValues.resume_weight + formValues.video_weight + formValues.profile_weight === 100
-                    ? 'text-green-600'
-                    : 'text-red-600'
-                }`}>
-                  {formValues.resume_weight + formValues.video_weight + formValues.profile_weight}%
-                </span>
-              </div>
-              {validationErrors.overall_weights && (
-                <p className="text-red-600 text-sm mt-2 flex items-center gap-1">
-                  <AlertCircle className="w-4 h-4" />
-                  {validationErrors.overall_weights}
-                </p>
-              )}
-              {formValues.resume_weight + formValues.video_weight + formValues.profile_weight === 100 && (
-                <p className="text-green-600 text-sm mt-2 flex items-center gap-1">
-                  <CheckCircle className="w-4 h-4" />
-                  Weights are properly balanced
-                </p>
-              )}
-            </div>
-          </div>
 
-          {/* Resume Formula Split */}
-          <div className="lg:col-span-2 bg-white rounded-lg shadow">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center gap-3">
-                <Sliders className="w-6 h-6 text-blue-600" />
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Resume Formula Split</h2>
-                  <p className="text-sm text-gray-500">
-                    How much semantic requirement matching vs raw count scoring contributes to the resume score.
-                    Formula: <span className="font-mono text-xs bg-gray-100 px-1 rounded">Resume Score = (Requirement Match × req%) + (Count Score × count%)</span>
-                  </p>
+            <div className="p-6 space-y-6">
+              {/* Sliders */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {/* Qualified Threshold */}
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">Qualified Threshold</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Minimum score to be considered qualified</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number" min="0" max="100"
+                        value={formValues.qualified_threshold}
+                        onChange={(e) => setFormValues({ ...formValues, qualified_threshold: Number(e.target.value) || 0 })}
+                        className={`w-16 px-2 py-1.5 border rounded-lg text-center text-lg font-bold text-green-600 focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white ${validationErrors.qualified_threshold ? 'border-red-400' : 'border-gray-200'}`}
+                      />
+                      <span className="text-sm font-medium text-gray-500">%</span>
+                    </div>
+                  </div>
+                  <input
+                    type="range" min="0" max="100"
+                    value={formValues.qualified_threshold}
+                    onChange={(e) => setFormValues({ ...formValues, qualified_threshold: Number(e.target.value) })}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-500"
+                  />
+                  {validationErrors.qualified_threshold && (
+                    <p className="text-red-500 text-xs mt-2 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" />{validationErrors.qualified_threshold}</p>
+                  )}
+                </div>
+
+                {/* Review Threshold */}
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">Review Threshold</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Minimum score to trigger manual review</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number" min="0" max="100"
+                        value={formValues.review_threshold}
+                        onChange={(e) => setFormValues({ ...formValues, review_threshold: Number(e.target.value) || 0 })}
+                        className={`w-16 px-2 py-1.5 border rounded-lg text-center text-lg font-bold text-yellow-600 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 bg-white ${validationErrors.review_threshold ? 'border-red-400' : 'border-gray-200'}`}
+                      />
+                      <span className="text-sm font-medium text-gray-500">%</span>
+                    </div>
+                  </div>
+                  <input
+                    type="range" min="0" max="100"
+                    value={formValues.review_threshold}
+                    onChange={(e) => setFormValues({ ...formValues, review_threshold: Number(e.target.value) })}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                  />
+                  {validationErrors.review_threshold && (
+                    <p className="text-red-500 text-xs mt-2 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" />{validationErrors.review_threshold}</p>
+                  )}
                 </div>
               </div>
-            </div>
-            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <WeightInput label="Requirement Match Weight" icon={Target} value={formValues.requirement_weight} onChange={(v) => setFormValues({ ...formValues, requirement_weight: v })} color="bg-blue-600" />
-              <WeightInput label="Count Score Weight" icon={FolderGit2} value={formValues.count_weight} onChange={(v) => setFormValues({ ...formValues, count_weight: v })} color="bg-orange-600" />
-            </div>
-            <div className="px-6 pb-6">
-              <div className={`p-3 rounded-lg border-2 flex items-center justify-between ${
-                formValues.requirement_weight + formValues.count_weight === 100
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-red-50 border-red-200'
-              }`}>
-                <span className="text-sm font-medium text-gray-700">Total:</span>
-                <span className={`text-lg font-bold ${
-                  formValues.requirement_weight + formValues.count_weight === 100
-                    ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {formValues.requirement_weight + formValues.count_weight}%
-                </span>
+
+              {/* Visualization Bar */}
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Score Range Preview</p>
+                <div className="relative h-6 rounded-full overflow-hidden flex">
+                  <div className="h-full bg-red-400 transition-all duration-200" style={{ width: `${formValues.review_threshold}%` }} />
+                  <div className="h-full bg-yellow-400 transition-all duration-200" style={{ width: `${Math.max(0, formValues.qualified_threshold - formValues.review_threshold)}%` }} />
+                  <div className="h-full bg-green-400 transition-all duration-200 flex-1" />
+                </div>
+                <div className="flex justify-between mt-1.5 text-xs text-gray-400">
+                  <span>0%</span>
+                  <span className="text-red-500 font-medium">{formValues.review_threshold}%</span>
+                  <span className="text-yellow-600 font-medium">{formValues.qualified_threshold}%</span>
+                  <span>100%</span>
+                </div>
+                <div className="flex gap-4 mt-2">
+                  <span className="flex items-center gap-1.5 text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" />Rejected</span>
+                  <span className="flex items-center gap-1.5 text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" />Needs Review</span>
+                  <span className="flex items-center gap-1.5 text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full bg-green-400 inline-block" />Qualified</span>
+                </div>
               </div>
-              {validationErrors.formula_weights && (
-                <p className="text-red-600 text-sm mt-2 flex items-center gap-1">
-                  <AlertCircle className="w-4 h-4" />
-                  {validationErrors.formula_weights}
-                </p>
-              )}
-              {formValues.requirement_weight + formValues.count_weight === 100 && (
-                <p className="text-green-600 text-sm mt-2 flex items-center gap-1">
-                  <CheckCircle className="w-4 h-4" />
-                  Weights are properly balanced
-                </p>
-              )}
             </div>
           </div>
 
           {/* Resume Component Weights */}
-          <div className="bg-white rounded-lg shadow">
+          <div className="bg-white rounded-lg shadow flex flex-col">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center gap-3">
-                <Sliders className="w-6 h-6 text-blue-600" />
+                <div className="p-2 bg-blue-50 rounded-lg">
+                  <Sliders className="w-6 h-6 text-blue-600" />
+                </div>
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Resume Scoring Weights</h2>
                   <p className="text-sm text-gray-500">How much each factor contributes to the resume score</p>
@@ -510,7 +516,7 @@ export function AdminScoringSettings() {
               </div>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 flex-1">
               <WeightInput label="Experience Weight" icon={Briefcase} value={formValues.experience_weight} onChange={(v) => setFormValues({ ...formValues, experience_weight: v })} color="bg-blue-600" />
               <WeightInput label="Skills Weight" icon={Target} value={formValues.skills_weight} onChange={(v) => setFormValues({ ...formValues, skills_weight: v })} color="bg-green-600" />
               <WeightInput label="Education Weight" icon={GraduationCap} value={formValues.education_weight} onChange={(v) => setFormValues({ ...formValues, education_weight: v })} color="bg-purple-600" />
@@ -531,83 +537,51 @@ export function AdminScoringSettings() {
                     {validationErrors.weights}
                   </p>
                 )}
-                {totalWeight === 100 && (
-                  <p className="text-green-600 text-sm mt-2 flex items-center gap-1">
-                    <CheckCircle className="w-4 h-4" />
-                    Weights are properly balanced
-                  </p>
-                )}
+                
               </div>
             </div>
           </div>
 
           {/* Threshold + Baselines */}
           <div className="space-y-6">
-            {/* Score Thresholds */}
+            {/* Resume Formula Split */}
             <div className="bg-white rounded-lg shadow">
               <div className="p-6 border-b border-gray-200">
                 <div className="flex items-center gap-3">
-                  <Target className="w-6 h-6 text-blue-600" />
+                  <div className="p-2 bg-blue-50 rounded-lg">
+                    <Sliders className="w-6 h-6 text-blue-600" />
+                  </div>
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Score Thresholds</h2>
-                    <p className="text-sm text-gray-500">Define qualification criteria</p>
+                    <h2 className="text-lg font-semibold text-gray-900">Resume Formula Split</h2>
+                    <p className="text-sm text-gray-500">Match weight prioritizes fit; count weight rewards breadth.
+</p>
                   </div>
                 </div>
               </div>
-
-              <div className="p-6 space-y-6">
-                {/* Qualified Threshold */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Qualified Threshold
-                    <span className="text-gray-400 text-xs ml-2">(Minimum score to be considered qualified)</span>
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <input type="range" min="0" max="100" value={formValues.qualified_threshold} onChange={(e) => setFormValues({ ...formValues, qualified_threshold: Number(e.target.value) })} className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600" />
-                    <input type="number" min="0" max="100" value={formValues.qualified_threshold} onChange={(e) => setFormValues({ ...formValues, qualified_threshold: Number(e.target.value) || 0 })} className={`w-20 px-3 py-2 border rounded-lg text-center font-medium focus:ring-2 focus:ring-green-500 focus:border-green-500 ${validationErrors.qualified_threshold ? 'border-red-500' : 'border-gray-300'}`} />
-                    <span className="text-gray-500 font-medium">%</span>
-                  </div>
-                  {validationErrors.qualified_threshold && (
-                    <p className="text-red-600 text-sm mt-2 flex items-center gap-1"><AlertCircle className="w-4 h-4" />{validationErrors.qualified_threshold}</p>
-                  )}
+              <div className="p-6 space-y-4">
+                <WeightInput label="Requirement Match Weight" icon={Target} value={formValues.requirement_weight} onChange={(v) => setFormValues({ ...formValues, requirement_weight: v })} color="bg-blue-600" />
+                <WeightInput label="Count Score Weight" icon={FolderGit2} value={formValues.count_weight} onChange={(v) => setFormValues({ ...formValues, count_weight: v })} color="bg-orange-600" />
+              </div>
+              <div className="px-6 pb-6">
+                <div className={`p-3 rounded-lg border-2 flex items-center justify-between ${
+                  formValues.requirement_weight + formValues.count_weight === 100
+                    ? 'bg-green-50 border-green-200'
+                    : 'bg-red-50 border-red-200'
+                }`}>
+                  <span className="text-sm font-medium text-gray-700">Total:</span>
+                  <span className={`text-lg font-bold ${
+                    formValues.requirement_weight + formValues.count_weight === 100
+                      ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {formValues.requirement_weight + formValues.count_weight}%
+                  </span>
                 </div>
-
-                {/* Review Threshold */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Review Threshold
-                    <span className="text-gray-400 text-xs ml-2">(Minimum score for manual review)</span>
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <input type="range" min="0" max="100" value={formValues.review_threshold} onChange={(e) => setFormValues({ ...formValues, review_threshold: Number(e.target.value) })} className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-yellow-600" />
-                    <input type="number" min="0" max="100" value={formValues.review_threshold} onChange={(e) => setFormValues({ ...formValues, review_threshold: Number(e.target.value) || 0 })} className={`w-20 px-3 py-2 border rounded-lg text-center font-medium focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 ${validationErrors.review_threshold ? 'border-red-500' : 'border-gray-300'}`} />
-                    <span className="text-gray-500 font-medium">%</span>
-                  </div>
-                  {validationErrors.review_threshold && (
-                    <p className="text-red-600 text-sm mt-2 flex items-center gap-1"><AlertCircle className="w-4 h-4" />{validationErrors.review_threshold}</p>
-                  )}
-                </div>
-
-                {/* Threshold Visualization */}
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <h4 className="text-sm font-medium text-gray-700 mb-3">Threshold Visualization</h4>
-                  <div className="relative h-8 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="absolute left-0 h-full bg-red-400" style={{ width: `${formValues.review_threshold}%` }} />
-                    <div className="absolute h-full bg-yellow-400" style={{ left: `${formValues.review_threshold}%`, width: `${formValues.qualified_threshold - formValues.review_threshold}%` }} />
-                    <div className="absolute right-0 h-full bg-green-400" style={{ width: `${100 - formValues.qualified_threshold}%` }} />
-                    <div className="absolute inset-0 flex items-center justify-between px-4 text-xs font-medium text-gray-700">
-                      <span>Rejected</span>
-                      <span>Review</span>
-                      <span>Qualified</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-between mt-2 text-xs text-gray-500">
-                    <span>0%</span>
-                    <span>{formValues.review_threshold}%</span>
-                    <span>{formValues.qualified_threshold}%</span>
-                    <span>100%</span>
-                  </div>
-                </div>
+                {validationErrors.formula_weights && (
+                  <p className="text-red-600 text-sm mt-2 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {validationErrors.formula_weights}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -657,6 +631,46 @@ export function AdminScoringSettings() {
                   </p>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* Overall Score Composition */}
+          <div className="lg:col-span-2 bg-white rounded-lg shadow">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <Target className="w-6 h-6 text-indigo-600" />
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Overall Score Composition</h2>
+                  <p className="text-sm text-gray-500">How much each assessment type contributes to the final candidate score</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <WeightInput label="Resume Score" icon={Briefcase} value={formValues.resume_weight} onChange={(v) => setFormValues({ ...formValues, resume_weight: v })} color="bg-blue-600" />
+              <WeightInput label="Video Assessment" icon={BookOpen} value={formValues.video_weight} onChange={(v) => setFormValues({ ...formValues, video_weight: v })} color="bg-purple-600" />
+              <WeightInput label="Profile Fit" icon={Award} value={formValues.profile_weight} onChange={(v) => setFormValues({ ...formValues, profile_weight: v })} color="bg-emerald-600" />
+            </div>
+            <div className="px-6 pb-6">
+              <div className={`p-3 rounded-lg border-2 flex items-center justify-between ${
+                formValues.resume_weight + formValues.video_weight + formValues.profile_weight === 100
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-red-50 border-red-200'
+              }`}>
+                <span className="text-sm font-medium text-gray-700">Total:</span>
+                <span className={`text-lg font-bold ${
+                  formValues.resume_weight + formValues.video_weight + formValues.profile_weight === 100
+                    ? 'text-green-600'
+                    : 'text-red-600'
+                }`}>
+                  {formValues.resume_weight + formValues.video_weight + formValues.profile_weight}%
+                </span>
+              </div>
+              {validationErrors.overall_weights && (
+                <p className="text-red-600 text-sm mt-2 flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {validationErrors.overall_weights}
+                </p>
+              )}
             </div>
           </div>
         </div>
