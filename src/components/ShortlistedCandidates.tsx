@@ -84,6 +84,11 @@ const DEFAULT_SCORING_SETTINGS: ScoringSettings = {
   baseline_traincert: 2,
   baseline_achievements: 1,
   scoring_type: 'hybrid',
+  resume_weight: 50,
+  video_weight: 40,
+  profile_weight: 10,
+  requirement_weight: 60,
+  count_weight: 40,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 };
