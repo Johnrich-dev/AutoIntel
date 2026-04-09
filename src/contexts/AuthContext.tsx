@@ -15,8 +15,11 @@ interface AuthContextType {
   accessToken: string | null;
   loading: boolean;
   userType: 'applicant' | 'admin' | null;
+  userRole: 'admin' | 'hr' | null;
+  isMaintenancePreview: boolean;
   login: (token: string, email: string) => Promise<boolean>;
   adminLogin: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  adminPreviewLogin: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   adminLogout: () => void;
   updateApplicant: (updates: Partial<Applicant>) => void;
@@ -27,6 +30,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [applicant, setApplicant] = useState<Applicant | null>(null);
   const [adminSession, setAdminSession] = useState<AdminSession | null>(null);
+  const [userRole, setUserRole] = useState<'admin' | 'hr' | null>(null);
+  const [isMaintenancePreview, setIsMaintenancePreview] = useState(false);
   const [accessToken, setAccessToken] = useState<string | null>(
     () => {
       // Check for applicant token
@@ -67,6 +72,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       supabase.auth.signOut();
     }, timeoutMinutes * 60 * 1000);
   };
+
+  useEffect(() => {
+    // Restore maintenance preview state on page load
+    if (localStorage.getItem('maintenance_preview') === '1') {
+      setIsMaintenancePreview(true);
+    }
+  }, []);
 
   // Start/restart idle timer whenever admin session is active
   useEffect(() => {
@@ -119,6 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const parsed = JSON.parse(adminData);
           if (parsed.access_token === accessToken && parsed.expires_at * 1000 > Date.now()) {
             setAdminSession(parsed);
+            setUserRole(parsed.role || 'admin');
+            setIsMaintenancePreview(parsed.isMaintenancePreview || false);
             setLoading(false);
             return;
           }
@@ -295,15 +309,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.warn('Could not update last_login_at:', e);
         }
 
+        const role: 'admin' | 'hr' = adminUser.role === 'hr' ? 'hr' : 'admin';
         const adminSession: AdminSession = {
           access_token: `admin_${adminUser.id}_${Date.now()}`,
           expires_at: Math.floor(Date.now() / 1000) + 86400, // 24 hours
           user_id: adminUser.id,
           email: adminUser.email,
         };
+        const sessionData = { ...adminSession, role };
         setAdminSession(adminSession);
+        setUserRole(role);
         setAccessToken(adminSession.access_token);
-        localStorage.setItem('admin_session', JSON.stringify(adminSession));
+        localStorage.setItem('admin_session', JSON.stringify(sessionData));
         
         console.log('Admin login successful!');
         console.log('=== ADMIN LOGIN END ===');
@@ -323,6 +340,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const adminPreviewLogin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    // Verify against admin_users — if valid, enter applicant portal as maintenance preview
+    const result = await adminLogin(email, password);
+    if (!result.success) return result;
+
+    // adminLogin sets adminSession; we override to maintenance preview mode
+    setAdminSession(null);
+    setUserRole(null);
+    setIsMaintenancePreview(true);
+    localStorage.removeItem('admin_session');
+    localStorage.setItem('maintenance_preview', '1');
+    return { success: true };
+  };
+
   const logout = () => {
     setApplicant(null);
     setAccessToken(null);
@@ -335,7 +366,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const adminLogout = () => {
     setAdminSession(null);
     setAccessToken(null);
+    setUserRole(null);
+    setIsMaintenancePreview(false);
     localStorage.removeItem('admin_session');
+    localStorage.removeItem('maintenance_preview');
     // Sign out from Supabase auth
     supabase.auth.signOut();
   };
@@ -354,8 +388,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accessToken,
       loading,
       userType: adminSession ? 'admin' : applicant ? 'applicant' : null,
+      userRole,
+      isMaintenancePreview,
       login,
       adminLogin,
+      adminPreviewLogin,
       logout,
       adminLogout,
       updateApplicant,

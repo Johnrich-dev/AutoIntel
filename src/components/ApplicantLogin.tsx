@@ -12,7 +12,9 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [tokenFromUrl, setTokenFromUrl] = useState(false);
-  const { login } = useAuth();
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const { login, adminPreviewLogin } = useAuth();
 
   // Auto-populate token from URL query param (?token=...)
   useEffect(() => {
@@ -29,6 +31,20 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
     setError('');
     setLoading(true);
 
+    // Maintenance preview: email prefixed with "admin:" triggers admin credential check
+    if (email.startsWith('admin:')) {
+      const adminEmail = email.slice(6).trim();
+      const result = await adminPreviewLogin(adminEmail, adminPassword);
+      if (result.success) {
+        window.history.replaceState({}, '', window.location.pathname);
+        onLoginSuccess();
+      } else {
+        setError(result.error || 'Invalid admin credentials.');
+      }
+      setLoading(false);
+      return;
+    }
+
     const success = await login(token, email);
 
     if (success) {
@@ -40,6 +56,10 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
     }
     setLoading(false);
   };
+
+  // Show maintenance password field when email starts with "admin:"
+  const isMaintenance = email.startsWith('admin:');
+  if (isMaintenance !== maintenanceMode) setMaintenanceMode(isMaintenance);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
@@ -66,7 +86,7 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
                 Email Address
               </label>
               <input
-                type="email"
+                type={maintenanceMode ? 'text' : 'email'}
                 id="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -76,26 +96,45 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
               />
             </div>
 
-            <div>
-              <label htmlFor="token" className="block text-sm font-medium text-gray-700 mb-2">
-                <Lock className="w-4 h-4 inline mr-1" />
-                Access Token
-              </label>
-              <input
-                type="text"
-                id="token"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="Enter your access token"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                required
-              />
-              {!tokenFromUrl && (
-                <p className="mt-2 text-sm text-gray-500">
-                  Check your email for the temporary access token
-                </p>
-              )}
-            </div>
+            {maintenanceMode ? (
+              <div>
+                <label htmlFor="adminPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                  <Lock className="w-4 h-4 inline mr-1" />
+                  Admin Password
+                </label>
+                <input
+                  type="password"
+                  id="adminPassword"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  placeholder="Enter admin password"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  required
+                />
+                <p className="mt-2 text-xs text-gray-500">Maintenance preview mode — use your admin credentials</p>
+              </div>
+            ) : (
+              <div>
+                <label htmlFor="token" className="block text-sm font-medium text-gray-700 mb-2">
+                  <Lock className="w-4 h-4 inline mr-1" />
+                  Access Token
+                </label>
+                <input
+                  type="text"
+                  id="token"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder="Enter your access token"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  required
+                />
+                {!tokenFromUrl && (
+                  <p className="mt-2 text-sm text-gray-500">
+                    Check your email for the temporary access token
+                  </p>
+                )}
+              </div>
+            )}
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">

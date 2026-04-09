@@ -5,9 +5,10 @@ import { useAuth } from '../contexts/AuthContext';
 interface AdminLoginProps {
   onLoginSuccess: () => void;
   onCancel: () => void;
+  loginLabel?: string;
 }
 
-export function AdminLogin({ onLoginSuccess, onCancel }: AdminLoginProps) {
+export function AdminLogin({ onLoginSuccess, onCancel, loginLabel = 'Admin Login' }: AdminLoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,8 +44,8 @@ export function AdminLogin({ onLoginSuccess, onCancel }: AdminLoginProps) {
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-700 rounded-full mb-4">
               <Shield className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Admin Login</h1>
-            <p className="text-gray-600">Enter your credentials to access the admin dashboard</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">{loginLabel}</h1>
+            <p className="text-gray-600">Enter your credentials to access the dashboard</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">

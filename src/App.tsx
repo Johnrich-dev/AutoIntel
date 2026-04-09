@@ -13,9 +13,10 @@ import { getSupabaseConfigError } from './lib/supabase';
 type ApplicantView = 'rules' | 'dashboard' | 'video' | 'test';
 
 // Determine the current route from the URL path
-function getRoute(): 'applicant-login' | 'admin-login' | 'applicant-app' | 'not-found' {
+function getRoute(): 'applicant-login' | 'hr-login' | 'admin-login' | 'applicant-app' | 'not-found' {
   const path = window.location.pathname;
-  if (path === '/applicant/login') return 'applicant-login';
+  if (path === '/applicant/login' || path === '/applicant') return 'applicant-login';
+  if (path === '/hr/login' || path === '/hr') return 'hr-login';
   if (path === '/admin/login' || path === '/admin') return 'admin-login';
   // Legacy /login path → redirect to applicant login
   if (path === '/login' || path === '/') return 'applicant-login';
@@ -118,7 +119,7 @@ function ApplicantApp() {
 }
 
 // ─── Admin flow ───────────────────────────────────────────────────────────────
-function AdminApp() {
+function AdminApp({ loginLabel = 'Admin Login' }: { loginLabel?: string }) {
   const { isAdminAuthenticated, loading } = useAuth();
 
   if (loading) {
@@ -132,9 +133,9 @@ function AdminApp() {
   if (!isAdminAuthenticated) {
     return (
       <AdminLogin
+        loginLabel={loginLabel}
         onLoginSuccess={() => {
-          // Push to /admin so the route resolves to AdminDashboard on next render
-          window.history.pushState({}, '', '/admin');
+          window.history.pushState({}, '', window.location.pathname);
           window.dispatchEvent(new PopStateEvent('popstate'));
         }}
         onCancel={() => {
@@ -159,21 +160,31 @@ function AppRouter() {
     return () => window.removeEventListener('popstate', handlePop);
   }, []);
 
-  // Route guard: authenticated applicant trying to access admin → redirect
+  // Route guard: authenticated applicant trying to access admin/hr → redirect
   useEffect(() => {
     if (loading) return;
-    if (userType === 'applicant' && (route === 'admin-login')) {
+    if (userType === 'applicant' && (route === 'admin-login' || route === 'hr-login')) {
       window.history.replaceState({}, '', '/applicant/login');
       setRoute('applicant-login');
     }
   }, [userType, route, loading]);
 
-  if (route === 'admin-login' || route === 'not-found') {
-    // Block applicants from reaching admin routes
-    if (!loading && userType === 'applicant') {
-      return <ApplicantApp />;
-    }
-    return <AdminApp />;
+  if (route === 'not-found') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-white text-lg">404 — Page not found</div>
+      </div>
+    );
+  }
+
+  if (route === 'hr-login') {
+    if (!loading && userType === 'applicant') return <ApplicantApp />;
+    return <AdminApp loginLabel="HR Login" />;
+  }
+
+  if (route === 'admin-login') {
+    if (!loading && userType === 'applicant') return <ApplicantApp />;
+    return <AdminApp loginLabel="Admin Login" />;
   }
 
   // applicant-login and default → applicant flow
