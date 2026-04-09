@@ -26,6 +26,8 @@ import {
 import { getSupabaseAdminClient, Applicant } from '../lib/supabase';
 import { FilterDropdown } from './FilterDropdown';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 // ============================================================================
 // Types & Interfaces
 // ============================================================================
@@ -1065,7 +1067,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
       : [];
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const apiUrl = API_BASE;
       const response = await fetch(`${apiUrl}/api/schedule-interview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

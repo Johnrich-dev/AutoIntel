@@ -20,6 +20,8 @@ import {
 import { getSupabaseAdminClient } from '../lib/supabase';
 import { FilterDropdown } from './FilterDropdown';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -134,7 +136,7 @@ function OfferEmailModal({
       }
 
       // Call backend API to send email
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const apiUrl = API_BASE;
       const formData = new FormData();
       formData.append('applicant_name', record.name);
       formData.append('applicant_email', record.email);
@@ -305,7 +307,7 @@ function RejectionEmailModal({
     setSending(true);
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const apiUrl = API_BASE;
       const res = await fetch(`${apiUrl}/api/send-rejection-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -3,6 +3,8 @@ import { Video, ClipboardList, CheckCircle, Clock, LogOut, Camera, User, Chevron
 import { useAuth } from '../contexts/AuthContext';
 import { getSupabaseClient, getSupabaseAdminClient, VideoAssessment, PersonalityTest } from '../lib/supabase';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 interface AssessmentDashboardProps {
   onStartVideo: () => void;
   onStartPersonalityTest: () => void;
@@ -39,7 +41,7 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
     if (videoCompleted) completed.push('Video Assessment');
     if (testCompleted) completed.push('Personality Test');
 
-    fetch('http://localhost:5000/api/notify-assessment-complete', {
+    fetch(`${API_BASE}/api/notify-assessment-complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

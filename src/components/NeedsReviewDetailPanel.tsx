@@ -31,6 +31,8 @@ import {
 } from 'lucide-react';
 import { getSupabaseAdminClient } from '../lib/supabase';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 // ---- Local types for parsed resume data ----
 interface ResumeEducation {
   course_or_strand?: string;
@@ -220,7 +222,7 @@ export function NeedsReviewDetailPanel({
 
     setVerifyingVideo(true);
     try {
-      const response = await fetch('http://localhost:5000/api/video-verification', {
+      const response = await fetch(`${API_BASE}/api/video-verification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -463,7 +465,7 @@ export function NeedsReviewDetailPanel({
       setAiInsights(null);
       setLoadingInsights(true);
       try {
-        const response = await fetch('http://localhost:5000/api/generate-ai-insights', {
+        const response = await fetch(`${API_BASE}/api/generate-ai-insights`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

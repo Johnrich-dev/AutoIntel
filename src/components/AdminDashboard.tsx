@@ -15,6 +15,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { Applicant, PersonalityTest, Resume, ResumeParsedData, getSupabaseAdminClient, VideoAssessment, supabase } from '../lib/supabase';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
   video?: VideoAssessment;
@@ -1212,7 +1214,7 @@ export function AdminDashboard() {
                   setScheduling(true);
                   try {
                     // Call the API to schedule interview and send email
-                    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/schedule-interview`, {
+                    const response = await fetch(`${API_BASE}/api/schedule-interview`, {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',

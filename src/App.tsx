@@ -23,7 +23,7 @@ function getRoute(): 'applicant-login' | 'admin-login' | 'applicant-app' | 'not-
 }
 
 // ─── Applicant flow ───────────────────────────────────────────────────────────
-const SCORING_API = import.meta.env.VITE_SCORING_API_URL || 'http://localhost:5000';
+const SCORING_API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 async function fireAssessmentNotification(applicantId: string, completed: string[]) {
   try {

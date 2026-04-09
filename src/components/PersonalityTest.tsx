@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { ArrowLeft, ArrowRight, Send, User, ClipboardList } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getSupabaseAdminClient } from '../lib/supabase';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 import {
   WORK_STYLE_QUESTIONS,
   ESSAY_QUESTION,
@@ -125,7 +127,7 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
           // Get the job title from applicant data
           const applicantJobTitle = applicant.position || '';
 
-          const scoringResponse = await fetch('http://localhost:5000/api/workstyle/score', {
+          const scoringResponse = await fetch(`${API_BASE}/api/workstyle/score`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

@@ -3,6 +3,8 @@ import { Video, Upload, ArrowLeft, CheckCircle, XCircle, AlertCircle, Camera, Mi
 import { useAuth } from '../contexts/AuthContext';
 import { getSupabaseAdminClient } from '../lib/supabase';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 interface VideoAssessmentProps {
   onComplete: () => void;
   onBack: () => void;
@@ -411,7 +413,7 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
         
         // Call the Flask API to trigger transcription
         try {
-          const response = await fetch('http://localhost:5000/api/trigger-transcription', {
+          const response = await fetch(`${API_BASE}/api/trigger-transcription`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

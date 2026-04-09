@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { Applicant, Resume } from '../lib/supabase';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 interface ScreenedApplicant extends Omit<Applicant, 'screening_status' | 'screened_at'> {
   resume?: Resume;
   overall_score?: number;
@@ -108,7 +110,7 @@ export function ScreeningDetailModal({
     setIsProcessing(true);
     try {
       const response = await fetch(
-        `http://localhost:5000${decision === 'approved' ? '/api/grant-access' : '/api/reject-applicant'}`,
+        `${API_BASE}${decision === 'approved' ? '/api/grant-access' : '/api/reject-applicant'}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
