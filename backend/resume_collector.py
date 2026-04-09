@@ -17,6 +17,12 @@ from email.header import decode_header
 from pathlib import Path
 from typing import Any, Optional
 
+try:
+    from teams_notify import notify_new_applicant, notify_screening_result
+except ImportError:
+    notify_new_applicant = None
+    notify_screening_result = None
+
 def clean_extracted_text(text: str) -> str:
     """
     Fix common PDF extraction artifacts before storing or parsing.
@@ -699,6 +705,17 @@ def process_emails():
                 applicant_id = applicant_result.data[0]['id']
                 print(f"Created applicant with ID: {applicant_id}")
 
+                # Notify Teams channel about new applicant
+                if notify_new_applicant:
+                    try:
+                        notify_new_applicant(
+                            applicant_name=sender_name,
+                            applicant_email=sender_email,
+                            position=position,
+                        )
+                    except Exception as notify_err:
+                        print(f"[Teams] New applicant notification failed: {notify_err}")
+
                 uploaded_files = process_attachments(msg, applicant_id, sender_name, sender_email)
 
                 if uploaded_files:
@@ -809,6 +826,19 @@ def process_emails():
                                     print(f"Email sent: {screening_result.get('email_sent')}")
                                     if not screening_result.get('email_sent'):
                                         print(f"WARNING: Email was NOT sent! Error details may be in email service.")
+
+                                    # Notify Teams channel about screening result
+                                    if notify_screening_result and screening_result.get('success'):
+                                        try:
+                                            notify_screening_result(
+                                                applicant_name=sender_name,
+                                                applicant_email=sender_email,
+                                                position=job_title,
+                                                score=screening_result.get('score', 0),
+                                                decision=screening_result.get('decision', 'failed'),
+                                            )
+                                        except Exception as notify_err:
+                                            print(f"[Teams] Screening notification failed: {notify_err}")
                                 else:
                                     print(f"No matching job found for position: {position}, skipping screening")
                                 

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useFormatDate } from '../hooks/useFormatDate';
 import {
   Search,
   FileText,
@@ -123,6 +124,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function ScreeningResults() {
+  const formatDate = useFormatDate();
   const [applicants, setApplicants] = useState<ScreenedApplicant[]>([]);
   const [jobs, setJobs] = useState<JobOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,6 +150,12 @@ export function ScreeningResults() {
         .from('scoring_settings').select('*').order('created_at', { ascending: false }).limit(1).maybeSingle();
       const qualifiedThreshold = settingsData?.qualified_threshold ?? 78;
       const reviewThreshold = settingsData?.review_threshold ?? 65;
+
+      // Load auto-action thresholds from admin settings
+      const { data: adminSettingsData } = await adminClient
+        .from('admin_users').select('auto_reject_threshold, auto_shortlist_threshold').limit(1).maybeSingle();
+      const autoRejectThreshold: number = adminSettingsData?.auto_reject_threshold ?? 0;
+      const autoShortlistThreshold: number = adminSettingsData?.auto_shortlist_threshold ?? 0;
 
       const { data: applicantsData, error: applicantsError } = await adminClient
         .from('applicants').select('*').order('created_at', { ascending: false });
@@ -393,6 +401,44 @@ export function ScreeningResults() {
       });
 
       setApplicants(screenedApplicants);
+
+      // Apply auto-reject / auto-shortlist thresholds
+      // Only act on applicants that haven't been manually decided yet
+      const DECIDED_STATUSES = new Set(['shortlisted', 'rejected', 'hired', 'final_interview']);
+      const toAutoReject: string[] = [];
+      const toAutoShortlist: string[] = [];
+
+      if (autoRejectThreshold > 0 || autoShortlistThreshold > 0) {
+        for (const a of screenedApplicants) {
+          if (DECIDED_STATUSES.has(a.status ?? '')) continue;
+          const score = a.overall_score ?? 0;
+          if (score === 0) continue; // not scored yet
+          if (autoRejectThreshold > 0 && score < autoRejectThreshold) {
+            toAutoReject.push(a.id);
+          } else if (autoShortlistThreshold > 0 && score >= autoShortlistThreshold) {
+            toAutoShortlist.push(a.id);
+          }
+        }
+
+        if (toAutoReject.length > 0) {
+          await adminClient.from('applicants').update({ status: 'rejected' }).in('id', toAutoReject);
+        }
+        if (toAutoShortlist.length > 0) {
+          await adminClient.from('applicants').update({ status: 'shortlisted' }).in('id', toAutoShortlist);
+        }
+
+        // Reflect auto-actions in local state
+        if (toAutoReject.length > 0 || toAutoShortlist.length > 0) {
+          const rejectSet = new Set(toAutoReject);
+          const shortlistSet = new Set(toAutoShortlist);
+          setApplicants(prev => prev.map(a => {
+            if (rejectSet.has(a.id)) return { ...a, status: 'rejected' };
+            if (shortlistSet.has(a.id)) return { ...a, status: 'shortlisted' };
+            return a;
+          }));
+          console.log(`[AutoAction] Rejected: ${toAutoReject.length}, Shortlisted: ${toAutoShortlist.length}`);
+        }
+      }
 
       const positionCounts = applicantsData.reduce((acc, a) => {
         if (a.position) acc[a.position] = (acc[a.position] || 0) + 1;
@@ -689,7 +735,7 @@ export function ScreeningResults() {
                     <td className="px-4 py-5">
                       <div className="flex items-center gap-2 text-sm text-gray-500">
                         <Calendar className="w-4 h-4" />
-                        {new Date(applicant.screened_at || applicant.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {formatDate(applicant.screened_at || applicant.created_at)}
                       </div>
                     </td>
                   </tr>

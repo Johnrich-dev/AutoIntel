@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useFormatDate } from '../hooks/useFormatDate';
 import {
   X, CheckCircle, XCircle, TrendingUp, Star, Briefcase,
   AlertCircle, ChevronLeft, ChevronRight, FileText, Download, Clock,
@@ -82,6 +83,7 @@ interface ScreeningDetailModalProps {
 export function ScreeningDetailModal({
   applicant, onClose, onUpdateStatus, onPrev, onNext, currentIndex, totalCount,
 }: ScreeningDetailModalProps) {
+  const formatDate = useFormatDate();
   const [isProcessing, setIsProcessing] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
@@ -171,8 +173,8 @@ export function ScreeningDetailModal({
   const scoreLabelColor = (s: number) => s >= 78 ? 'text-green-600' : s >= 65 ? 'text-yellow-600' : 'text-red-500';
 
   const screenedDate = applicant.screened_at
-    ? new Date(applicant.screened_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-    : new Date(applicant.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    ? formatDate(applicant.screened_at)
+    : formatDate(applicant.created_at);
 
   return (
     <>

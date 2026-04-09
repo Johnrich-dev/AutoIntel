@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useFormatDate } from '../hooks/useFormatDate';
 import {
   Search,
   Award,
@@ -474,7 +475,7 @@ function DecisionModal({
                 <p className="text-gray-500 mb-0.5">Interview Date</p>
                 <p className="font-medium text-gray-800 flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                  {new Date(record.interview_date).toLocaleDateString()}
+                  {formatDate(record.interview_date)}
                 </p>
               </div>
             )}
@@ -492,7 +493,7 @@ function DecisionModal({
               <div>
                 <p className="text-gray-500 mb-0.5">Decision Date</p>
                 <p className="font-medium text-gray-800">
-                  {new Date(record.decision_date).toLocaleDateString()}
+                  {formatDate(record.decision_date)}
                 </p>
               </div>
             )}
@@ -555,6 +556,7 @@ function DecisionModal({
 // ============================================================================
 
 export function FinalDecisions() {
+  const formatDate = useFormatDate();
   const [records, setRecords] = useState<FinalDecisionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -675,10 +677,10 @@ export function FinalDecisions() {
     const headers = ['Name', 'Email', 'Position', 'Department', 'Interview Date', 'Interviewer', 'Decision', 'Decision Date', 'Communication Status'];
     const rows = filtered.map((r) => [
       r.name, r.email, r.position, r.department || '',
-      r.interview_date ? new Date(r.interview_date).toLocaleDateString() : '',
+      r.interview_date ? formatDate(r.interview_date) : '',
       r.interviewer_name || '',
       r.status,
-      r.decision_date ? new Date(r.decision_date).toLocaleDateString() : '',
+      r.decision_date ? formatDate(r.decision_date) : '',
       r.status === 'hired' ? (r.offer_email_sent ? 'Offer Sent' : 'Offer Not Sent') : (r.rejection_email_sent ? 'Rejection Sent' : 'Rejection Not Sent'),
     ]);
     const csv = [headers, ...rows].map((row) => row.map((v) => `"${v}"`).join(',')).join('\n');
@@ -811,13 +813,13 @@ export function FinalDecisions() {
                       <td className="px-4 py-3 text-gray-700">{record.position}</td>
                       <td className="px-4 py-3 text-gray-500">{record.department || '—'}</td>
                       <td className="px-4 py-3 text-gray-500">
-                        {record.interview_date ? new Date(record.interview_date).toLocaleDateString() : '—'}
+                        {record.interview_date ? formatDate(record.interview_date) : '—'}
                       </td>
                       <td className="px-4 py-3 text-gray-500">{record.interviewer_name || '—'}</td>
                       <td className="px-4 py-3"><DecisionBadge status={record.status} /></td>
                       <td className="px-4 py-3"><CommStatusBadge record={record} /></td>
                       <td className="px-4 py-3 text-gray-500">
-                        {record.decision_date ? new Date(record.decision_date).toLocaleDateString() : '—'}
+                        {record.decision_date ? formatDate(record.decision_date) : '—'}
                       </td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         {record.status === 'hired' ? (

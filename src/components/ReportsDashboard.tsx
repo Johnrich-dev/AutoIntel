@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useFormatDate } from '../hooks/useFormatDate';
 import {
   BarChart3,
   TrendingUp,
@@ -159,6 +160,7 @@ function BarRow({
 // ============================================================================
 
 export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
+  const formatDate = useFormatDate();
   const [dateRange, setDateRange] = useState<DateRange>('30d');
   const [selectedReport, setSelectedReport] = useState<ReportTab>('overview');
 
@@ -382,7 +384,7 @@ export function ReportsDashboard({ applicants }: ReportsDashboardProps) {
         getResumeScore(a) ?? '',
         getVideoScore(a.video) ?? '',
         getWorkStyleScore(a.test) ?? '',
-        new Date(a.created_at).toLocaleDateString(),
+        formatDate(a.created_at),
       ]),
     ];
     const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useFormatDate } from '../hooks/useFormatDate';
 import {
   Search,
   ChevronDown,
@@ -309,6 +310,7 @@ function RejectConfirmDialog({ name, onConfirm, onCancel }: { name: string; onCo
 }
 
 function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onScheduleInterview }: QuickProfilePanelProps) {
+  const formatDate = useFormatDate();
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [showFinalInterviewConfirm, setShowFinalInterviewConfirm] = useState(false);
 
@@ -458,7 +460,7 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onSched
               )}
               <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                 <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <span className="text-sm text-gray-700">Applied {new Date(candidate.created_at).toLocaleDateString()}</span>
+                <span className="text-sm text-gray-700">Applied {formatDate(candidate.created_at)}</span>
               </div>
               <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                 <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
@@ -592,6 +594,7 @@ interface ShortlistedCandidatesProps {
 }
 
 export function ShortlistedCandidates({ applicants: externalApplicants, onNavigateToInterview, onApplicantStatusChanged }: ShortlistedCandidatesProps) {
+  const formatDate = useFormatDate();
   const [applicants, setApplicants] = useState<ApplicantWithDetails[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField>('overall');
@@ -794,7 +797,7 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
     const headers = ['Name', 'Email', 'Position', 'Education', 'Resume Score', 'Video Score', 'Profile Fit', 'Overall', 'Status', 'Applied', 'Days in Stage'];
     const rows = data.map(a => {
       const edu = getParsedResumeData(a.resume)?.education?.[0]?.course_or_strand || '';
-      return [a.name, a.email, a.position, edu, a.resumeScore, a.videoScore, a.profileFit, a.overall, a.status, new Date(a.created_at).toLocaleDateString(), getDaysInStage(a)];
+      return [a.name, a.email, a.position, edu, a.resumeScore, a.videoScore, a.profileFit, a.overall, a.status, formatDate(a.created_at), getDaysInStage(a)];
     });
     downloadFile([headers.join(','), ...rows.map(r => r.join(','))].join('\n'), 'shortlisted-candidates.csv', 'text/csv');
   };
@@ -802,15 +805,15 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
   const exportToExcel = (data: ApplicantWithDetails[]) => {
     const html = `<table><tr><th>Name</th><th>Email</th><th>Position</th><th>Education</th><th>Resume</th><th>Video</th><th>Profile Fit</th><th>Overall</th><th>Status</th><th>Applied</th><th>Days in Stage</th></tr>${data.map(a => {
       const edu = getParsedResumeData(a.resume)?.education?.[0]?.course_or_strand || '';
-      return `<tr><td>${a.name}</td><td>${a.email}</td><td>${a.position}</td><td>${edu}</td><td>${a.resumeScore}</td><td>${a.videoScore}</td><td>${a.profileFit}</td><td>${a.overall}</td><td>${a.status}</td><td>${new Date(a.created_at).toLocaleDateString()}</td><td>${getDaysInStage(a)}</td></tr>`;
+      return `<tr><td>${a.name}</td><td>${a.email}</td><td>${a.position}</td><td>${edu}</td><td>${a.resumeScore}</td><td>${a.videoScore}</td><td>${a.profileFit}</td><td>${a.overall}</td><td>${a.status}</td><td>${formatDate(a.created_at)}</td><td>${getDaysInStage(a)}</td></tr>`;
     }).join('')}</table>`;
     downloadFile(html, 'shortlisted-candidates.xls', 'application/vnd.ms-excel');
   };
 
   const exportToPDF = (data: ApplicantWithDetails[]) => {
-    const html = `<!DOCTYPE html><html><head><title>Shortlisted Candidates</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}th{background:#f3f4f6}</style></head><body><h1>Shortlisted Candidates Report</h1><p>Generated on ${new Date().toLocaleDateString()}</p><table><tr><th>Name</th><th>Position</th><th>Education</th><th>Overall</th><th>Status</th><th>Applied</th><th>Days in Stage</th></tr>${data.map(a => {
+    const html = `<!DOCTYPE html><html><head><title>Shortlisted Candidates</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}th{background:#f3f4f6}</style></head><body><h1>Shortlisted Candidates Report</h1><p>Generated on ${formatDate(new Date())}</p><table><tr><th>Name</th><th>Position</th><th>Education</th><th>Overall</th><th>Status</th><th>Applied</th><th>Days in Stage</th></tr>${data.map(a => {
       const edu = getParsedResumeData(a.resume)?.education?.[0]?.course_or_strand || '-';
-      return `<tr><td>${a.name}</td><td>${a.position}</td><td>${edu}</td><td>${a.overall}</td><td>${a.status}</td><td>${new Date(a.created_at).toLocaleDateString()}</td><td>${getDaysInStage(a)}</td></tr>`;
+      return `<tr><td>${a.name}</td><td>${a.position}</td><td>${edu}</td><td>${a.overall}</td><td>${a.status}</td><td>${formatDate(a.created_at)}</td><td>${getDaysInStage(a)}</td></tr>`;
     }).join('')}</table></body></html>`;
     const w = window.open('', '_blank');
     if (w) { w.document.write(html); w.document.close(); w.print(); }
@@ -1043,7 +1046,7 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
                     </div>
                   </td>
                   <td className="px-4 py-4 text-center">
-                    <div className="text-sm text-gray-600">{new Date(applicant.created_at).toLocaleDateString()}</div>
+                    <div className="text-sm text-gray-600">{formatDate(applicant.created_at)}</div>
                     <div className="text-xs text-gray-400 flex items-center justify-center gap-1 mt-0.5">
                       <Clock className="w-3 h-3" />
                       {getDaysInStage(applicant)}d in stage

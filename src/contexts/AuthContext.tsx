@@ -1,5 +1,5 @@
-import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
-import { Applicant, getSupabaseClient, supabase } from '../lib/supabase';
+import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { Applicant, getSupabaseClient, getSupabaseAdminClient, supabase } from '../lib/supabase';
 
 interface AdminSession {
   access_token: string;
@@ -48,6 +48,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   );
   const [loading, setLoading] = useState(true);
+
+  // ── Idle session timeout ──────────────────────────────────────────────────
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearIdleTimer = () => {
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+  };
+
+  const resetIdleTimer = (timeoutMinutes: number) => {
+    clearIdleTimer();
+    if (timeoutMinutes <= 0) return;
+    idleTimer.current = setTimeout(() => {
+      // Auto-logout on idle
+      setAdminSession(null);
+      setAccessToken(null);
+      localStorage.removeItem('admin_session');
+      supabase.auth.signOut();
+    }, timeoutMinutes * 60 * 1000);
+  };
+
+  // Start/restart idle timer whenever admin session is active
+  useEffect(() => {
+    if (!adminSession) { clearIdleTimer(); return; }
+
+    const loadTimeout = async () => {
+      try {
+        const { data } = await getSupabaseAdminClient()
+          .from('admin_users')
+          .select('session_timeout')
+          .eq('id', adminSession.user_id)
+          .maybeSingle();
+        const minutes = parseInt(data?.session_timeout || '30', 10);
+        resetIdleTimer(minutes);
+
+        const events = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll'];
+        const handler = () => resetIdleTimer(minutes);
+        events.forEach(e => window.addEventListener(e, handler, { passive: true }));
+
+        // Listen for settings changes (fired by AdminSettings on save)
+        const onSettingsChange = (e: Event) => {
+          const newMinutes = parseInt((e as CustomEvent).detail?.sessionTimeout || '30', 10);
+          resetIdleTimer(newMinutes);
+          events.forEach(ev => window.removeEventListener(ev, handler));
+          events.forEach(ev => window.addEventListener(ev, () => resetIdleTimer(newMinutes), { passive: true }));
+        };
+        window.addEventListener('autointel:settings-saved', onSettingsChange);
+
+        return () => {
+          events.forEach(e => window.removeEventListener(e, handler));
+          window.removeEventListener('autointel:settings-saved', onSettingsChange);
+          clearIdleTimer();
+        };
+      } catch {
+        resetIdleTimer(30); // fallback
+      }
+    };
+
+    let cleanup: (() => void) | undefined;
+    loadTimeout().then(fn => { cleanup = fn; });
+    return () => { cleanup?.(); };
+  }, [adminSession?.user_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (accessToken) {
@@ -193,6 +254,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (adminUser) {
         console.log('Admin user found!', adminUser);
+
+        // ── Password expiry check ───────────────────────────────────────────
+        try {
+          const { data: secData } = await getSupabaseAdminClient()
+            .from('admin_users')
+            .select('password_expiry, last_login_at')
+            .eq('id', adminUser.id)
+            .maybeSingle();
+
+          if (secData) {
+            const expiry = secData.password_expiry;
+            const lastLogin = secData.last_login_at;
+
+            if (expiry && expiry !== 'never' && lastLogin) {
+              const expiryDays = parseInt(expiry, 10);
+              const daysSinceLogin = Math.floor(
+                (Date.now() - new Date(lastLogin).getTime()) / (1000 * 60 * 60 * 24)
+              );
+              if (daysSinceLogin >= expiryDays) {
+                setLoading(false);
+                return {
+                  success: false,
+                  error: `Your password expired ${daysSinceLogin} days ago (policy: every ${expiryDays} days). Please contact your system administrator to reset it.`,
+                };
+              }
+            }
+          }
+        } catch (secErr) {
+          console.warn('Could not check password expiry:', secErr);
+        }
+
+        // ── Update last_login_at ────────────────────────────────────────────
+        try {
+          await getSupabaseAdminClient()
+            .from('admin_users')
+            .update({ last_login_at: new Date().toISOString() })
+            .eq('id', adminUser.id);
+        } catch (e) {
+          console.warn('Could not update last_login_at:', e);
+        }
+
         const adminSession: AdminSession = {
           access_token: `admin_${adminUser.id}_${Date.now()}`,
           expires_at: Math.floor(Date.now() / 1000) + 86400, // 24 hours

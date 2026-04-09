@@ -10,9 +10,10 @@ import { ShortlistedCandidates } from './ShortlistedCandidates';
 import { NeedsReview } from './NeedsReview';
 import { InterviewScheduling } from './InterviewScheduling';
 import { FinalDecisions } from './FinalDecisions';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Applicant, PersonalityTest, Resume, ResumeParsedData, getSupabaseAdminClient, VideoAssessment } from '../lib/supabase';
+import { useSettings } from '../contexts/SettingsContext';
+import { Applicant, PersonalityTest, Resume, ResumeParsedData, getSupabaseAdminClient, VideoAssessment, supabase } from '../lib/supabase';
 
 interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
@@ -102,12 +103,14 @@ function Toast({ message, type, onClose }: { message: string; type: 'success' | 
 
 export function AdminDashboard() {
   const { adminLogout } = useAuth();
+  const { settings } = useSettings();
+  const notifiedApplicants = useRef<Set<string>>(new Set());
   const [applicants, setApplicants] = useState<ApplicantWithDetails[]>([]);
   const [selectedApplicant, setSelectedApplicant] = useState<ApplicantWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => settings.sidebarCollapsed);
   const [activeMenu, setActiveMenu] = useState<MenuId>('dashboard');
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(['job-postings', 'recruitment-pipeline']));
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -119,6 +122,7 @@ export function AdminDashboard() {
   const [navBadges, setNavBadges] = useState<Record<string, number>>({});
   const [pendingInterviewApplicantId, setPendingInterviewApplicantId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
+  const [sessionWarning, setSessionWarning] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
@@ -129,6 +133,74 @@ export function AdminDashboard() {
     loadApplicants();
     loadNavBadges();
   }, []);
+
+  // Sync sidebar collapsed state when settings change (e.g. after saving in AdminSettings)
+  useEffect(() => {
+    setSidebarCollapsed(settings.sidebarCollapsed);
+  }, [settings.sidebarCollapsed]);
+
+  // Browser notification subscription — fires when a new applicant row is inserted
+  useEffect(() => {
+    if (!settings.browserNotifications) return;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+    const channel = supabase
+      .channel('admin-new-applicants')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'applicants' },
+        (payload) => {
+          const id = payload.new?.id;
+          if (!id || notifiedApplicants.current.has(id)) return;
+          notifiedApplicants.current.add(id);
+
+          const name = payload.new?.name || 'New applicant';
+          const position = payload.new?.position || 'Unknown position';
+
+          new Notification('New Applicant — AutoIntel', {
+            body: `${name} applied for ${position}`,
+            icon: '/favicon.ico',
+          });
+
+          // Refresh nav badges
+          loadNavBadges();
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [settings.browserNotifications]);
+
+  // Session expiry warning — show banner 2 minutes before idle timeout
+  useEffect(() => {
+    if (!settings.sessionTimeout) return;
+    const totalMs = parseInt(settings.sessionTimeout, 10) * 60 * 1000;
+    const warnMs = totalMs - 2 * 60 * 1000; // warn 2 min before
+    if (warnMs <= 0) return;
+
+    let warnTimer: ReturnType<typeof setTimeout>;
+    let dismissTimer: ReturnType<typeof setTimeout>;
+
+    const schedule = () => {
+      clearTimeout(warnTimer);
+      clearTimeout(dismissTimer);
+      warnTimer = setTimeout(() => {
+        setSessionWarning(true);
+        dismissTimer = setTimeout(() => setSessionWarning(false), 2 * 60 * 1000);
+      }, warnMs);
+    };
+
+    schedule();
+    const events = ['mousemove', 'keydown', 'mousedown', 'touchstart'];
+    const reset = () => { setSessionWarning(false); schedule(); };
+    events.forEach(e => window.addEventListener(e, reset, { passive: true }));
+
+    return () => {
+      clearTimeout(warnTimer);
+      clearTimeout(dismissTimer);
+      events.forEach(e => window.removeEventListener(e, reset));
+    };
+  }, [settings.sessionTimeout]);
 
   const loadNavBadges = async () => {
     try {
@@ -523,7 +595,7 @@ export function AdminDashboard() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 overflow-y-auto bg-gray-50 p-4 lg:p-4 space-y-6 min-h-screen">
+        <div className={`flex-1 overflow-y-auto bg-gray-50 min-h-screen ${settings.compactView ? 'p-2 lg:p-3 space-y-3' : 'p-4 lg:p-4 space-y-6'}`}>
           {activeMenu === 'dashboard' && <DashboardLanding applicants={applicants} onMenuChange={setActiveMenu} />}
           
           {/* Job Management */}
@@ -1209,6 +1281,16 @@ export function AdminDashboard() {
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {sessionWarning && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 bg-amber-500 text-white px-5 py-3 rounded-xl shadow-xl text-sm font-medium">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          Your session will expire in 2 minutes due to inactivity. Move your mouse to stay logged in.
+          <button onClick={() => setSessionWarning(false)} className="ml-2 opacity-70 hover:opacity-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

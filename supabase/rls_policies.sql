@@ -48,6 +48,13 @@ CREATE POLICY "Allow anon read for login" ON public.admin_users
   FOR SELECT TO authenticated
   USING (true);
 
+-- Service role bypasses RLS, so admin settings updates use getSupabaseAdminClient()
+-- This policy documents that intent and covers any future authenticated update paths.
+CREATE POLICY "admin_users_service_update" ON public.admin_users
+  FOR UPDATE TO authenticated
+  USING (true)
+  WITH CHECK (true);
+
 -- ============================================
 -- applicants
 -- ============================================

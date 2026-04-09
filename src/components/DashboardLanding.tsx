@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Users, FileText, Video, TrendingUp, CheckCircle, AlertCircle, XCircle, Calendar, Search, UserPlus } from 'lucide-react';
 import { Applicant, Resume, VideoAssessment, PersonalityTest, getSupabaseAdminClient } from '../lib/supabase';
 import { FilterDropdown } from './FilterDropdown';
+import { useFormatDate } from '../hooks/useFormatDate';
 
 interface ApplicantWithDetails extends Applicant {
   resume?: Resume;
@@ -62,6 +63,7 @@ function resolveScreeningStatus(
 }
 
 export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingProps) {
+  const formatDate = useFormatDate();
   const [selectedJob, setSelectedJob] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -196,7 +198,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
     if (diffInHours < 24) return `${diffInHours}h ago`;
     const diffInDays = Math.floor(diffInHours / 24);
     if (diffInDays < 7) return `${diffInDays}d ago`;
-    return date.toLocaleDateString();
+    return formatDate(dateString);
   };
 
   if (!applicants.length && loadingStats) {
@@ -243,7 +245,7 @@ export function DashboardLanding({ applicants, onMenuChange }: DashboardLandingP
               />
             <div className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-600">
               <Calendar className="w-4 h-4" />
-              <span>{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+              <span>{formatDate(new Date())}</span>
             </div>
           </div>
         </div>

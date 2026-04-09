@@ -29,6 +29,13 @@ except ImportError as e:
     print("Make sure job_alignment.py is in the backend/ folder")
     sys.exit(1)
 
+# Import Teams notifications (optional — won't crash if missing)
+try:
+    from teams_notify import notify_screening_result, notify_assessment_complete
+except ImportError:
+    notify_screening_result = None
+    notify_assessment_complete = None
+
 # Initialize Flask app
 app = Flask(__name__)
 
@@ -805,7 +812,20 @@ def grant_access():
             count_breakdown=count_breakdown,
             weights_used=weights_used
         )
-        
+
+        # Notify Teams channel — applicant passed screening
+        if notify_screening_result:
+            try:
+                notify_screening_result(
+                    applicant_name=applicant_name,
+                    applicant_email=applicant_email,
+                    position=position,
+                    score=overall_score,
+                    decision="passed",
+                )
+            except Exception as notify_err:
+                print(f"[Teams] Grant access notification failed: {notify_err}")
+
         return jsonify({
             "success": True,
             "message": "Access granted and email sent successfully",
@@ -938,7 +958,20 @@ def reject_applicant():
             count_breakdown=count_breakdown,
             weights_used=weights_used
         )
-        
+
+        # Notify Teams channel — applicant rejected
+        if notify_screening_result:
+            try:
+                notify_screening_result(
+                    applicant_name=applicant_name,
+                    applicant_email=applicant_email,
+                    position=position,
+                    score=overall_score,
+                    decision="failed",
+                )
+            except Exception as notify_err:
+                print(f"[Teams] Reject notification failed: {notify_err}")
+
         return jsonify({
             "success": True,
             "message": "Applicant rejected and email sent successfully",
@@ -1380,6 +1413,50 @@ def detect_role():
             "error": str(e),
             "status": "error"
         }), 500
+
+
+@app.route('/api/notify-assessment-complete', methods=['POST', 'OPTIONS'])
+def notify_assessment_complete_endpoint():
+    """
+    Called by the frontend when an applicant completes all assessments.
+    Sends a Teams notification to the configured webhook.
+
+    Request Body:
+    {
+        "applicant_name": "string",
+        "applicant_email": "string",
+        "position": "string",
+        "completed": ["Video Assessment", "Personality Test"]
+    }
+    """
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    if not notify_assessment_complete:
+        return jsonify({"success": False, "message": "Teams notifications not available"}), 200
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        applicant_name = data.get('applicant_name', 'Unknown')
+        applicant_email = data.get('applicant_email', '')
+        position = data.get('position', 'Unknown Position')
+        completed = data.get('completed', ['Video Assessment', 'Personality Test'])
+
+        # notify_assessment_complete already checks the toggle internally
+        sent = notify_assessment_complete(
+            applicant_name=applicant_name,
+            applicant_email=applicant_email,
+            position=position,
+            completed=completed,
+        )
+
+        return jsonify({"success": sent, "message": "Notification sent" if sent else "No webhook configured"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e), "status": "error"}), 500
 
 
 @app.errorhandler(404)
@@ -1878,6 +1955,59 @@ def send_rejection_email_endpoint():
         if sent:
             return jsonify({"success": True, "message": f"Rejection email sent to {applicant_email}"}), 200
         return jsonify({"success": False, "error": "Failed to send rejection email"}), 500
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/notify-assessment', methods=['POST'])
+def notify_assessment():
+    """
+    Fire a Teams notification when an applicant completes an assessment.
+
+    Request Body:
+    {
+        "applicant_id": "string (required)",
+        "completed": ["Video Assessment", "Personality Test"]  // list of completed items
+    }
+    """
+    if notify_assessment_complete is None:
+        return jsonify({"success": False, "error": "Teams notify module not available"}), 500
+
+    try:
+        from supabase import create_client
+        from dotenv import load_dotenv
+        load_dotenv()
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No JSON data provided"}), 400
+
+        applicant_id = data.get('applicant_id')
+        completed = data.get('completed', [])
+
+        if not applicant_id:
+            return jsonify({"success": False, "error": "applicant_id is required"}), 400
+
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if not supabase_url or not supabase_key:
+            return jsonify({"success": False, "error": "Supabase configuration missing"}), 500
+
+        supabase = create_client(supabase_url, supabase_key)
+        result = supabase.table("applicants").select("name, email, position").eq("id", applicant_id).maybeSingle().execute()
+        if not result.data:
+            return jsonify({"success": False, "error": "Applicant not found"}), 404
+
+        applicant = result.data
+        sent = notify_assessment_complete(
+            applicant_name=applicant["name"],
+            applicant_email=applicant["email"],
+            position=applicant["position"],
+            completed=completed,
+        )
+
+        return jsonify({"success": sent}), 200
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

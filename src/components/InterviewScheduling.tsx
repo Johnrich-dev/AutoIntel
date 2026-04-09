@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useFormatDate } from '../hooks/useFormatDate';
 import {
   Search,
   ChevronLeft,
@@ -527,6 +528,7 @@ function ViewDetailsModal({
   onHire?: () => void;
   onReject?: () => void;
 }) {
+  const formatDate = useFormatDate();
   if (!isOpen || !interview) return null;
 
   return (
@@ -564,12 +566,7 @@ function ViewDetailsModal({
               <div className="flex items-center gap-3">
                 <CalendarIcon className="w-4 h-4 text-gray-400" />
                 <span className="text-sm text-gray-700">
-                  {interview.interviewDate ? new Date(interview.interviewDate).toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  }) : 'Not scheduled'}
+                  {interview.interviewDate ? formatDate(interview.interviewDate) : 'Not scheduled'}
                 </span>
               </div>
 
@@ -718,6 +715,7 @@ function CalendarViewComponent({
   view: CalendarView;
   onInterviewClick: (interview: ScheduledInterview) => void;
 }) {
+  const formatDate = useFormatDate();
   const getDaysInWeek = (date: Date) => {
     const start = new Date(date);
     start.setDate(start.getDate() - start.getDay());
@@ -759,8 +757,8 @@ function CalendarViewComponent({
           <h3 className="font-medium text-gray-900">
             {view === 'week' ? 'Week View' : 'Day View'} -{' '}
             {days.length === 1
-              ? days[0].toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-              : `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${days[days.length - 1].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+              ? formatDate(days[0])
+              : `${formatDate(days[0])} - ${formatDate(days[days.length - 1])}`}
           </h3>
         </div>
       </div>
@@ -841,6 +839,7 @@ function CalendarViewComponent({
 // ============================================================================
 
 export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsumed }: { preSelectedApplicantId?: string | null; onPreSelectedConsumed?: () => void }) {
+  const formatDate = useFormatDate();
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [calendarView, setCalendarView] = useState<CalendarView>('week');
   const [interviews, setInterviews] = useState<ScheduledInterview[]>([]);
@@ -1461,11 +1460,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm text-gray-700">
-                          {interview.interviewDate ? new Date(interview.interviewDate).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric'
-                          }) : '-'}
+                          {interview.interviewDate ? formatDate(interview.interviewDate) : '-'}
                         </span>
                       </td>
                       <td className="px-4 py-3">
