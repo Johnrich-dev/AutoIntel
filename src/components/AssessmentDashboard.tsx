@@ -18,8 +18,6 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  console.log('Applicant photo_url:', applicant?.photo_url);
-
   useEffect(() => {
     loadAssessmentStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps

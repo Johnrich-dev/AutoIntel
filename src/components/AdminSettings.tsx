@@ -130,10 +130,6 @@ export function AdminSettings() {
     try {
       const adminClient = getSupabaseAdminClient();
 
-      // Debug: confirm what we're targeting
-      console.log('[Settings] Saving for user_id:', adminSession.user_id);
-      console.log('[Settings] language:', settings.language, 'timezone:', settings.timezone);
-
       const { error, count } = await adminClient
         .from('admin_users')
         .update({
@@ -160,8 +156,6 @@ export function AdminSettings() {
         .eq('id', adminSession.user_id)
         .select('id');
 
-      console.log('[Settings] Update result — error:', error, 'count:', count);
-
       if (error) {
         setSaveError(`DB error: ${error.message}`);
         return;
@@ -186,7 +180,6 @@ export function AdminSettings() {
       if (settings.autoArchive && settings.dataRetention !== 'forever') {
         try {
           const archived = await archiveOldApplicants();
-          if (archived > 0) console.log(`[Settings] Auto-archived ${archived} applicant(s).`);
         } catch (archiveErr) {
           console.warn('[Settings] Auto-archive failed:', archiveErr);
         }

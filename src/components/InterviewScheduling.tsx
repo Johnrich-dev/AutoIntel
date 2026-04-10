@@ -1156,8 +1156,10 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
           };
           await adminClient.from('scheduled_interviews').insert(insertData);
         } catch (dbError) {
-          console.log('Could not save to scheduled_interviews table:', dbError);
+          // non-critical
         }
+
+        // update
 
         setInterviews((prev) => [...prev, newInterview]);
 
@@ -1190,7 +1192,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
         .update({ status: 'cancelled', updated_at: new Date().toISOString() })
         .eq('id', interviewId);
     } catch (dbError) {
-      console.log('Could not update scheduled_interviews table:', dbError);
+      // non-critical
     }
     setInterviews((prev) =>
       prev.map((interview) =>

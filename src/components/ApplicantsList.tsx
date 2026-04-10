@@ -208,8 +208,6 @@ export function ApplicantsList() {
       const { data: applicantsData, error: applicantsError } = await query;
 
       if (applicantsError) throw applicantsError;
-      
-      console.log('Applicants query result:', applicantsData, applicantsError);
 
       // Combine applicants with their resumes
 

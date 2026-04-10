@@ -152,7 +152,6 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
             const scoringResult = await scoringResponse.json();
             
             if (scoringResult.status === 'success') {
-              // Update the assessment with scoring results
               await client
                 .from('work_style_assessments')
                 .update({
@@ -168,10 +167,7 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
                   status: 'completed',
                 })
                 .eq('id', assessmentId);
-
-              console.log('Scoring completed:', scoringResult);
-            } else {
-              console.error('Scoring API returned error:', scoringResult.error);
+          console.error('Scoring API returned error:', scoringResult.error);
             }
           } else {
             const errorText = await scoringResponse.text();

@@ -340,8 +340,6 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
       const fileExt: string | undefined = videoFile.name.split('.').pop();
       const fileName: string = `${applicant.id}-${Date.now()}.${fileExt}`;
       
-      console.log('Uploading video to storage:', fileName, 'Size:', videoFile.size, 'bytes');
-      
       const { data: uploadData, error: uploadError } = await adminClient.storage
         .from('applicant-videos')
         .upload(fileName, videoFile, {
@@ -350,20 +348,13 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
         });
 
       if (uploadError) {
-        console.error('Storage upload error:', uploadError);
         throw new Error(`Upload failed: ${uploadError.message}`);
       }
 
-      console.log('Video uploaded successfully:', uploadData);
-
-      // Get public URL
       const { data: { publicUrl } } = adminClient.storage
         .from('applicant-videos')
         .getPublicUrl(fileName);
 
-      console.log('Public URL generated:', publicUrl);
-
-      // Use admin client to bypass RLS for database operations
       const { data: assessment, error: selectError } = await adminClient
         .from('video_assessments')
         .select('*')
@@ -373,8 +364,6 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
       if (selectError) {
         console.error('Error checking existing assessment:', selectError);
       }
-
-      console.log('Existing assessment:', assessment);
 
       let assessmentId: string | undefined;
       
@@ -390,10 +379,8 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
           .eq('id', assessment.id);
 
         if (updateError) {
-          console.error('Update error:', updateError);
           throw new Error(`Failed to update record: ${updateError.message}`);
         }
-        console.log('Assessment record updated successfully');
         assessmentId = assessment.id;
       } else {
         const { data: newAssessment, error: insertError } = await adminClient.from('video_assessments').insert({
@@ -405,36 +392,24 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
         }).select().single();
 
         if (insertError) {
-          console.error('Insert error:', insertError);
           throw new Error(`Failed to create record: ${insertError.message}`);
         }
-        console.log('Assessment record created successfully');
         assessmentId = newAssessment?.id;
       }
 
       // Trigger automatic transcription
       if (assessmentId) {
-        console.log('Triggering automatic transcription for assessment:', assessmentId);
-        
-        // Call the Flask API to trigger transcription
         try {
           const response = await fetch(`${API_BASE}/api/trigger-transcription`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              assessment_id: assessmentId,
-              language: 'en'
-            })
+            body: JSON.stringify({ assessment_id: assessmentId, language: 'en' })
           });
-          
-          if (response.ok) {
-            console.log('Transcription triggered successfully');
-          } else {
+          if (!response.ok) {
             console.warn('Transcription trigger returned non-ok status:', response.status);
           }
         } catch {
-          // API might not be running - that's ok, background worker will pick it up
-          console.log('Transcription API not available, background worker will process it automatically');
+          // background worker will pick it up
         }
       }
 

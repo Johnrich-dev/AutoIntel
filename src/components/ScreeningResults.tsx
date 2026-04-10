@@ -434,7 +434,7 @@ export function ScreeningResults() {
             if (shortlistSet.has(a.id)) return { ...a, status: 'shortlisted' };
             return a;
           }));
-          console.log(`[AutoAction] Rejected: ${toAutoReject.length}, Shortlisted: ${toAutoShortlist.length}`);
+          console.error('[AutoAction] Rejected:', toAutoReject.length, 'Shortlisted:', toAutoShortlist.length);
         }
       }
 

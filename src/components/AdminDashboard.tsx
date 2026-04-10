@@ -1173,8 +1173,6 @@ export function AdminDashboard() {
                           {selectedApplicant.video?.video_url && (
                             <button
                               onClick={() => {
-                                // Trigger transcription processing
-                                console.log('Trigger transcription for:', selectedApplicant.id);
                                 showToast('Transcription processing has been queued.', 'success');
                               }}
                               className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"

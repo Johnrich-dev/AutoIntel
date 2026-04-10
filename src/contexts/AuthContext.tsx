@@ -173,7 +173,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data) {
         const expiresAt = new Date(data.access_expires_at);
-        console.log('Loaded applicant data:', data);
         if (expiresAt > new Date()) {
           setApplicant(data);
         } else {
@@ -193,7 +192,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (token: string, email: string): Promise<boolean> => {
     setLoading(true);
-    console.log('[Login] Attempting login with token:', token, 'email:', email);
     try {
       const client = getSupabaseClient(token);
       const { data, error } = await client
@@ -203,25 +201,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('email', email)
         .maybeSingle();
 
-      console.log('[Login] Query result - data:', data, 'error:', error);
-
       if (error) throw error;
 
       if (data) {
         const expiresAt = new Date(data.access_expires_at);
-        console.log('Token expires at:', expiresAt, 'Current time:', new Date());
         if (expiresAt > new Date()) {
           setApplicant(data);
           setAccessToken(token);
           localStorage.setItem('sentinel_access_token', token);
           setLoading(false);
-          console.log('Login successful!');
           return true;
-        } else {
-          console.log('Token has expired');
         }
-      } else {
-        console.log('No applicant found with this email and token');
       }
 
       setLoading(false);
@@ -235,52 +225,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const adminLogin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setLoading(true);
-    console.log('=== ADMIN LOGIN START ===');
-    console.log('Email:', email);
-    console.log('Password:', password);
     
     try {
-      // First try the RPC function
-      console.log('Trying RPC function...');
       const { data: rpcData, error: rpcError } = await supabase.rpc('verify_admin_password', {
         email_param: email.trim(),
         password_param: password,
       });
 
-      console.log('RPC response:');
-      console.log('  data:', JSON.stringify(rpcData));
-      console.log('  error:', rpcError);
-
       let adminUser = null;
       
       if (rpcError) {
-        console.log('RPC failed, trying direct query...');
-        // Fallback: direct query
-        const { data: queryData, error: queryError } = await supabase
-          .from('admin_users')
-          .select('id, email, name, role')
-          .eq('email', email.trim())
-          .eq('password_hash', password)
-          .single();
-        
-        console.log('Direct query response:');
-        console.log('  data:', JSON.stringify(queryData));
-        console.log('  error:', queryError);
-        
-        if (queryError) {
-          console.error('Direct query error:', queryError);
-        } else {
-          adminUser = queryData;
-        }
+        setLoading(false);
+        return { success: false, error: 'Login failed. Please try again.' };
       } else if (rpcData && rpcData.length > 0) {
-        console.log('RPC returned data, using first result');
         adminUser = rpcData[0];
-      } else {
-        console.log('RPC returned no data');
       }
 
       if (adminUser) {
-        console.log('Admin user found!', adminUser);
 
         // ── Password expiry / must-change check ────────────────────────────
         let mustChange = false;
@@ -293,7 +254,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (secData) {
             mustChange = secData.must_change_password === true;
-            console.log('[Auth] must_change_password from DB:', secData.must_change_password, '→ mustChange:', mustChange);
             const expiry = secData.password_expiry;
             const lastLogin = secData.last_login_at;
 
@@ -338,20 +298,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUserRole(role);
         setAccessToken(adminSession.access_token);
         localStorage.setItem('admin_session', JSON.stringify(sessionData));
-        
-        console.log('Admin login successful!');
-        console.log('=== ADMIN LOGIN END ===');
         setLoading(false);
         return { success: true };
       }
 
-      console.log('No admin user found - credentials invalid');
-      console.log('=== ADMIN LOGIN END ===');
       setLoading(false);
       return { success: false, error: 'Invalid email or password' };
     } catch (error: unknown) {
-      console.error('Admin login EXCEPTION:', error);
-      console.log('=== ADMIN LOGIN END (error) ===');
       setLoading(false);
       return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
     }
