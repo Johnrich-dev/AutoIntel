@@ -304,7 +304,14 @@ export function ScreeningResults() {
                 || jobPostingsData.find(j =>
                     j.title?.toLowerCase().includes(applicant.position?.toLowerCase() || '') ||
                     applicant.position?.toLowerCase().includes(j.title?.toLowerCase() || ''));
-              if (match?.skills?.length) requiredSkills = match.skills;
+              if (match?.skills?.length) {
+                const rawSkills = match.skills;
+                requiredSkills = Array.isArray(rawSkills)
+                  ? rawSkills
+                  : typeof rawSkills === 'string'
+                  ? JSON.parse(rawSkills)
+                  : [];
+              }
             }
             if (requiredSkills.length === 0) {
               const pos = applicant.position.toLowerCase();
