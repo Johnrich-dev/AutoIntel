@@ -740,50 +740,76 @@ def process_emails():
                             resume_text = resume_result.data[0].get('raw_extracted_content')
 
                             if resume_text:
-                                # Improved job matching: Try multiple strategies
+                                # Check if job was already matched on a previous run
+                                existing_applicant = supabase.table('applicants').select(
+                                    'applied_job_id'
+                                ).eq('id', applicant_id).maybeSingle().execute()
+                                existing_job_id = existing_applicant.data.get('applied_job_id') if existing_applicant.data else None
+
                                 job_id = None
                                 job_title = position
                                 job_description = ""
                                 job_posting = None
-                                
-                                # Strategy 1: Exact/partial title match (existing)
-                                job_result = supabase.table('job_postings').select(
-                                    'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, department'
-                                ).ilike('title', f'%{position}%').execute()
-                                
-                                # Strategy 2: If no title match, try department match
-                                if not job_result.data or len(job_result.data) == 0:
-                                    # Extract department hint from position (e.g., "Python Developer" -> "Developer")
-                                    position_lower = position.lower()
-                                    role_hints = ['developer', 'engineer', 'manager', 'analyst', 'designer', 'specialist', 'coordinator', 'administrator']
-                                    department = None
-                                    for hint in role_hints:
-                                        if hint in position_lower:
-                                            department = hint
-                                            break
-                                    
-                                    if department:
-                                        job_result = supabase.table('job_postings').select(
-                                            'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, department'
-                                        ).ilike('department', f'%{department}%').execute()
-                                
-                                # Strategy 3: If still no match, try any active job (fallback)
-                                if not job_result.data or len(job_result.data) == 0:
+
+                                if existing_job_id:
+                                    # Reuse previously matched job for consistency
                                     job_result = supabase.table('job_postings').select(
                                         'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, department'
-                                    ).eq('is_active', True).limit(1).execute()
-                                    if job_result.data and len(job_result.data) > 0:
-                                        print(f"[WARNING] No exact job match for '{position}', using fallback: {job_result.data[0].get('title')}")
-                                
-                                if job_result.data and len(job_result.data) > 0:
-                                    job = job_result.data[0]
-                                    job_id = job.get('job_id')
-                                    job_title = job.get('title', position)
-                                    job_description = job.get('description') or ""
-                                    job_posting = job  # Full job posting for hybrid scoring
-                                    print(f"[INFO] Matched job: {job_title} (ID: {job_id})")
+                                    ).eq('job_id', existing_job_id).maybeSingle().execute()
+                                    if job_result.data:
+                                        job = job_result.data
+                                        job_id = job.get('job_id')
+                                        job_title = job.get('title', position)
+                                        job_description = job.get('description') or ""
+                                        job_posting = job
+                                        print(f"[INFO] Reusing previously matched job: {job_title} (ID: {job_id})")
                                 else:
-                                    print(f"[WARNING] No job found for position: {position}, using position as title")
+                                    # Improved job matching: Try multiple strategies
+                                    # Strategy 1: Exact/partial title match
+                                    job_result = supabase.table('job_postings').select(
+                                        'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, department'
+                                    ).ilike('title', f'%{position}%').execute()
+
+                                    # Strategy 2: department match
+                                    if not job_result.data or len(job_result.data) == 0:
+                                        position_lower = position.lower()
+                                        role_hints = ['developer', 'engineer', 'manager', 'analyst', 'designer', 'specialist', 'coordinator', 'administrator']
+                                        department = None
+                                        for hint in role_hints:
+                                            if hint in position_lower:
+                                                department = hint
+                                                break
+                                        if department:
+                                            job_result = supabase.table('job_postings').select(
+                                                'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, department'
+                                            ).ilike('department', f'%{department}%').execute()
+
+                                    # Strategy 3: fallback to any active job
+                                    if not job_result.data or len(job_result.data) == 0:
+                                        job_result = supabase.table('job_postings').select(
+                                            'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, department'
+                                        ).eq('is_active', True).limit(1).execute()
+                                        if job_result.data and len(job_result.data) > 0:
+                                            print(f"[WARNING] No exact job match for '{position}', using fallback: {job_result.data[0].get('title')}")
+
+                                    if job_result.data and len(job_result.data) > 0:
+                                        job = job_result.data[0]
+                                        job_id = job.get('job_id')
+                                        job_title = job.get('title', position)
+                                        job_description = job.get('description') or ""
+                                        job_posting = job
+                                        print(f"[INFO] Matched job: {job_title} (ID: {job_id})")
+
+                                        # Save applied_job_id for consistency on re-runs
+                                        if job_id:
+                                            try:
+                                                supabase.table('applicants').update({
+                                                    'applied_job_id': job_id
+                                                }).eq('id', applicant_id).execute()
+                                            except Exception as e:
+                                                print(f"Warning: Could not save applied_job_id: {e}")
+                                    else:
+                                        print(f"[WARNING] No job found for position: {position}, using position as title")
 
                                 # Get parsed resume JSON for hybrid scoring
                                 parsed_resume_json = None
