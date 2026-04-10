@@ -1,13 +1,14 @@
-import { CheckCircle2, FileText } from 'lucide-react';
+import { CheckCircle2, FileText, ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getSupabaseClient } from '../lib/supabase';
 
 interface RulesAndTermsProps {
   onAccept: () => void;
+  onBack?: () => void;
 }
 
-export function RulesAndTerms({ onAccept }: RulesAndTermsProps) {
+export function RulesAndTerms({ onAccept, onBack }: RulesAndTermsProps) {
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const { applicant, updateApplicant, accessToken } = useAuth();
@@ -51,6 +52,15 @@ export function RulesAndTerms({ onAccept }: RulesAndTermsProps) {
       <div className="w-full max-w-3xl">
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <div className="flex items-center gap-3 mb-6">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="flex items-center gap-1 text-gray-500 hover:text-gray-700 text-sm transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back
+              </button>
+            )}
             <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-600 rounded-full">
               <FileText className="w-6 h-6 text-white" />
             </div>

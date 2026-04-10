@@ -1,4 +1,4 @@
-import { Lock, Mail, AlertCircle } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -14,6 +14,7 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
   const [tokenFromUrl, setTokenFromUrl] = useState(false);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
   const { login, adminPreviewLogin } = useAuth();
 
   // Auto-populate token from URL query param (?token=...)
@@ -48,11 +49,16 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
     const success = await login(token, email);
 
     if (success) {
-      // Clean token from URL after successful login
       window.history.replaceState({}, '', window.location.pathname);
       onLoginSuccess();
     } else {
-      setError('Invalid email or access token. Please check your email for the correct credentials.');
+      if (!token) {
+        setError('Please enter your access token from the email we sent you.');
+      } else if (!email) {
+        setError('Please enter your email address.');
+      } else {
+        setError('Invalid email or access token. Please double-check the token from your email.');
+      }
     }
     setLoading(false);
   };
@@ -102,15 +108,25 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
                   <Lock className="w-4 h-4 inline mr-1" />
                   Admin Password
                 </label>
+              <div className="relative">
                 <input
-                  type="password"
+                  type={showAdminPassword ? 'text' : 'password'}
                   id="adminPassword"
                   value={adminPassword}
                   onChange={(e) => setAdminPassword(e.target.value)}
                   placeholder="Enter admin password"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowAdminPassword(!showAdminPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  tabIndex={-1}
+                >
+                  {showAdminPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
                 <p className="mt-2 text-xs text-gray-500">Maintenance preview mode — use your admin credentials</p>
               </div>
             ) : (
@@ -124,13 +140,13 @@ export function ApplicantLogin({ onLoginSuccess }: ApplicantLoginProps) {
                   id="token"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  placeholder="Enter your access token"
+                  placeholder="Enter your access token from email"
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                   required
                 />
                 {!tokenFromUrl && (
                   <p className="mt-2 text-sm text-gray-500">
-                    Check your email for the temporary access token
+                    Check your email for the access token we sent you
                   </p>
                 )}
               </div>

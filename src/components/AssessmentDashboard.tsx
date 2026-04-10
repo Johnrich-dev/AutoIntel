@@ -87,53 +87,41 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
 
     try {
       setUploadingPhoto(true);
-      const client = getSupabaseClient(accessToken ?? undefined);
 
-      // First convert file to base64 for immediate local update
-      const base64Promise = new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      // Try to upload to Supabase Storage
+      // Use admin client to bypass RLS for storage upload
+      const adminClient = getSupabaseAdminClient();
       const fileExt = file.name.split('.').pop();
       const fileName = `${applicant.id}-${Date.now()}.${fileExt}`;
 
-      const { error: uploadError } = await client.storage
+      const { error: uploadError } = await adminClient.storage
         .from('applicant-photos')
-        .upload(fileName, file);
-
-      let photoUrl: string;
+        .upload(fileName, file, { upsert: true });
 
       if (uploadError) {
-        console.log('Storage upload failed, using base64 approach:', uploadError);
-        photoUrl = await base64Promise;
-      } else {
-        // Get public URL
-        const { data: { publicUrl } } = client.storage
-          .from('applicant-photos')
-          .getPublicUrl(fileName);
-        photoUrl = publicUrl;
-      }
-
-      // Update database with photo URL (use admin client to bypass RLS)
-      const { error: updateError } = await getSupabaseAdminClient()
-        .from('applicants')
-        .update({ photo_url: photoUrl })
-        .eq('id', applicant.id);
-
-      if (updateError) {
-        console.error('Failed to update photo_url in database:', updateError);
-        alert('Failed to save photo. Please make sure the photo_url column exists in your database.');
+        console.error('Storage upload failed:', uploadError);
+        alert(`Failed to upload photo: ${uploadError.message}. Please try again.`);
         setUploadingPhoto(false);
         return;
       }
 
-      console.log('Photo URL saved successfully:', photoUrl);
-      // Update local state
-      updateApplicant({ photo_url: photoUrl });
+      const { data: { publicUrl } } = adminClient.storage
+        .from('applicant-photos')
+        .getPublicUrl(fileName);
+
+      // Update database using token-authenticated client
+      const { error: updateError } = await getSupabaseClient(accessToken ?? undefined)
+        .from('applicants')
+        .update({ photo_url: publicUrl })
+        .eq('id', applicant.id);
+
+      if (updateError) {
+        console.error('Failed to update photo_url in database:', updateError);
+        alert('Photo uploaded but failed to save. Please try again.');
+        setUploadingPhoto(false);
+        return;
+      }
+
+      updateApplicant({ photo_url: publicUrl });
       setUploadingPhoto(false);
     } catch (error) {
       console.error('Error uploading photo:', error);
@@ -147,10 +135,8 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
     const expiresAt = new Date(applicant.access_expires_at);
     const now = new Date();
     const hoursLeft = Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60));
-
-    if (hoursLeft < 24) {
-      return `${hoursLeft} hours remaining`;
-    }
+    if (hoursLeft < 1) return 'Expiring soon';
+    if (hoursLeft < 24) return `${hoursLeft} hours remaining`;
     return `${Math.floor(hoursLeft / 24)} days remaining`;
   };
 
@@ -176,7 +162,8 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
   const totalAssessments = 2;
   const progressPercent = Math.round((completedCount / totalAssessments) * 100);
   const expiryHours = getExpiryHours();
-  const isExpiringSoon = expiryHours < 24;
+  const isExpiringSoon = expiryHours < 6;
+  const showExpiryBadge = expiryHours < 24;
   const hasProfilePhoto = !!applicant?.photo_url;
 
   const handleStartVideo = () => {
@@ -289,7 +276,8 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
               </div>
             </div>
             
-            {/* Expiry Badge */}
+            {/* Expiry Badge — only show when under 24 hours */}
+            {showExpiryBadge && (
             <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${
               isExpiringSoon 
                 ? 'bg-red-50 text-red-700 border border-red-200' 
@@ -298,8 +286,22 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
               <Clock className="w-4 h-4" />
               <span>Access expires: {getExpiryText()}</span>
             </div>
+            )}
           </div>
         </div>
+
+        {/* Photo Upload Banner — shown prominently if no photo */}
+        {!hasProfilePhoto && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <Camera className="w-5 h-5 text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-amber-800 font-semibold text-sm">Upload your profile photo to unlock assessments</p>
+              <p className="text-amber-600 text-xs mt-0.5">Click the camera icon on your avatar above to upload a photo.</p>
+            </div>
+          </div>
+        )}
 
         {/* Completion Message */}
         {allCompleted && (
@@ -382,9 +384,20 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
               </span>
               
               {videoCompleted ? (
-                <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Submitted</span>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Submitted</span>
+                  </div>
+                  <span className={`text-xs ${
+                    videoStatus?.transcription_status === 'completed' ? 'text-green-500' :
+                    videoStatus?.transcription_status === 'failed' ? 'text-red-500' :
+                    'text-amber-500'
+                  }`}>
+                    {videoStatus?.transcription_status === 'completed' ? '✓ Transcription complete' :
+                     videoStatus?.transcription_status === 'failed' ? '✗ Transcription failed' :
+                     '⏳ Transcription in progress...'}
+                  </span>
                 </div>
               ) : (
                 <button
@@ -451,6 +464,26 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
           </div>
         </div>
 
+        {/* What's Next */}
+        {!allCompleted && (
+          <div className="mt-8 bg-white rounded-2xl p-5 border border-gray-100 shadow-md">
+            <h2 className="text-base font-bold text-gray-800 mb-3">What happens after you submit?</h2>
+            <div className="flex flex-col sm:flex-row gap-4">
+              {[
+                { step: '1', label: 'Complete assessments', done: completedCount > 0 },
+                { step: '2', label: 'HR team reviews your submission', done: false },
+                { step: '3', label: 'You receive a decision within 5–7 business days', done: false },
+              ].map((item) => (
+                <div key={item.step} className="flex items-center gap-3 flex-1">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${item.done ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {item.done ? <CheckCircle className="w-4 h-4" /> : item.step}
+                  </div>
+                  <span className="text-sm text-gray-600">{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

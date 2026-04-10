@@ -53,7 +53,15 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
     }
 
     if (Object.keys(answers).length !== questions.length) {
-      setModal({ type: 'error', message: 'Please answer all questions before submitting.' });
+      const unanswered = questions
+        .map((_, idx) => idx + 1)
+        .filter((num) => answers[num - 1] === undefined);
+      setModal({ type: 'error', message: `Please answer all questions before submitting. Unanswered: ${unanswered.join(', ')}` });
+      return;
+    }
+
+    if (!essay.trim()) {
+      setModal({ type: 'error', message: 'Please complete the essay question before submitting.' });
       return;
     }
 
@@ -291,9 +299,11 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
                           ? 'bg-blue-600 text-white'
                           : answers[idx] !== undefined
                           ? 'bg-green-100 text-green-700'
+                          : isEssayQuestion && answers[idx] === undefined
+                          ? 'bg-red-100 text-red-600 ring-1 ring-red-300'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
-                      title={`Question ${idx + 1}`}
+                      title={`Question ${idx + 1}${answers[idx] === undefined ? ' (unanswered)' : ''}`}
                     >
                       {idx + 1}
                     </button>
@@ -306,9 +316,11 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
                         ? 'bg-blue-600 text-white'
                         : essay.trim()
                         ? 'bg-green-100 text-green-700'
+                        : likertAllAnswered
+                        ? 'bg-red-100 text-red-600 ring-1 ring-red-300'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
-                    title="Essay Question"
+                    title="Essay Question (Required)"
                   >
                     <span className="text-lg leading-none">📝</span>
                   </button>
@@ -380,8 +392,9 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
                     maxLength={2000}
                   />
                   
-                  <div className="mt-3 text-sm text-gray-500 text-right">
-                    {essay.length}/2000 characters
+                  <div className="mt-3 flex items-center justify-between text-sm text-gray-500">
+                    <span className="text-red-500 text-xs font-medium">* Required</span>
+                    <span>{essay.length}/2000 characters</span>
                   </div>
                 </div>
               )}
@@ -404,9 +417,9 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
                 {isEssayQuestion ? (
                   <button
                     onClick={handleSubmit}
-                    disabled={submitting || !likertAllAnswered}
+                    disabled={submitting || !likertAllAnswered || !essay.trim()}
                     className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium transition-colors ${
-                      submitting || !likertAllAnswered
+                      submitting || !likertAllAnswered || !essay.trim()
                         ? 'bg-gray-400 cursor-not-allowed text-gray-200'
                         : 'bg-green-600 hover:bg-green-700 text-white'
                     }`}

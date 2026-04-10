@@ -517,7 +517,7 @@ export function AdminDashboard() {
             {!sidebarCollapsed && (
               <div className="overflow-hidden whitespace-nowrap">
                 <h1 className="text-lg font-semibold text-gray-900">AutoIntel</h1>
-                <p className="text-xs text-gray-500">Admin Dashboard</p>
+                <p className="text-xs text-gray-500">{userRole === 'hr' ? 'HR Dashboard' : 'Admin Dashboard'}</p>
               </div>
             )}
           </div>

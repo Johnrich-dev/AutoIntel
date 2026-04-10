@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, AlertCircle, Loader2 } from 'lucide-react';
+import { Shield, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface AdminLoginProps {
@@ -13,6 +13,7 @@ export function AdminLogin({ onLoginSuccess, onCancel, loginLabel = 'Admin Login
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const { adminLogin } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -26,7 +27,14 @@ export function AdminLogin({ onLoginSuccess, onCancel, loginLabel = 'Admin Login
       if (result.success) {
         onLoginSuccess();
       } else {
-        setError(result.error || 'Login failed. Please check your credentials.');
+        // Give specific error hints
+        if (result.error?.toLowerCase().includes('password')) {
+          setError('Incorrect password. Please try again.');
+        } else if (result.error?.toLowerCase().includes('expired')) {
+          setError(result.error);
+        } else {
+          setError('Invalid email or password. Please check your credentials.');
+        }
       }
     } catch (err) {
       console.error('Admin login error:', err);
@@ -76,16 +84,26 @@ export function AdminLogin({ onLoginSuccess, onCancel, loginLabel = 'Admin Login
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 Password
               </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
-                placeholder="••••••••"
-                required
-                disabled={loading}
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                  placeholder="••••••••"
+                  required
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
             </div>
 
             <div className="flex gap-4">

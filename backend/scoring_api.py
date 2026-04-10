@@ -2013,6 +2013,12 @@ def notify_assessment():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def hash_password(supabase_client, password: str) -> str:
+    """Hash a password using pgcrypto bcrypt via Supabase RPC."""
+    result = supabase_client.rpc('hash_password', {'password': password}).execute()
+    return result.data
+
+
 @app.route('/api/change-hr-password', methods=['POST'])
 def change_hr_password():
     """
@@ -2043,8 +2049,9 @@ def change_hr_password():
             return jsonify({"success": False, "error": "Supabase configuration missing"}), 500
 
         supabase = create_client(supabase_url, supabase_key)
+        hashed = hash_password(supabase, new_password)
         supabase.table("admin_users").update({
-            "password_hash": new_password,
+            "password_hash": hashed,
             "must_change_password": False
         }).eq("id", user_id).execute()
 
@@ -2094,11 +2101,14 @@ def create_hr_user():
         if existing.data and len(existing.data) > 0:
             return jsonify({"success": False, "error": "An account with this email already exists"}), 409
 
+        # Hash password before storing
+        hashed_password = hash_password(supabase, password)
+
         # Insert HR user
         supabase.table("admin_users").insert({
             "name": name,
             "email": email,
-            "password_hash": password,
+            "password_hash": hashed_password,
             "role": "hr",
             "must_change_password": True
         }).execute()

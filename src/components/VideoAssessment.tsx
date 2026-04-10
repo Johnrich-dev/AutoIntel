@@ -319,6 +319,11 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
       showToast('Please record or upload a video before submitting.', 'warning');
       return;
     }
+    // Minimum duration check for recorded videos (not uploads)
+    if (videoBlob && recordingTime < 60) {
+      showToast('Your video is too short. Please record at least 1 minute.', 'warning');
+      return;
+    }
     setShowConfirmModal(true);
   };
 
@@ -612,6 +617,14 @@ export function VideoAssessment({ onComplete, onBack }: VideoAssessmentProps) {
                       <div className="w-2.5 h-2.5 bg-white rounded-full animate-pulse" />
                       <span className="text-white text-sm font-medium">
                         REC {formatTime(recordingTime)}
+                      </span>
+                    </div>
+                  )}
+                  {/* Max time warning */}
+                  {isRecording && recordingTime >= 240 && (
+                    <div className="absolute top-4 right-4 bg-amber-500/90 backdrop-blur-sm px-3 py-1.5 rounded-full">
+                      <span className="text-white text-xs font-medium">
+                        {formatTime(300 - recordingTime)} remaining
                       </span>
                     </div>
                   )}
