@@ -632,28 +632,37 @@ def schedule_interview():
         )
 
     # --- Send additional attendees email with ICS (includes internal_notes) ---
+    # Deduplicate: skip anyone already emailed as primary interviewer or the applicant
+    already_emailed = {applicant_email}
+    if primary_interviewer_email:
+        already_emailed.add(primary_interviewer_email)
+
     attendee_results = []
     for attendee_email in additional_attendees:
-        if attendee_email and attendee_email != applicant_email:
-            sent = email_service.send_interviewer_notification(
-                interviewer_name=attendee_email,  # use email as name if no name available
-                interviewer_email=attendee_email,
-                applicant_name=applicant_name,
-                applicant_email=applicant_email,
-                job_title=position,
-                interview_date=interview_date,
-                interview_time=interview_time,
-                interview_type=interview_type,
-                duration_minutes=duration_minutes,
-                time_zone=time_zone,
-                meeting_link=meeting_link or None,
-                meeting_id=meeting_id or None,
-                meeting_passcode=meeting_passcode or None,
-                location=location or None,
-                internal_notes=internal_notes or interview_notes,
-                ics_content=ics_content
-            )
-            attendee_results.append({"email": attendee_email, "sent": sent})
+        if not attendee_email or attendee_email in already_emailed:
+            continue
+        already_emailed.add(attendee_email)
+        # Use the part before @ as a readable name fallback
+        attendee_display_name = attendee_email.split('@')[0].replace('.', ' ').replace('_', ' ').title()
+        sent = email_service.send_interviewer_notification(
+            interviewer_name=attendee_display_name,
+            interviewer_email=attendee_email,
+            applicant_name=applicant_name,
+            applicant_email=applicant_email,
+            job_title=position,
+            interview_date=interview_date,
+            interview_time=interview_time,
+            interview_type=interview_type,
+            duration_minutes=duration_minutes,
+            time_zone=time_zone,
+            meeting_link=meeting_link or None,
+            meeting_id=meeting_id or None,
+            meeting_passcode=meeting_passcode or None,
+            location=location or None,
+            internal_notes=internal_notes or interview_notes,
+            ics_content=ics_content
+        )
+        attendee_results.append({"email": attendee_email, "sent": sent})
 
     email_sent = applicant_email_sent
 
@@ -662,12 +671,15 @@ def schedule_interview():
     elif email_sent:
         message = "Interview scheduled and emails sent (calendar event skipped)"
     elif calendar_created:
-        message = "Calendar event created but email delivery failed"
+        message = "Calendar event created but applicant email delivery failed"
     else:
-        message = "Interview scheduling attempted but both calendar and email failed"
+        message = "Interview scheduling failed — applicant was not notified"
+
+    # success requires the applicant email to have been sent
+    success = bool(email_sent)
 
     return jsonify({
-        "success": calendar_created or email_sent,
+        "success": success,
         "message": message,
         "calendar_event_id": calendar_event_id,
         "calendar_event_link": calendar_event_link,
@@ -677,8 +689,8 @@ def schedule_interview():
         "attendee_results": attendee_results,
         "calendar_created": calendar_created,
         "ics_generated": ics_content is not None,
-        "status": "success" if (calendar_created or email_sent) else "error"
-    }), 200 if (calendar_created or email_sent) else 500
+        "status": "success" if success else "error"
+    }), 200 if success else 500
 
 
 
@@ -2112,6 +2124,14 @@ def create_hr_user():
             "role": "hr",
             "must_change_password": True
         }).execute()
+
+        # Mirror into hr_managers so they appear in the interviewer dropdown
+        supabase.table("hr_managers").upsert({
+            "name": name,
+            "email": email,
+            "role": "HR",
+            "is_active": True
+        }, on_conflict="email").execute()
 
         # Send credentials email
         body = f"""

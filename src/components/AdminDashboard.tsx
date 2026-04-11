@@ -1,4 +1,4 @@
-import { Calendar, CheckCircle, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, Briefcase, Sliders, ChevronLeft, ChevronRight, ClipboardList, UserCheck, Search, Eye, ListChecks, CalendarDays, Award, TrendingUp, AlertCircle, XCircle, UserPlus, Trash2, KeyRound } from 'lucide-react';
+import { Calendar, CheckCircle, FileText, LayoutDashboard, LogOut, Menu, Send, Settings, Shield, Users, Video, X, Briefcase, Sliders, ChevronLeft, ChevronRight, ClipboardList, UserCheck, Search, Eye, ListChecks, CalendarDays, Award, TrendingUp, AlertCircle, XCircle, UserPlus, Trash2, KeyRound, UserCog } from 'lucide-react';
 import { AdminJobManagement } from './AdminJobManagement';
 import { AdminScoringSettings } from './AdminScoringSettings';
 import { DashboardLanding } from './DashboardLanding';
@@ -69,6 +69,7 @@ const menuItems = [
   
   // SYSTEM Section
   { id: 'hr-management', label: 'Manage HR Users', icon: UserPlus, category: 'SYSTEM', adminOnly: true },
+  { id: 'hiring-managers', label: 'Hiring Managers', icon: UserCog, category: 'SYSTEM', adminOnly: true },
   { id: 'system-settings', label: 'System Settings', icon: Settings, category: 'SYSTEM' },
 ];
 
@@ -134,10 +135,13 @@ function ManageHRUsers() {
 
   const handleDelete = async (id: string, email: string) => {
     if (!confirm(`Remove HR account for ${email}?`)) return;
-    const { error } = await getSupabaseAdminClient().from('admin_users').delete().eq('id', id);
+    const adminClient = getSupabaseAdminClient();
+    const { error } = await adminClient.from('admin_users').delete().eq('id', id);
     if (error) {
       setToast({ message: `Failed to delete: ${error.message}`, type: 'error' });
     } else {
+      // Deactivate in hr_managers so they no longer appear in the interviewer dropdown
+      await adminClient.from('hr_managers').update({ is_active: false }).eq('email', email);
       setToast({ message: `Removed ${email}`, type: 'success' });
       load();
     }
@@ -220,6 +224,333 @@ function ManageHRUsers() {
                       className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                       title="Remove HR user"
                     >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Manage Hiring Managers ───────────────────────────────────────────────────
+interface HiringManager {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  department: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+interface CsvPreviewRow {
+  name: string;
+  email: string;
+  role: string;
+  department: string;
+  error?: string;
+}
+
+function ManageHiringManagers() {
+  const [managers, setManagers] = useState<HiringManager[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: '', email: '', role: '', department: '' });
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [csvPreview, setCsvPreview] = useState<CsvPreviewRow[] | null>(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await getSupabaseAdminClient()
+      .from('hr_managers')
+      .select('*')
+      .order('name', { ascending: true });
+    setManagers(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  // ── Template download ──────────────────────────────────────────────────────
+  const downloadTemplate = () => {
+    const csv = [
+      'name,email,role,department',
+      'Juan dela Cruz,juan@company.com,Senior Manager,Engineering',
+      'Maria Santos,maria@company.com,HR Manager,Human Resources',
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'hiring_managers_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ── CSV parse & preview ────────────────────────────────────────────────────
+  const handleCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) {
+        setToast({ message: 'CSV is empty or missing data rows.', type: 'error' });
+        return;
+      }
+      const header = lines[0].toLowerCase().split(',').map(h => h.trim());
+      const nameIdx = header.indexOf('name');
+      const emailIdx = header.indexOf('email');
+      const roleIdx = header.indexOf('role');
+      const deptIdx = header.indexOf('department');
+
+      if (nameIdx === -1 || emailIdx === -1) {
+        setToast({ message: 'CSV must have at least "name" and "email" columns.', type: 'error' });
+        return;
+      }
+
+      const rows: CsvPreviewRow[] = lines.slice(1).map(line => {
+        const cols = line.split(',').map(c => c.trim());
+        const name = cols[nameIdx] || '';
+        const email = cols[emailIdx] || '';
+        const role = roleIdx !== -1 ? (cols[roleIdx] || '') : '';
+        const department = deptIdx !== -1 ? (cols[deptIdx] || '') : '';
+        let error: string | undefined;
+        if (!name) error = 'Missing name';
+        else if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) error = 'Invalid email';
+        return { name, email, role, department, error };
+      });
+
+      setCsvPreview(rows);
+    };
+    reader.readAsText(file);
+    // reset so same file can be re-selected
+    e.target.value = '';
+  };
+
+  const validRows = csvPreview?.filter(r => !r.error) ?? [];
+  const invalidRows = csvPreview?.filter(r => r.error) ?? [];
+
+  const handleImport = async () => {
+    if (validRows.length === 0) return;
+    setImporting(true);
+    try {
+      const adminClient = getSupabaseAdminClient();
+      const rows = validRows.map(r => ({
+        name: r.name,
+        email: r.email,
+        role: r.role || 'Manager',
+        department: r.department || null,
+        is_active: true,
+      }));
+      const { error } = await adminClient
+        .from('hr_managers')
+        .upsert(rows, { onConflict: 'email' });
+      if (error) throw error;
+      setToast({ message: `${validRows.length} hiring manager(s) imported successfully.`, type: 'success' });
+      setCsvPreview(null);
+      load();
+    } catch (e: unknown) {
+      setToast({ message: (e as Error).message || 'Import failed.', type: 'error' });
+    }
+    setImporting(false);
+  };
+
+  // ── Manual add ────────────────────────────────────────────────────────────
+  const handleCreate = async () => {
+    if (!form.name || !form.email) {
+      setToast({ message: 'Name and email are required.', type: 'error' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await getSupabaseAdminClient()
+        .from('hr_managers')
+        .upsert({ name: form.name, email: form.email, role: form.role || 'Manager', department: form.department || null, is_active: true }, { onConflict: 'email' });
+      if (error) throw error;
+      setToast({ message: `${form.name} added as hiring manager.`, type: 'success' });
+      setForm({ name: '', email: '', role: '', department: '' });
+      setShowForm(false);
+      load();
+    } catch (e: unknown) {
+      setToast({ message: (e as Error).message || 'Failed to save.', type: 'error' });
+    }
+    setSaving(false);
+  };
+
+  const handleToggleActive = async (id: string, current: boolean) => {
+    await getSupabaseAdminClient().from('hr_managers').update({ is_active: !current }).eq('id', id);
+    load();
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Remove ${name} from hiring managers?`)) return;
+    const { error } = await getSupabaseAdminClient().from('hr_managers').delete().eq('id', id);
+    if (error) {
+      setToast({ message: `Failed to delete: ${error.message}`, type: 'error' });
+    } else {
+      setToast({ message: `Removed ${name}`, type: 'success' });
+      load();
+    }
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-6">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">Hiring Managers</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Manage interviewers available in the scheduling dropdown</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Download template */}
+          <button onClick={downloadTemplate}
+            className="flex items-center gap-2 px-3 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+            <FileText className="w-4 h-4" />
+            Download Template
+          </button>
+          {/* CSV import */}
+          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleCsvFile} />
+          <button onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 px-3 py-2 border border-blue-200 text-blue-600 text-sm font-medium rounded-lg hover:bg-blue-50 transition-colors">
+            <Send className="w-4 h-4" />
+            Import CSV
+          </button>
+          {/* Manual add */}
+          <button onClick={() => setShowForm(v => !v)}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+            <UserCog className="w-4 h-4" />
+            Add Manager
+          </button>
+        </div>
+      </div>
+
+      {/* Manual add form */}
+      {showForm && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2"><UserCog className="w-4 h-4 text-blue-500" /> New Hiring Manager</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <input type="text" placeholder="Full name *" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+            <input type="email" placeholder="Email address *" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+            <input type="text" placeholder="Role (e.g. Senior Manager)" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+            <input type="text" placeholder="Department (optional)" value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+            <button onClick={handleCreate} disabled={saving}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              {saving ? 'Saving...' : 'Add Manager'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Preview */}
+      {csvPreview && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">CSV Preview</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {validRows.length} valid row{validRows.length !== 1 ? 's' : ''}
+                {invalidRows.length > 0 && ` · ${invalidRows.length} row${invalidRows.length !== 1 ? 's' : ''} with errors (will be skipped)`}
+              </p>
+            </div>
+            <button onClick={() => setCsvPreview(null)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+              <X className="w-4 h-4 text-gray-400" />
+            </button>
+          </div>
+          <div className="overflow-x-auto max-h-56 overflow-y-auto rounded-lg border border-gray-100">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="text-left px-3 py-2 text-gray-500 font-medium">Name</th>
+                  <th className="text-left px-3 py-2 text-gray-500 font-medium">Email</th>
+                  <th className="text-left px-3 py-2 text-gray-500 font-medium">Role</th>
+                  <th className="text-left px-3 py-2 text-gray-500 font-medium">Department</th>
+                  <th className="text-left px-3 py-2 text-gray-500 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {csvPreview.map((row, i) => (
+                  <tr key={i} className={row.error ? 'bg-red-50' : ''}>
+                    <td className="px-3 py-2 text-gray-800">{row.name || '—'}</td>
+                    <td className="px-3 py-2 text-gray-600">{row.email || '—'}</td>
+                    <td className="px-3 py-2 text-gray-500">{row.role || '—'}</td>
+                    <td className="px-3 py-2 text-gray-500">{row.department || '—'}</td>
+                    <td className="px-3 py-2">
+                      {row.error
+                        ? <span className="text-red-600 font-medium">{row.error}</span>
+                        : <span className="text-green-600 font-medium">Ready</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setCsvPreview(null)} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+            <button onClick={handleImport} disabled={importing || validRows.length === 0}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              {importing ? 'Importing...' : `Import ${validRows.length} Manager${validRows.length !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+        {loading ? (
+          <div className="p-6 text-center text-gray-400 text-sm">Loading...</div>
+        ) : managers.length === 0 ? (
+          <div className="p-8 text-center">
+            <UserCog className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-sm text-gray-500">No hiring managers yet.</p>
+            <p className="text-xs text-gray-400 mt-1">Add one manually or import from a CSV file.</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Name</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Email</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Role</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Department</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {managers.map(m => (
+                <tr key={m.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900">{m.name}</td>
+                  <td className="px-4 py-3 text-gray-600">{m.email}</td>
+                  <td className="px-4 py-3 text-gray-500">{m.role || '—'}</td>
+                  <td className="px-4 py-3 text-gray-500">{m.department || '—'}</td>
+                  <td className="px-4 py-3">
+                    <button onClick={() => handleToggleActive(m.id, m.is_active)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${m.is_active ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                      {m.is_active ? 'Active' : 'Inactive'}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => handleDelete(m.id, m.name)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Remove">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>
@@ -765,7 +1096,7 @@ export function AdminDashboard() {
           
           {/* Recruitment Pipeline - All pipeline views use ApplicantsList or ShortlistedCandidates */}
           {activeMenu === 'screening-results' && <ScreeningResults />}
-          {activeMenu === 'needs-review' && <NeedsReview />}
+          {activeMenu === 'needs-review' && <NeedsReview onDecisionMade={() => { loadNavBadges(); loadApplicants(); }} />}
           {(activeMenu === 'applications') && 
             <ApplicantsList />}
           {activeMenu === 'interview-scheduling' && <InterviewScheduling preSelectedApplicantId={pendingInterviewApplicantId} onPreSelectedConsumed={() => setPendingInterviewApplicantId(null)} />}
@@ -786,6 +1117,7 @@ export function AdminDashboard() {
           {activeMenu === 'system-settings' && <AdminSettings />}
           {/* HR Management - admin only */}
           {activeMenu === 'hr-management' && userRole === 'admin' && <ManageHRUsers />}
+          {activeMenu === 'hiring-managers' && userRole === 'admin' && <ManageHiringManagers />}
         </div>
       </main>
 

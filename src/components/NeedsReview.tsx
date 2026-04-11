@@ -108,7 +108,7 @@ function KeyIssueBadge({ issue }: { issue: string }) {
 
 
 
-export function NeedsReview() {
+export function NeedsReview({ onDecisionMade }: { onDecisionMade?: () => void } = {}) {
   const formatDate = useFormatDate();
   const [applicants, setApplicants] = useState<NeedsReviewApplicant[]>([]);
   const [filteredApplicants, setFilteredApplicants] = useState<NeedsReviewApplicant[]>([]);
@@ -385,6 +385,7 @@ export function NeedsReview() {
       setToast({ message: `${ids.length} applicant(s) ${bulkConfirm.type === 'shortlist' ? 'shortlisted' : 'rejected'}`, type: 'success' });
       setSelectedApplicants(new Set());
       loadData();
+      onDecisionMade?.();
     } catch {
       setToast({ message: `Failed to ${bulkConfirm?.type === 'shortlist' ? 'shortlist' : 'reject'} applicants`, type: 'error' });
     } finally {
@@ -735,6 +736,7 @@ export function NeedsReview() {
         onDecision={(type) => {
           setToast({ message: type === 'verified' ? 'Applicant shortlisted' : 'Applicant rejected', type: 'success' });
           loadData();
+          onDecisionMade?.();
         }}
       />
 

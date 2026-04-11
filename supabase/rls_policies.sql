@@ -87,7 +87,7 @@ CREATE POLICY "applicants_admin_all" ON public.applicants
 -- ============================================
 -- hr_managers
 -- ============================================
-CREATE POLICY "Allow full access to hr_managers for authenticated users" ON public.hr_managers
+CREATE POLICY "hr_managers_full_access" ON public.hr_managers
   FOR ALL TO authenticated
   USING (true)
   WITH CHECK (true);

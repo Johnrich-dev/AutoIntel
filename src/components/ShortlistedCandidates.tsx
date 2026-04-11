@@ -378,7 +378,7 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onSched
                 Cancel
               </button>
               <button
-                onClick={() => { setShowFinalInterviewConfirm(false); onStatusChange(candidate.id, 'final_interview'); }}
+                onClick={() => { setShowFinalInterviewConfirm(false); onStatusChange(candidate.id, 'final_interview'); onScheduleInterview?.(candidate.id); }}
                 className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors"
               >
                 Advance to Final Interview
@@ -492,40 +492,20 @@ function QuickProfilePanel({ candidate, isOpen, onClose, onStatusChange, onSched
 
       {/* Action Footer */}
       <div className="border-t border-gray-200 p-4 bg-gray-50 flex gap-3">
-        {candidate.status === 'final_interview' ? (
-          <>
-            <button
-              onClick={() => onScheduleInterview?.(candidate.id)}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-            >
-              <Calendar className="w-4 h-4" />
-              Schedule Interview
-            </button>
-            <button
-              onClick={() => onStatusChange(candidate.id, 'shortlisted')}
-              className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
-            >
-              Move Back
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              onClick={() => setShowFinalInterviewConfirm(true)}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
-            >
-              <CheckCircle className="w-4 h-4" />
-              Move to Final Interview
-            </button>
-            <button
-              onClick={() => setShowRejectConfirm(true)}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors font-medium"
-            >
-              <XCircle className="w-4 h-4" />
-              Reject
-            </button>
-          </>
-        )}
+        <button
+          onClick={() => setShowFinalInterviewConfirm(true)}
+          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
+        >
+          <CheckCircle className="w-4 h-4" />
+          Move to Final Interview
+        </button>
+        <button
+          onClick={() => setShowRejectConfirm(true)}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors font-medium"
+        >
+          <XCircle className="w-4 h-4" />
+          Reject
+        </button>
       </div>
     </div>
     </>

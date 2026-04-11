@@ -26,75 +26,59 @@ def generate_ics_content(
     method: str = "REQUEST",
     status: str = "CONFIRMED",
     categories: Optional[str] = None,
-    url: Optional[str] = None
+    url: Optional[str] = None,
+    time_zone: str = "Asia/Manila"
 ) -> str:
     """
     Generate ICS calendar file content.
-    
-    Args:
-        summary: Event title/summary
-        start_time: Start datetime
-        end_time: End datetime
-        description: Event description
-        location: Location or meeting URL
-        organizer_name: Organizer's name
-        organizer_email: Organizer's email
-        attendees: List of attendee emails
-        uid: Unique identifier for the event
-        method: iCalendar method (REQUEST, PUBLISH, etc.)
-        status: Event status (CONFIRMED, TENTATIVE, CANCELLED)
-        categories: Event categories/tags
-        url: URL link for the event
-    
-    Returns:
-        ICS file content as string
     """
-    # Generate UID if not provided
     if not uid:
         uid = f"{uuid.uuid4()}@autointel.recruitment"
-    
-    # Format datetime for ICS (UTC format: YYYYMMDDTHHMMSSZ)
+
+    # Format datetime with TZID — avoids "floating" time that shifts per viewer's local tz
     dt_start = start_time.strftime("%Y%m%dT%H%M%S")
     dt_end = end_time.strftime("%Y%m%dT%H%M%S")
     dtstamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-    
+
     # Build attendees section
     attendees_lines = ""
     if attendees:
         for attendee in attendees:
             attendees_lines += f"ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN={attendee}:mailto:{attendee}\n"
-    
-    # Build location section
-    location_line = ""
-    if location:
-        location_line = f"LOCATION:{location}\n"
-    
-    # Build URL section
-    url_line = ""
-    if url:
-        url_line = f"URL:{url}\n"
-    
-    # Build categories section
-    categories_line = ""
-    if categories:
-        categories_line = f"CATEGORIES:{categories}\n"
-    
-    # Build description (escape special characters)
+
+    location_line = f"LOCATION:{location}\n" if location else ""
+    url_line = f"URL:{url}\n" if url else ""
+    categories_line = f"CATEGORIES:{categories}\n" if categories else ""
+
     escaped_description = description.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
-    
+
+    # VTIMEZONE block — required by RFC 5545 for non-UTC times; Outlook ignores X-WR-TIMEZONE without it
+    # Covers Asia/Manila (UTC+8, no DST)
+    vtimezone_block = f"""BEGIN:VTIMEZONE
+TZID:{time_zone}
+X-LIC-LOCATION:{time_zone}
+BEGIN:STANDARD
+TZOFFSETFROM:+0800
+TZOFFSETTO:+0800
+TZNAME:PHT
+DTSTART:19700101T000000
+END:STANDARD
+END:VTIMEZONE
+"""
+
     ics_content = f"""BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//AutoIntel//Recruitment System//EN
 CALSCALE:GREGORIAN
 METHOD:{method}
 X-WR-CALNAME:AutoIntel Interviews
-X-WR-TIMEZONE:Asia/Manila
-
+X-WR-TIMEZONE:{time_zone}
+{vtimezone_block}
 BEGIN:VEVENT
 UID:{uid}
 DTSTAMP:{dtstamp}
-DTSTART:{dt_start}
-DTEND:{dt_end}
+DTSTART;TZID={time_zone}:{dt_start}
+DTEND;TZID={time_zone}:{dt_end}
 SUMMARY:{summary}
 DESCRIPTION:{escaped_description}
 {location_line}{url_line}{categories_line}ORGANIZER;CN={organizer_name}:mailto:{organizer_email}
@@ -116,7 +100,6 @@ END:VEVENT
 
 END:VCALENDAR
 """
-    
     return ics_content
 
 
@@ -248,7 +231,8 @@ def create_interview_ics(
         organizer_email=organizer_email,
         attendees=attendees,
         categories="Interview,Recruitment",
-        url=meeting_link if interview_type in ("online", "hybrid") else None
+        url=meeting_link if interview_type in ("online", "hybrid") else None,
+        time_zone=time_zone
     )
 
 

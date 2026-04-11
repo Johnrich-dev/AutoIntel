@@ -238,7 +238,7 @@ function InterviewModal({
                 >
                   <option value="">Select Applicant</option>
                   {applicants.map(app => (
-                    <option key={app.id} value={app.id}>{app.name} — {app.position}</option>
+                    <option key={app.id} value={app.id}>{app.name}</option>
                   ))}
                 </select>
               </div>
@@ -930,7 +930,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
       const { data: applicantsData } = await adminClient
         .from('applicants')
         .select('*')
-        .not('status', 'in', '("hired","rejected")')
+        .eq('status', 'final_interview')
         .order('created_at', { ascending: false });
 
       if (applicantsData) {
