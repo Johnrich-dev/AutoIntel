@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string | undefined;
 
 export function getSupabaseConfigError(): string | null {
   const missing: string[] = [];
@@ -63,9 +64,13 @@ export const getSupabaseClient = (accessToken?: string) => {
 };
 
 export const getSupabaseAdminClient = () => {
-  // NOTE: The service role key has been removed from the frontend for security.
-  // This now returns the standard anon client. Admin operations that require
-  // elevated privileges should be moved to the Flask backend.
+  // Use service role key if available — bypasses RLS for admin operations.
+  // Falls back to anon client if not configured.
+  if (supabaseServiceKey && supabaseUrl) {
+    return createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { persistSession: false }
+    });
+  }
   return getSupabaseClient();
 };
 
