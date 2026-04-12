@@ -1652,6 +1652,15 @@ export function NeedsReviewDetailPanel({
           <div className="flex-1 min-w-0">
             <p className="text-xs text-gray-500">Decision for</p>
             <p className="text-sm font-semibold text-gray-900 truncate">{applicant.name || 'this applicant'}</p>
+            {(!applicant.video_completed || !applicant.profiling_completed) && (
+              <p className="text-xs text-amber-600 mt-0.5">
+                {!applicant.video_completed && !applicant.profiling_completed
+                  ? 'Video & work style assessments not yet completed'
+                  : !applicant.video_completed
+                  ? 'Video assessment not yet completed'
+                  : 'Work style assessment not yet completed'}
+              </p>
+            )}
           </div>
           {/* Notes toggle */}
           <button
@@ -1665,16 +1674,18 @@ export function NeedsReviewDetailPanel({
           </button>
           <button
             onClick={() => requestDecision('mismatch')}
-            disabled={verifyingVideo}
-            className="flex items-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+            disabled={verifyingVideo || !applicant.video_completed || !applicant.profiling_completed}
+            title={!applicant.video_completed || !applicant.profiling_completed ? 'All assessments must be completed before making a decision' : ''}
+            className="flex items-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {verifyingVideo ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserX className="w-4 h-4" />}
             Reject
           </button>
           <button
             onClick={() => requestDecision('verified')}
-            disabled={verifyingVideo}
-            className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+            disabled={verifyingVideo || !applicant.video_completed || !applicant.profiling_completed}
+            title={!applicant.video_completed || !applicant.profiling_completed ? 'All assessments must be completed before making a decision' : ''}
+            className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {verifyingVideo ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
             Shortlist
