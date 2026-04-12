@@ -167,7 +167,8 @@ export function PersonalityTest({ onComplete, onBack }: PersonalityTestProps) {
                   status: 'completed',
                 })
                 .eq('id', assessmentId);
-          console.error('Scoring API returned error:', scoringResult.error);
+            } else {
+              console.error('Scoring API returned error:', scoringResult.error);
             }
           } else {
             const errorText = await scoringResponse.text();

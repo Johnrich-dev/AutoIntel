@@ -257,3 +257,17 @@ CREATE POLICY "Anyone can insert work style assessments" ON public.work_style_as
 CREATE POLICY "Anyone can update work style assessments" ON public.work_style_assessments
   FOR UPDATE TO authenticated
   USING (true);
+
+-- Applicant portal uses anon key — must allow anon to insert/update their own assessment
+CREATE POLICY "work_style_anon_insert" ON public.work_style_assessments
+  FOR INSERT TO anon
+  WITH CHECK (true);
+
+CREATE POLICY "work_style_anon_update" ON public.work_style_assessments
+  FOR UPDATE TO anon
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "work_style_anon_select" ON public.work_style_assessments
+  FOR SELECT TO anon
+  USING (true);
