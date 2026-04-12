@@ -25,7 +25,7 @@ export function AssessmentDashboard({ onStartVideo, onStartPersonalityTest }: As
 
   // Derived state — computed here so the Teams notification useEffect can reference them
   const videoCompleted = videoStatus?.status === 'submitted';
-  const testCompleted = testStatus?.status === 'submitted';
+  const testCompleted = testStatus?.status === 'submitted' || testStatus?.status === 'completed';
   const allCompleted = videoCompleted && testCompleted;
 
   // Fire Teams notification once when all assessments are completed
