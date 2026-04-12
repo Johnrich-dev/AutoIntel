@@ -39,8 +39,33 @@ except ImportError:
 # Initialize Flask app
 app = Flask(__name__)
 
-# Enable CORS for frontend communication
-CORS(app)
+# ── CORS ────────────────────────────────────────────────────────────────────
+# Restrict to known frontend origins. Add your Amplify domain here.
+_ALLOWED_ORIGINS = [o.strip() for o in os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5173,http://localhost:3000"
+).split(",") if o.strip()]
+CORS(app, origins=_ALLOWED_ORIGINS, supports_credentials=True)
+
+# ── Rate limiting ────────────────────────────────────────────────────────────
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=[],          # no global limit — set per-route
+        storage_uri="memory://",
+    )
+    _LIMITER_AVAILABLE = True
+except ImportError:
+    limiter = None  # type: ignore
+    _LIMITER_AVAILABLE = False
+    print("WARNING: flask-limiter not installed — rate limiting disabled. Run: pip install flask-limiter")
+
+# ── Constants ────────────────────────────────────────────────────────────────
+MAX_PDF_BYTES = 10 * 1024 * 1024   # 10 MB
+GPT_TIMEOUT_SECONDS = 45
 
 # Configuration
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
@@ -2153,6 +2178,211 @@ def create_hr_user():
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/extract-jd-pdf', methods=['POST', 'OPTIONS'])
+def extract_jd_pdf():
+    """Extract text from an uploaded JD PDF file. Rate limited to 20/minute."""
+    # Manual rate limit check (works even without flask-limiter decorator)
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "No file uploaded. Send a PDF as 'file' field."}), 400
+
+        uploaded_file = request.files['file']
+
+        if not uploaded_file.filename:
+            return jsonify({"error": "Empty filename"}), 400
+
+        if not uploaded_file.filename.lower().endswith('.pdf'):
+            return jsonify({"error": "Only PDF files are supported"}), 400
+
+        import io
+        pdf_bytes = uploaded_file.read()
+
+        if len(pdf_bytes) == 0:
+            return jsonify({"error": "Uploaded file is empty"}), 400
+
+        # Enforce file size limit
+        if len(pdf_bytes) > MAX_PDF_BYTES:
+            return jsonify({"error": f"File too large. Maximum allowed size is {MAX_PDF_BYTES // (1024*1024)} MB."}), 413
+
+        extracted_text = ""
+        page_count = 0
+        pdfplumber_error = None
+        pymupdf_error = None
+
+        # Try pdfplumber first
+        try:
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                page_count = len(pdf.pages)
+                pages_text = [p.extract_text() for p in pdf.pages if p.extract_text()]
+                extracted_text = "\n\n".join(t.strip() for t in pages_text)
+        except Exception as e:
+            pdfplumber_error = str(e)
+            print(f"[extract_jd_pdf] pdfplumber failed: {e}")
+
+        # Fallback to pymupdf
+        if not extracted_text.strip():
+            try:
+                import fitz
+                doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                page_count = len(doc)
+                pages_text = [doc[i].get_text() for i in range(len(doc)) if doc[i].get_text().strip()]
+                extracted_text = "\n\n".join(t.strip() for t in pages_text)
+                doc.close()
+            except Exception as e:
+                pymupdf_error = str(e)
+                print(f"[extract_jd_pdf] pymupdf failed: {e}")
+
+        if not extracted_text.strip():
+            detail = f"pdfplumber: {pdfplumber_error or 'no text'} | pymupdf: {pymupdf_error or 'no text'}"
+            print(f"[extract_jd_pdf] Both extractors failed: {detail}")
+            return jsonify({
+                "error": "Could not extract any text from this PDF. It may be a scanned image — please paste the text manually.",
+                "detail": detail
+            }), 422
+
+        return jsonify({
+            "text": extracted_text.strip(),
+            "pages": page_count,
+            "status": "success"
+        }), 200
+
+    except Exception as e:
+        print(f"[extract_jd_pdf] Unexpected error: {e}")
+        return jsonify({"error": "An unexpected error occurred while processing the PDF.", "status": "error"}), 500
+
+
+@app.route('/api/parse-job-description', methods=['POST', 'OPTIONS'])
+def parse_job_description():
+    """Parse a raw job description text using GPT and return structured job posting data."""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    try:
+        from openai import OpenAI
+        from dotenv import load_dotenv
+        load_dotenv()
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        raw_description = data.get('raw_description', '').strip()
+        if not raw_description:
+            return jsonify({"error": "raw_description is required"}), 400
+        if len(raw_description) < 30:
+            return jsonify({"error": "Job description is too short to parse"}), 400
+        if len(raw_description) > 20000:
+            return jsonify({"error": "Job description is too long. Please trim to under 20,000 characters."}), 400
+
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            return jsonify({"error": "AI parsing is not configured on the server. Contact your administrator."}), 500
+
+        client = OpenAI(api_key=api_key)
+        gpt_model = os.getenv("GPT_MODEL", "gpt-4o-mini")
+
+        prompt = f"""You are a job description parser. Extract structured information from the job description below and return ONLY valid JSON.
+
+Return this exact JSON structure (no markdown, no explanation):
+{{
+  "title": "job title string",
+  "department": "one of: MIS / IT, Finance, Marketing, HR, Operations, Sales, Other",
+  "skills": ["lowercase skill1", "lowercase skill2"],
+  "keywords": ["lowercase keyword1", "lowercase keyword2"],
+  "required_education": ["lowercase field of study or degree"],
+  "expected_projects": ["lowercase project type"],
+  "preferred_certifications": ["certification name or empty array"],
+  "min_years_experience": 0,
+  "max_years_experience": 3
+}}
+
+Rules:
+- skills: technical and soft skills mentioned (lowercase, no duplicates)
+- keywords: searchable terms that describe the role (lowercase)
+- required_education: degree fields like "computer science", "information technology", "software engineering"
+- expected_projects: types of projects relevant to the role like "web application", "api development", "database system"
+- preferred_certifications: any certifications mentioned, empty array if none
+- min_years_experience: integer, 0 if entry-level or not specified
+- max_years_experience: integer, use null if not specified or senior/open-ended
+- department: pick the closest match from the allowed values
+
+Job Description:
+---
+{raw_description}
+---
+
+Return ONLY valid JSON:"""
+
+        try:
+            response = client.chat.completions.create(
+                model=gpt_model,
+                messages=[
+                    {"role": "system", "content": "You are a job description parser. Return ONLY valid JSON, no markdown, no explanations."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.1,
+                max_tokens=1500,
+                timeout=GPT_TIMEOUT_SECONDS,
+            )
+        except Exception as gpt_err:
+            print(f"[parse_job_description] GPT API error: {gpt_err}")
+            return jsonify({"error": "AI service is temporarily unavailable. Please try again in a moment."}), 503
+
+        content = response.choices[0].message.content.strip()
+
+        # Strip markdown code blocks if GPT wraps in them
+        if content.startswith('```'):
+            content = content.split('\n', 1)[1] if '\n' in content else content
+        if content.endswith('```'):
+            content = content.rsplit('```', 1)[0]
+        content = content.strip()
+
+        import json as json_module
+        try:
+            parsed = json_module.loads(content)
+        except Exception as parse_err:
+            print(f"[parse_job_description] JSON parse error: {parse_err} | GPT output (first 500): {content[:500]}")
+            return jsonify({"error": "AI returned an unexpected response. Please try again."}), 500
+
+        # Post-parse validation — ensure arrays are lists, not strings
+        for arr_field in ["skills", "keywords", "required_education", "expected_projects", "preferred_certifications"]:
+            val = parsed.get(arr_field)
+            if not isinstance(val, list):
+                parsed[arr_field] = []
+
+        result = {
+            "title": str(parsed.get("title", "")).strip(),
+            "department": str(parsed.get("department", "MIS / IT")).strip(),
+            "description": raw_description,
+            "skills": parsed.get("skills", []),
+            "keywords": parsed.get("keywords", []),
+            "required_education": parsed.get("required_education", []),
+            "expected_projects": parsed.get("expected_projects", []),
+            "preferred_certifications": parsed.get("preferred_certifications", []),
+            "min_years_experience": parsed.get("min_years_experience", 0),
+            "max_years_experience": parsed.get("max_years_experience", None),
+            "status": "success"
+        }
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        print(f"[parse_job_description] Unexpected error: {e}")
+        return jsonify({"error": "An unexpected error occurred. Please try again.", "status": "error"}), 500
+        for arr_field in ["skills", "keywords", "required_education", "expected_projects", "preferred_certifications"]:
+            if not isinstance(result[arr_field], list):
+                result[arr_field] = []
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e), "status": "error"}), 500
 
 
 if __name__ == "__main__":

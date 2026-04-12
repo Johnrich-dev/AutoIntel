@@ -65,12 +65,13 @@ export const getSupabaseClient = (accessToken?: string) => {
 
 export const getSupabaseAdminClient = () => {
   // Use service role key if available — bypasses RLS for admin operations.
-  // Falls back to anon client if not configured.
   if (supabaseServiceKey && supabaseUrl) {
     return createClient(supabaseUrl, supabaseServiceKey, {
       auth: { persistSession: false }
     });
   }
+  // Fall back to anon key — write operations will rely on RLS policies allowing authenticated users.
+  // Ensure job_postings INSERT/UPDATE/DELETE policies exist in Supabase for this to work.
   return getSupabaseClient();
 };
 

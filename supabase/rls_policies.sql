@@ -99,6 +99,21 @@ CREATE POLICY "Job postings are viewable by everyone" ON public.job_postings
   FOR SELECT TO anon, authenticated
   USING (true);
 
+-- Admin frontend uses anon key (custom JWT auth, not Supabase Auth)
+-- so write policies must allow anon role
+CREATE POLICY "job_postings_anon_insert" ON public.job_postings
+  FOR INSERT TO anon
+  WITH CHECK (true);
+
+CREATE POLICY "job_postings_anon_update" ON public.job_postings
+  FOR UPDATE TO anon
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "job_postings_anon_delete" ON public.job_postings
+  FOR DELETE TO anon
+  USING (true);
+
 -- ============================================
 -- personality_tests
 -- ============================================
