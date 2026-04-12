@@ -65,8 +65,8 @@ def load_scoring_settings(supabase_client: Any) -> Dict[str, Any]:
         Dictionary with scoring settings (weights and thresholds)
     """
     try:
-        # Simply get the first row (no ordering to avoid syntax issues)
-        result = supabase_client.table("scoring_settings").select("*").limit(1).execute()
+        # Get the most recently updated settings row
+        result = supabase_client.table("scoring_settings").select("*").order("updated_at", desc=True).limit(1).execute()
         
         if result.data and len(result.data) > 0:
             settings = result.data[0]
@@ -216,28 +216,32 @@ def process_applicant_screening(
         unified_profile = job_alignment.get_unified_scoring_profile()
         
         # Get unified weights
+        def _get(key, fallback):
+            v = scoring_settings.get(key)
+            return v if v is not None else fallback
+
         weights = {
-            'experience_weight': scoring_settings.get("experience_weight") or unified_profile['weights'].get('experience_weight', 28),
-            'skills_weight': scoring_settings.get("skills_weight") or unified_profile['weights'].get('skills_weight', 30),
-            'education_weight': scoring_settings.get("education_weight") or unified_profile['weights'].get('education_weight', 18),
-            'projects_weight': scoring_settings.get("projects_weight") or unified_profile['weights'].get('projects_weight', 14),
-            'traincert_weight': scoring_settings.get("traincert_weight") or unified_profile['weights'].get('traincert_weight', 6),
-            'achievements_weight': scoring_settings.get("achievements_weight") or unified_profile['weights'].get('achievements_weight', 4)
+            'experience_weight': _get("experience_weight", unified_profile['weights'].get('experience_weight', 28)),
+            'skills_weight': _get("skills_weight", unified_profile['weights'].get('skills_weight', 30)),
+            'education_weight': _get("education_weight", unified_profile['weights'].get('education_weight', 18)),
+            'projects_weight': _get("projects_weight", unified_profile['weights'].get('projects_weight', 14)),
+            'traincert_weight': _get("traincert_weight", unified_profile['weights'].get('traincert_weight', 6)),
+            'achievements_weight': _get("achievements_weight", unified_profile['weights'].get('achievements_weight', 4)),
         }
-        
+
         # Get unified baselines
         baselines = {
-            'baseline_experience': scoring_settings.get("baseline_experience") or unified_profile['baselines'].get('baseline_experience', 2),
-            'baseline_skills': scoring_settings.get("baseline_skills") or unified_profile['baselines'].get('baseline_skills', 10),
-            'baseline_education': scoring_settings.get("baseline_education") or unified_profile['baselines'].get('baseline_education', 2),
-            'baseline_projects': scoring_settings.get("baseline_projects") or unified_profile['baselines'].get('baseline_projects', 2),
-            'baseline_traincert': scoring_settings.get("baseline_traincert") or unified_profile['baselines'].get('baseline_traincert', 2),
-            'baseline_achievements': scoring_settings.get("baseline_achievements") or unified_profile['baselines'].get('baseline_achievements', 1)
+            'baseline_experience': _get("baseline_experience", unified_profile['baselines'].get('baseline_experience', 2)),
+            'baseline_skills': _get("baseline_skills", unified_profile['baselines'].get('baseline_skills', 10)),
+            'baseline_education': _get("baseline_education", unified_profile['baselines'].get('baseline_education', 2)),
+            'baseline_projects': _get("baseline_projects", unified_profile['baselines'].get('baseline_projects', 2)),
+            'baseline_traincert': _get("baseline_traincert", unified_profile['baselines'].get('baseline_traincert', 2)),
+            'baseline_achievements': _get("baseline_achievements", unified_profile['baselines'].get('baseline_achievements', 1)),
         }
-        
+
         # Get unified thresholds
-        qualified_threshold = scoring_settings.get("qualified_threshold") or unified_profile['thresholds'].get('qualified_threshold', 78)
-        review_threshold = scoring_settings.get("review_threshold") or unified_profile['thresholds'].get('review_threshold', 65)
+        qualified_threshold = _get("qualified_threshold", unified_profile['thresholds'].get('qualified_threshold', 78))
+        review_threshold = _get("review_threshold", unified_profile['thresholds'].get('review_threshold', 65))
         
         # Allow override via function parameters
         if pass_threshold is not None:

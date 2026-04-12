@@ -193,7 +193,7 @@ export function AdminScoringSettings() {
       const { data, error: fetchError } = await adminClient
         .from('scoring_settings')
         .select('*')
-        .order('created_at', { ascending: false })
+        .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -252,9 +252,15 @@ export function AdminScoringSettings() {
       setSaveSuccess(false);
       const adminClient = getSupabaseAdminClient();
 
+      // Always upsert into the singleton row. If settings_id exists we reuse it,
+      // otherwise Supabase will insert a new row. updated_at is set explicitly so
+      // both the frontend and backend can reliably order by it.
       const saveData = {
+        ...(settings ? { settings_id: settings.settings_id } : {}),
         scoring_type: 'hybrid',
+        updated_at: new Date().toISOString(),
         experience_weight: formValues.experience_weight,
+        skills_weight: formValues.skills_weight,
         education_weight: formValues.education_weight,
         projects_weight: formValues.projects_weight,
         traincert_weight: formValues.traincert_weight,
@@ -274,35 +280,18 @@ export function AdminScoringSettings() {
         count_weight: formValues.count_weight,
       };
 
-      if (settings) {
-        const { error: updateError } = await adminClient
-          .from('scoring_settings')
-          .update(saveData)
-          .eq('settings_id', settings.settings_id);
+      const { error: upsertError } = await adminClient
+        .from('scoring_settings')
+        .upsert(saveData, { onConflict: 'settings_id' });
 
-        if (updateError) {
-          if (updateError.message?.includes('column') || updateError.code === '42703') {
-            throw new Error(`Database column missing: ${updateError.message}. Please run the migration add_hybrid_scoring_columns.sql in Supabase.`);
-          }
-          if (isTableNotExistError(updateError)) {
-            throw new Error('Database table "scoring_settings" does not exist. Please run the database migration first.');
-          }
-          throw new Error(`Update failed: ${updateError.message}`);
+      if (upsertError) {
+        if (upsertError.message?.includes('column') || upsertError.code === '42703') {
+          throw new Error(`Database column missing: ${upsertError.message}. Please run the migration add_hybrid_scoring_columns.sql in Supabase.`);
         }
-      } else {
-        const { error: insertError } = await adminClient
-          .from('scoring_settings')
-          .insert(saveData);
-
-        if (insertError) {
-          if (insertError.message?.includes('column') || insertError.code === '42703') {
-            throw new Error(`Database column missing: ${insertError.message}. Please run the migration add_hybrid_scoring_columns.sql in Supabase.`);
-          }
-          if (isTableNotExistError(insertError)) {
-            throw new Error('Database table "scoring_settings" does not exist. Please run the database migration first.');
-          }
-          throw new Error(`Insert failed: ${insertError.message}`);
+        if (isTableNotExistError(upsertError)) {
+          throw new Error('Database table "scoring_settings" does not exist. Please run the database migration first.');
         }
+        throw new Error(`Save failed: ${upsertError.message}`);
       }
 
       setSaveSuccess(true);

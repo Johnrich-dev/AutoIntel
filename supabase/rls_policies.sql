@@ -87,10 +87,25 @@ CREATE POLICY "applicants_admin_all" ON public.applicants
 -- ============================================
 -- hr_managers
 -- ============================================
-CREATE POLICY "hr_managers_full_access" ON public.hr_managers
-  FOR ALL TO authenticated
+-- Frontend uses anon key (custom JWT auth, not Supabase Auth)
+-- SELECT is open so the interviewer dropdown works for all users
+-- Write operations are restricted to anon (admin frontend) only
+CREATE POLICY "hr_managers_anon_select" ON public.hr_managers
+  FOR SELECT TO anon, authenticated
+  USING (true);
+
+CREATE POLICY "hr_managers_anon_insert" ON public.hr_managers
+  FOR INSERT TO anon
+  WITH CHECK (true);
+
+CREATE POLICY "hr_managers_anon_update" ON public.hr_managers
+  FOR UPDATE TO anon
   USING (true)
   WITH CHECK (true);
+
+CREATE POLICY "hr_managers_anon_delete" ON public.hr_managers
+  FOR DELETE TO anon
+  USING (true);
 
 -- ============================================
 -- job_postings
@@ -193,6 +208,17 @@ CREATE POLICY "Anyone can view scoring settings" ON public.scoring_settings
 
 CREATE POLICY "Authenticated users can manage scoring settings" ON public.scoring_settings
   FOR ALL TO authenticated
+  USING (true)
+  WITH CHECK (true);
+
+-- Admin frontend uses anon key (custom JWT auth, not Supabase Auth)
+-- so write policies must allow anon role (same pattern as job_postings/hr_managers)
+CREATE POLICY "scoring_settings_anon_insert" ON public.scoring_settings
+  FOR INSERT TO anon
+  WITH CHECK (true);
+
+CREATE POLICY "scoring_settings_anon_update" ON public.scoring_settings
+  FOR UPDATE TO anon
   USING (true)
   WITH CHECK (true);
 

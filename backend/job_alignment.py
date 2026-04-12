@@ -408,8 +408,17 @@ def extract_experience_text(experience_list: List[Dict]) -> str:
             parts.append(str(exp['company']))
         if exp.get('years'):
             parts.append(str(exp['years']) + " years")
+        # 'summary' = resume_parser (BERT) output key
         if exp.get('summary'):
             parts.append(str(exp['summary']))
+        # 'description' / 'bullets' = GPT extractor output keys
+        if exp.get('description'):
+            parts.append(str(exp['description']))
+        bullets = exp.get('bullets') or exp.get('responsibilities') or []
+        if isinstance(bullets, list):
+            parts.extend(str(b) for b in bullets if b)
+        elif isinstance(bullets, str) and bullets:
+            parts.append(bullets)
         if parts:
             texts.append(" ".join(parts))
     
@@ -1649,7 +1658,6 @@ def calculate_projects_keyword_match(
         else:
             bullets_text = str(bullets).lower()
         all_project_texts.append(f"{role} {summary} {bullets_text}")
-
     # 3. Raw resume text fallback — catches anything the parser missed
     if raw_resume_text:
         all_project_texts.append(raw_resume_text.lower())
@@ -2685,6 +2693,11 @@ def calculate_requirement_match_score(
     resume_projects = parsed_resume_json.get('projects', [])
     resume_traincerts = parsed_resume_json.get('trainings', []) + parsed_resume_json.get('certifications', [])
     resume_achievements = parsed_resume_json.get('achievements', [])
+
+    # Normalize resume_skills: resume_parser returns a flat list, GPT extractor returns a dict.
+    # calculate_skills_keyword_match expects a dict with an 'all' key (or hard_skills/soft_skills).
+    if isinstance(resume_skills, list):
+        resume_skills = {'all': resume_skills, 'hard_skills': resume_skills, 'soft_skills': []}
     
     # Extract job requirements
     job_skills = job_posting.get('skills', [])
@@ -2694,6 +2707,34 @@ def calculate_requirement_match_score(
     job_projects = job_posting.get('expected_projects', [])
     job_traincerts = job_posting.get('preferred_certifications', [])
     job_achievements = job_posting.get('preferred_achievements', [])
+
+    def _ensure_list(val) -> list:
+        """Normalize a DB field that may be a list, a JSON string, or a comma-separated string.
+        Supabase jsonb columns can arrive as a Python list, a JSON-encoded string, or a
+        plain comma-separated string depending on how the row was inserted."""
+        if not val:
+            return []
+        if isinstance(val, list):
+            return [str(v).strip() for v in val if str(v).strip()]
+        if isinstance(val, str):
+            stripped = val.strip()
+            if stripped.startswith('['):
+                try:
+                    import json as _json
+                    parsed = _json.loads(stripped)
+                    if isinstance(parsed, list):
+                        return [str(v).strip() for v in parsed if str(v).strip()]
+                except Exception:
+                    pass
+            return [s.strip() for s in stripped.split(',') if s.strip()]
+        return []
+
+    job_skills      = _ensure_list(job_skills)
+    job_title_keywords = _ensure_list(job_title_keywords)
+    job_education   = _ensure_list(job_education)
+    job_projects    = _ensure_list(job_projects)
+    job_traincerts  = _ensure_list(job_traincerts)
+    job_achievements = _ensure_list(job_achievements)
     
     # Calculate individual category matches
     experience_match = calculate_experience_keyword_match(
