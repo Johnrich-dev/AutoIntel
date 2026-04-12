@@ -220,18 +220,30 @@ export function ScreeningResults() {
             const matchExplain = typeof resumeScore.match_explain === 'string'
               ? JSON.parse(resumeScore.match_explain)
               : resumeScore.match_explain;
-            const rb = matchExplain?.component_breakdown?.requirement_match || {};
+
+            // New format: component_breakdown has raw scores directly
+            const cb = matchExplain?.component_breakdown || {};
+            // requirement_match holds the per-category raw 0-100 scores
+            const rb = cb.requirement_match || {};
             if (rb.skills        != null) skillsScore       = Math.round(rb.skills);
             if (rb.experience    != null) experienceScore   = Math.round(rb.experience);
             if (rb.education     != null) educationScore    = Math.round(rb.education);
             if (rb.projects      != null) projectsScore     = Math.round(rb.projects);
             if (rb.traincert     != null) traincertScore    = Math.round(rb.traincert);
             if (rb.achievements  != null) achievementsScore = Math.round(rb.achievements);
-            const cb = matchExplain?.component_breakdown?.count || {};
-            if (Object.keys(cb).length > 0) countBreakdown = cb;
+
+            // Also check top-level component_breakdown keys (new flat format from screening_service fix)
+            if (cb.skills        != null && skillsScore       == null) skillsScore       = Math.round(cb.skills);
+            if (cb.experience    != null && experienceScore   == null) experienceScore   = Math.round(cb.experience);
+            if (cb.education     != null && educationScore    == null) educationScore    = Math.round(cb.education);
+            if (cb.projects      != null && projectsScore     == null) projectsScore     = Math.round(cb.projects);
+            if (cb.traincert     != null && traincertScore    == null) traincertScore    = Math.round(cb.traincert);
+            if (cb.achievements  != null && achievementsScore == null) achievementsScore = Math.round(cb.achievements);
+
+            const countCb = cb.count || {};
+            if (Object.keys(countCb).length > 0) countBreakdown = countCb;
             if (matchExplain?.requirement_match_score != null) requirementMatchScore = Math.round(matchExplain.requirement_match_score);
             if (matchExplain?.count_score != null) countScore = Math.round(matchExplain.count_score);
-            // Read backend-computed missing skills for the gap panel
             if (Array.isArray(matchExplain?.missing_skills))
               dbMissingSkills = matchExplain.missing_skills;
           } catch { /* keep DB values */ }
