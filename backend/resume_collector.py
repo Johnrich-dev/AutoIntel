@@ -743,8 +743,8 @@ def process_emails():
                                 # Check if job was already matched on a previous run
                                 existing_applicant = supabase.table('applicants').select(
                                     'applied_job_id'
-                                ).eq('id', applicant_id).maybeSingle().execute()
-                                existing_job_id = existing_applicant.data.get('applied_job_id') if existing_applicant.data else None
+                                ).eq('id', applicant_id).limit(1).execute()
+                                existing_job_id = existing_applicant.data[0].get('applied_job_id') if existing_applicant.data else None
 
                                 job_id = None
                                 job_title = position
@@ -755,8 +755,9 @@ def process_emails():
                                     # Reuse previously matched job for consistency
                                     job_result = supabase.table('job_postings').select(
                                         'job_id, title, description, skills, keywords, required_education, expected_projects, min_years_experience, max_years_experience, department'
-                                    ).eq('job_id', existing_job_id).maybeSingle().execute()
-                                    if job_result.data:
+                                    ).eq('job_id', existing_job_id).limit(1).execute()
+                                    if job_result.data and len(job_result.data) > 0:
+                                        job = job_result.data[0]
                                         job = job_result.data
                                         job_id = job.get('job_id')
                                         job_title = job.get('title', position)
