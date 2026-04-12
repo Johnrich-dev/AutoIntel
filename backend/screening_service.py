@@ -285,10 +285,13 @@ def process_applicant_screening(
             component_scores = {
                 'requirement_match': req_breakdown,
                 'count': count_breakdown_data,
-                'experience': req_breakdown.get('experience', count_breakdown_data.get('experience', {}).get('score', 0) if isinstance(count_breakdown_data.get('experience'), dict) else count_breakdown_data.get('experience', 0)),
-                'skills': req_breakdown.get('skills', count_breakdown_data.get('skills', {}).get('score', 0) if isinstance(count_breakdown_data.get('skills'), dict) else count_breakdown_data.get('skills', 0)),
-                'education': req_breakdown.get('education', count_breakdown_data.get('education', {}).get('score', 0) if isinstance(count_breakdown_data.get('education'), dict) else count_breakdown_data.get('education', 0)),
-                'projects': req_breakdown.get('projects', count_breakdown_data.get('projects', {}).get('score', 0) if isinstance(count_breakdown_data.get('projects'), dict) else count_breakdown_data.get('projects', 0)),
+                # Raw 0-100 scores per category (unweighted) — used for UI display
+                'experience': req_breakdown.get('experience', 0),
+                'skills': req_breakdown.get('skills', 0),
+                'education': req_breakdown.get('education', 0),
+                'projects': req_breakdown.get('projects', 0),
+                'traincert': req_breakdown.get('traincert', 0),
+                'achievements': req_breakdown.get('achievements', 0),
                 'matched_skills': hybrid_result.get('matched_skills', []),
                 'missing_skills': hybrid_result.get('missing_skills', []),
             }
