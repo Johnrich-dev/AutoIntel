@@ -371,6 +371,10 @@ def process_applicant_screening(
                     "skills_score": component_scores.get("skills", 0),
                     "education_score": component_scores.get("education", 0),
                     "project_score": component_scores.get("projects", 0),
+                    "traincert_score": component_scores.get("traincert", 0),
+                    "achievements_score": component_scores.get("achievements", 0),
+                    "requirement_match_score": requirement_match_score,
+                    "count_score": count_score,
                     "final_score": score,
                     "status": "pending",
                     "match_explain": json.dumps({
@@ -385,7 +389,7 @@ def process_applicant_screening(
                 }
                 
                 # Try to insert or update
-                supabase_client.table("resume_scores").upsert(scores_data).execute()
+                supabase_client.table("resume_scores").upsert(scores_data, on_conflict="applicant_id").execute()
                 print(f"Updated resume_scores with component breakdown")
             except Exception as e:
                 print(f"Warning: Could not update resume_scores: {e}")

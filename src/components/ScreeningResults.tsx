@@ -162,7 +162,7 @@ export function ScreeningResults() {
       if (applicantsError) throw applicantsError;
 
       const { data: resumesData } = await adminClient.from('resumes').select('*');
-      const { data: resumeScoresData } = await adminClient.from('resume_scores').select('applicant_id, skills_score, experience_score, education_score, match_explain');
+      const { data: resumeScoresData } = await adminClient.from('resume_scores').select('applicant_id, skills_score, experience_score, education_score, project_score, traincert_score, achievements_score, requirement_match_score, count_score, match_explain');
       const { data: jobPostingsData } = await adminClient.from('job_postings').select('job_id, title, skills');
       const { data: videoAssessmentsData } = await adminClient.from('video_assessments').select('*');
       const { data: workStyleAssessmentsData } = await adminClient.from('work_style_assessments').select('*');
@@ -206,14 +206,14 @@ export function ScreeningResults() {
         let skillsScore: number | null       = resumeScore?.skills_score ?? null;
         let experienceScore: number | null   = resumeScore?.experience_score ?? null;
         let educationScore: number | null    = resumeScore?.education_score ?? null;
-        let projectsScore: number | null     = null;
-        let traincertScore: number | null    = null;
-        let achievementsScore: number | null = null;
-        let requirementMatchScore: number | null = null;
-        let countScore: number | null = null;
+        let projectsScore: number | null     = resumeScore?.project_score ?? null;
+        let traincertScore: number | null    = resumeScore?.traincert_score ?? null;
+        let achievementsScore: number | null = resumeScore?.achievements_score ?? null;
+        let requirementMatchScore: number | null = resumeScore?.requirement_match_score ?? null;
+        let countScore: number | null        = resumeScore?.count_score ?? null;
         let countBreakdown: Record<string, { count: number; score: number }> | null = null;
 
-        // Pull real component scores from match_explain (requirement_match breakdown)
+        // Pull missing_skills and count_breakdown from match_explain only (not scores)
         let dbMissingSkills: string[] | null = null;
         if (resumeScore?.match_explain) {
           try {
@@ -221,31 +221,25 @@ export function ScreeningResults() {
               ? JSON.parse(resumeScore.match_explain)
               : resumeScore.match_explain;
 
-            // New format: component_breakdown has raw scores directly
-            const cb = matchExplain?.component_breakdown || {};
-            // requirement_match holds the per-category raw 0-100 scores
-            const rb = cb.requirement_match || {};
-            if (rb.skills        != null) skillsScore       = Math.round(rb.skills);
-            if (rb.experience    != null) experienceScore   = Math.round(rb.experience);
-            if (rb.education     != null) educationScore    = Math.round(rb.education);
-            if (rb.projects      != null) projectsScore     = Math.round(rb.projects);
-            if (rb.traincert     != null) traincertScore    = Math.round(rb.traincert);
-            if (rb.achievements  != null) achievementsScore = Math.round(rb.achievements);
-
-            // Also check top-level component_breakdown keys (new flat format from screening_service fix)
-            if (cb.skills        != null && skillsScore       == null) skillsScore       = Math.round(cb.skills);
-            if (cb.experience    != null && experienceScore   == null) experienceScore   = Math.round(cb.experience);
-            if (cb.education     != null && educationScore    == null) educationScore    = Math.round(cb.education);
-            if (cb.projects      != null && projectsScore     == null) projectsScore     = Math.round(cb.projects);
-            if (cb.traincert     != null && traincertScore    == null) traincertScore    = Math.round(cb.traincert);
-            if (cb.achievements  != null && achievementsScore == null) achievementsScore = Math.round(cb.achievements);
-
-            const countCb = cb.count || {};
-            if (Object.keys(countCb).length > 0) countBreakdown = countCb;
-            if (matchExplain?.requirement_match_score != null) requirementMatchScore = Math.round(matchExplain.requirement_match_score);
-            if (matchExplain?.count_score != null) countScore = Math.round(matchExplain.count_score);
             if (Array.isArray(matchExplain?.missing_skills))
               dbMissingSkills = matchExplain.missing_skills;
+
+            const cb = matchExplain?.component_breakdown || {};
+            const countCb = cb.count || {};
+            if (Object.keys(countCb).length > 0) countBreakdown = countCb;
+
+            // Fall back to match_explain scores only if flat columns are all null/zero
+            if (skillsScore == null && experienceScore == null && educationScore == null) {
+              const rb = cb.requirement_match || {};
+              if (rb.skills        != null) skillsScore       = Math.round(rb.skills);
+              if (rb.experience    != null) experienceScore   = Math.round(rb.experience);
+              if (rb.education     != null) educationScore    = Math.round(rb.education);
+              if (rb.projects      != null) projectsScore     = Math.round(rb.projects);
+              if (rb.traincert     != null) traincertScore    = Math.round(rb.traincert);
+              if (rb.achievements  != null) achievementsScore = Math.round(rb.achievements);
+              if (matchExplain?.requirement_match_score != null) requirementMatchScore = Math.round(matchExplain.requirement_match_score);
+              if (matchExplain?.count_score != null) countScore = Math.round(matchExplain.count_score);
+            }
           } catch { /* keep DB values */ }
         }
 
@@ -256,7 +250,7 @@ export function ScreeningResults() {
           educationScore = null;
         }
 
-        let parsedData: ResumeParsedData | null = null;
+let parsedData: ResumeParsedData | null = null;
         if (resume?.parsed_data) {
           parsedData = typeof resume.parsed_data === 'object'
             ? resume.parsed_data
