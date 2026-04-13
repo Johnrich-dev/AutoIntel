@@ -213,7 +213,7 @@ export function ScreeningResults() {
         let countScore: number | null        = resumeScore?.count_score ?? null;
         let countBreakdown: Record<string, { count: number; score: number }> | null = null;
 
-        // Pull missing_skills and count_breakdown from match_explain only (not scores)
+        // Pull scores and metadata from match_explain
         let dbMissingSkills: string[] | null = null;
         if (resumeScore?.match_explain) {
           try {
@@ -228,18 +228,21 @@ export function ScreeningResults() {
             const countCb = cb.count || {};
             if (Object.keys(countCb).length > 0) countBreakdown = countCb;
 
-            // Fall back to match_explain scores only if flat columns are all null/zero
-            if (skillsScore == null && experienceScore == null && educationScore == null) {
-              const rb = cb.requirement_match || {};
-              if (rb.skills        != null) skillsScore       = Math.round(rb.skills);
-              if (rb.experience    != null) experienceScore   = Math.round(rb.experience);
-              if (rb.education     != null) educationScore    = Math.round(rb.education);
-              if (rb.projects      != null) projectsScore     = Math.round(rb.projects);
-              if (rb.traincert     != null) traincertScore    = Math.round(rb.traincert);
-              if (rb.achievements  != null) achievementsScore = Math.round(rb.achievements);
-              if (matchExplain?.requirement_match_score != null) requirementMatchScore = Math.round(matchExplain.requirement_match_score);
-              if (matchExplain?.count_score != null) countScore = Math.round(matchExplain.count_score);
-            }
+            const rb = cb.requirement_match || {};
+
+            // Always read flat DB columns for the 4 that exist in the schema
+            // For the rest (traincert, achievements, requirement_match_score, count_score),
+            // the DB schema has no flat columns — always pull from match_explain
+            if (skillsScore == null && rb.skills != null)           skillsScore       = Math.round(rb.skills);
+            if (experienceScore == null && rb.experience != null)   experienceScore   = Math.round(rb.experience);
+            if (educationScore == null && rb.education != null)     educationScore    = Math.round(rb.education);
+            if (projectsScore == null && rb.projects != null)       projectsScore     = Math.round(rb.projects);
+
+            // These columns don't exist as flat DB columns — always read from match_explain
+            if (rb.traincert    != null) traincertScore    = Math.round(rb.traincert);
+            if (rb.achievements != null) achievementsScore = Math.round(rb.achievements);
+            if (matchExplain?.requirement_match_score != null) requirementMatchScore = Math.round(matchExplain.requirement_match_score);
+            if (matchExplain?.count_score != null)             countScore            = Math.round(matchExplain.count_score);
           } catch { /* keep DB values */ }
         }
 
