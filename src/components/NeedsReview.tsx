@@ -229,18 +229,37 @@ export function NeedsReview({ onDecisionMade }: { onDecisionMade?: () => void } 
         // Map applicants with their data and filter to only those who completed both assessments
         if (applicantsData) {
           const mappedApplicants: NeedsReviewApplicant[] = applicantsData
-            .map(applicant => ({
-              ...applicant,
-              resume: resumesMap[applicant.id],
-              overall_score: applicant.screening_score || 0,
-              screened_at: applicant.screened_at || applicant.updated_at || applicant.created_at,
-              video_completed: videoAssessmentsMap[applicant.id] || false,
-              profiling_completed: personalityTestsMap[applicant.id] || false,
-              video_assessment_score: videoScoresMap[applicant.id],
-              work_style_score: workStyleScoresMap[applicant.id],
-              // Determine key issue based on screening_fit_category or score
-              key_issue: applicant.screening_fit_category || determineKeyIssue(),
-            }))
+            .map(applicant => {
+              const resumeScore = applicant.screening_score ?? 0;
+              const videoScore = videoScoresMap[applicant.id] ?? null;
+              const workScore = workStyleScoresMap[applicant.id] ?? null;
+
+              // Compute overall score as weighted average of available scores:
+              // Resume 50%, Video 30%, Work Style 20%
+              let overall_score: number;
+              if (videoScore !== null && workScore !== null) {
+                overall_score = Math.round(resumeScore * 0.5 + videoScore * 0.3 + workScore * 0.2);
+              } else if (videoScore !== null) {
+                overall_score = Math.round(resumeScore * 0.6 + videoScore * 0.4);
+              } else if (workScore !== null) {
+                overall_score = Math.round(resumeScore * 0.7 + workScore * 0.3);
+              } else {
+                overall_score = resumeScore;
+              }
+
+              return {
+                ...applicant,
+                resume: resumesMap[applicant.id],
+                overall_score,
+                screened_at: applicant.screened_at || applicant.updated_at || applicant.created_at,
+                video_completed: videoAssessmentsMap[applicant.id] || false,
+                profiling_completed: personalityTestsMap[applicant.id] || false,
+                video_assessment_score: videoScoresMap[applicant.id],
+                work_style_score: workStyleScoresMap[applicant.id],
+                key_issue: applicant.screening_fit_category || determineKeyIssue(),
+              };
+            })
+
             .filter(applicant => applicant.video_completed && applicant.profiling_completed);
 
           setApplicants(mappedApplicants);

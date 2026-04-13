@@ -45,6 +45,7 @@ CREATE TABLE public.admin_users (
   api_access boolean DEFAULT false,
   debug_mode boolean DEFAULT false,
   slack_webhook text,
+  must_change_password boolean DEFAULT false,
   CONSTRAINT admin_users_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.applicants (

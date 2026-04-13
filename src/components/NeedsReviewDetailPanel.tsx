@@ -207,44 +207,39 @@ export function NeedsReviewDetailPanel({
   const [workStyleData, setWorkStyleData] = useState<WorkStyleRecord | null>(null);
   const [loadingWorkStyle, setLoadingWorkStyle] = useState(false);
   const [resumeScores, setResumeScores] = useState<{ skills_score: number; experience_score: number; education_score: number; project_score: number } | null>(null);
+  const [matchedSkills, setMatchedSkills] = useState<string[]>([]);
+  const [missingSkills, setMissingSkills] = useState<string[]>([]);
+  const [skillsReady, setSkillsReady] = useState(false);
+  const [resolvedName, setResolvedName] = useState<string | null>(null);
   const [hrNotes, setHrNotes] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ type: 'verified' | 'mismatch' } | null>(null);
   const [showNotes, setShowNotes] = useState(false);
 
-  // Handle video verification (Verified or Mismatch)
+  // Handle shortlist/reject decision — updates DB directly, no backend dependency
   const handleVideoVerification = async (verificationStatus: 'verified' | 'mismatch') => {
-    if (!applicant?.id || !applicant?.email || !applicant?.name || !applicant?.position) {
-      console.error('Missing applicant data for video verification');
-      return;
-    }
+    if (!applicant?.id) return;
 
     setVerifyingVideo(true);
     try {
-      const response = await fetch(`${API_BASE}/api/video-verification`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          applicant_id: applicant.id,
-          applicant_email: applicant.email,
-          applicant_name: applicant.name,
-          position: applicant.position,
-          verification_status: verificationStatus,
-        }),
-      });
+      const adminClient = getSupabaseAdminClient();
+      const newStatus = verificationStatus === 'verified' ? 'shortlisted' : 'rejected';
 
-      const result = await response.json();
+      const { error } = await adminClient
+        .from('applicants')
+        .update({
+          status: newStatus,
+          screening_status: verificationStatus === 'verified' ? 'passed' : 'failed',
+        })
+        .eq('id', applicant.id);
 
-      if (result.success) {
-        onDecision?.(verificationStatus);
-        onClose();
-      } else {
-        // Surface error via onDecision with a fallback — parent handles toast
-        console.error('Verification error:', result.error);
-      }
+      if (error) throw error;
+
+      onDecision?.(verificationStatus);
+      onClose();
     } catch (error) {
-      console.error('Error during video verification:', error);
+      console.error('Error updating applicant status:', error);
     } finally {
       setVerifyingVideo(false);
     }
@@ -287,6 +282,10 @@ export function NeedsReviewDetailPanel({
     setNotesSaved(false);
     setShowNotes(false);
     setResumeScores(null);
+    setMatchedSkills([]);
+    setMissingSkills([]);
+    setSkillsReady(false);
+    setResolvedName(null);
 
     const fetchExistingNotes = async () => {
       if (!applicant?.id) return;
@@ -307,40 +306,164 @@ export function NeedsReviewDetailPanel({
       if (!applicant?.id) return;
       try {
         const adminClient = getSupabaseAdminClient();
-        const { data } = await adminClient
-          .from('resume_scores')
-          .select('skills_score, experience_score, education_score, project_score, match_explain')
-          .eq('applicant_id', applicant.id)
-          .order('score_id', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (data) {
-          // If sub-scores are zero, try to recover from match_explain JSON
-          let scores = {
-            skills_score: data.skills_score || 0,
-            experience_score: data.experience_score || 0,
-            education_score: data.education_score || 0,
-            project_score: data.project_score || 0,
-          };
-          const allZero = Object.values(scores).every(v => v === 0);
-          if (allZero && data.match_explain) {
-            try {
-              const explain = typeof data.match_explain === 'string'
-                ? JSON.parse(data.match_explain)
-                : data.match_explain;
-              const bd = explain?.component_breakdown?.count || explain?.count_breakdown || {};
-              scores = {
-                skills_score: bd.skills || 0,
-                experience_score: bd.experience || 0,
-                education_score: bd.education || 0,
-                project_score: bd.projects || 0,
-              };
-            } catch { /* ignore parse errors */ }
-          }
-          setResumeScores(scores);
+
+        // Fetch resume scores + job posting skills in parallel
+        const [scoresResult, jobResult] = await Promise.all([
+          adminClient
+            .from('resume_scores')
+            .select('skills_score, experience_score, education_score, project_score, match_explain')
+            .eq('applicant_id', applicant.id)
+            .order('score_id', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          applicant.position
+            ? adminClient
+                .from('job_postings')
+                .select('skills')
+                .or(`title.ilike.%${applicant.position}%,title.eq.${applicant.position}`)
+                .limit(1)
+                .maybeSingle()
+            : Promise.resolve({ data: null }),
+        ]);
+
+        const data = scoresResult.data;
+
+        // Parse match_explain
+        let explain: Record<string, unknown> = {};
+        if (data?.match_explain) {
+          try {
+            explain = typeof data.match_explain === 'string'
+              ? JSON.parse(data.match_explain)
+              : data.match_explain as Record<string, unknown>;
+          } catch { /* ignore */ }
         }
+
+        // Sub-scores
+        let scores = {
+          skills_score: data?.skills_score || 0,
+          experience_score: data?.experience_score || 0,
+          education_score: data?.education_score || 0,
+          project_score: data?.project_score || 0,
+        };
+        const allZero = Object.values(scores).every(v => v === 0);
+        if (allZero) {
+          const bd = (explain?.component_breakdown as Record<string, unknown>)?.count as Record<string, number>
+            || explain?.count_breakdown as Record<string, number>
+            || {};
+          scores = {
+            skills_score: (bd.skills as number) || 0,
+            experience_score: (bd.experience as number) || 0,
+            education_score: (bd.education as number) || 0,
+            project_score: (bd.projects as number) || 0,
+          };
+        }
+
+        // ── Parse resume data first — used for both name resolution and skill matching ──
+        const parsedData = applicant.resume?.parsed_data
+          ? typeof applicant.resume.parsed_data === 'string'
+            ? JSON.parse(applicant.resume.parsed_data)
+            : applicant.resume.parsed_data
+          : null;
+
+        // ── Resolve name from parsed resume (more accurate than email display name) ──
+        const resumeName = parsedData?.name as string | undefined;
+        if (resumeName && resumeName.trim() && resumeName.trim() !== applicant.name) {
+          setResolvedName(resumeName.trim());
+          // Silently update the DB so future loads use the correct name
+          try {
+            const adminClient = getSupabaseAdminClient();
+            await adminClient
+              .from('applicants')
+              .update({ name: resumeName.trim() })
+              .eq('id', applicant.id);
+          } catch { /* non-critical */ }
+        }
+
+        // ── Compute matched/missing from resume parsed_data vs job_postings.skills ──
+
+        // Collect all skills from resume
+        const allResumeSkills: string[] = [];
+        if (parsedData?.skills) {
+          if (Array.isArray(parsedData.skills)) {
+            allResumeSkills.push(...parsedData.skills);
+          } else if (parsedData.skills.hard_skills && Array.isArray(parsedData.skills.hard_skills)) {
+            allResumeSkills.push(...parsedData.skills.hard_skills);
+          } else if (typeof parsedData.skills === 'object') {
+            Object.values(parsedData.skills as Record<string, unknown>).forEach((v) => {
+              if (Array.isArray(v)) allResumeSkills.push(...(v as string[]));
+              else if (typeof v === 'string') allResumeSkills.push(v);
+            });
+          }
+        }
+
+        // Deduplicate resume skills
+        const labelPattern = /^(skills?|technical|soft|hard|tools?|languages?|frameworks?|platforms?|databases?|other|additional|core|key|professional|personal)$/i;
+        const seen = new Set<string>();
+        const cleanSkills: string[] = [];
+        for (const s of allResumeSkills) {
+          if (!s || typeof s !== 'string') continue;
+          const key = s.toLowerCase().trim();
+          if (!seen.has(key) && !labelPattern.test(key)) {
+            seen.add(key);
+            cleanSkills.push(s.trim());
+          }
+        }
+
+        // Get required skills from job_postings
+        let requiredSkills: string[] = [];
+        const jobData = (jobResult as { data: { skills?: unknown } | null }).data;
+        if (jobData?.skills) {
+          requiredSkills = Array.isArray(jobData.skills)
+            ? jobData.skills as string[]
+            : typeof jobData.skills === 'string'
+            ? JSON.parse(jobData.skills)
+            : [];
+        }
+
+        // Alias map for fuzzy matching
+        const ALIASES: Record<string, string[]> = {
+          'aws': ['amazon web services', 'aws cloud', 'aws s3', 'aws ec2', 'aws lambda'],
+          'gcp': ['google cloud', 'google cloud platform'],
+          'azure': ['microsoft azure', 'azure cloud', 'azure devops'],
+          'sql': ['mysql', 'postgresql', 'postgres', 'mssql', 'sqlite', 'supabase'],
+          'python': ['django', 'flask', 'fastapi'],
+          'javascript': ['js', 'node.js', 'nodejs', 'react', 'vue', 'angular', 'typescript'],
+          'git': ['github', 'gitlab', 'version control'],
+          'spark': ['apache spark', 'pyspark'],
+          'linux': ['unix', 'bash', 'shell scripting'],
+          'mongodb': ['mongo', 'nosql'],
+          'dotnet': ['.net', '.net core', 'asp.net'],
+        };
+        const aliasToCanon: Record<string, string> = {};
+        for (const [canon, variants] of Object.entries(ALIASES)) {
+          aliasToCanon[canon] = canon;
+          for (const v of variants) aliasToCanon[v] = canon;
+        }
+        const canon = (s: string) => {
+          const low = s.toLowerCase().trim();
+          return aliasToCanon[low] ?? low;
+        };
+
+        const resumeCanons = cleanSkills.map(canon);
+
+        const matched = requiredSkills.length > 0
+          ? requiredSkills.filter(req => {
+              const rc = canon(req);
+              return resumeCanons.some(mc => mc === rc || mc.includes(rc) || rc.includes(mc));
+            })
+          : cleanSkills; // fallback: show all resume skills if no job posting found
+
+        const missing = requiredSkills.filter(req => {
+          const rc = canon(req);
+          return !resumeCanons.some(mc => mc === rc || mc.includes(rc) || rc.includes(mc));
+        });
+
+        setResumeScores(scores);
+        setMatchedSkills(matched);
+        setMissingSkills(missing);
+        setSkillsReady(true);
       } catch {
-        // no resume_scores row yet — breakdown stays empty
+        setSkillsReady(true);
       }
     };
 
@@ -479,8 +602,8 @@ export function NeedsReviewDetailPanel({
             projects_score: resumeScores?.project_score || applicant.projects_score || 0,
             video_score: applicant.video_assessment_score || 0,
             work_style_score: applicant.work_style_score || 0,
-            matched_skills: applicant.matched_skills || [],
-            missing_skills: applicant.missing_skills || [],
+            matched_skills: matchedSkills.length > 0 ? matchedSkills : (applicant.matched_skills || []),
+            missing_skills: missingSkills.length > 0 ? missingSkills : (applicant.missing_skills || []),
             position: applicant.position || 'the position'
           }),
         });
@@ -501,10 +624,10 @@ export function NeedsReviewDetailPanel({
       }
     };
 
-    if (isOpen && applicant && resumeScores !== undefined) {
+    if (isOpen && applicant && skillsReady) {
       fetchAiInsights();
     }
-  }, [isOpen, applicant?.id, resumeScores]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen, applicant?.id, skillsReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch work style assessment data when work tab is active
   useEffect(() => {
@@ -569,14 +692,12 @@ export function NeedsReviewDetailPanel({
     { label: 'Projects', score: resumeScores?.project_score || applicant.projects_score || 0, icon: FolderOpen },
   ];
 
-  // Compute overall combined score from all three pillars
-  const resumeScore = applicant.screening_score || applicant.overall_score || 0;
+  // Use the pre-computed weighted overall score from the parent (NeedsReview.tsx)
+  // Formula: resume 50% + video 30% + work style 20%
+  const resumeScore = applicant.screening_score || 0;
   const videoScore = applicant.video_assessment_score || 0;
   const workScore = applicant.work_style_score || 0;
-  const scoredPillars = [resumeScore, videoScore, workScore].filter(s => s > 0);
-  const overallCombined = scoredPillars.length > 0
-    ? Math.round(scoredPillars.reduce((a, b) => a + b, 0) / scoredPillars.length)
-    : 0;
+  const overallCombined = applicant.overall_score || 0;
 
   return (
     <div className={`fixed inset-y-0 right-0 z-50 bg-white shadow-2xl transition-all duration-300 flex flex-col ${isFullscreen ? 'inset-0' : 'w-full max-w-3xl'}`}>
@@ -584,10 +705,10 @@ export function NeedsReviewDetailPanel({
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10 flex-shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
-            {applicant.name?.charAt(0).toUpperCase() || '?'}
+            {(resolvedName || applicant.name)?.charAt(0).toUpperCase() || '?'}
           </div>
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-gray-900 truncate">{applicant.name || 'Applicant Details'}</h2>
+            <h2 className="text-base font-semibold text-gray-900 truncate">{resolvedName || applicant.name || 'Applicant Details'}</h2>
             <p className="text-xs text-gray-500 truncate">{applicant.position || 'No position'}</p>
           </div>
         </div>
@@ -690,7 +811,7 @@ export function NeedsReviewDetailPanel({
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-gray-900">Overall Score</p>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    Average across {scoredPillars.length} completed assessment{scoredPillars.length !== 1 ? 's' : ''}
+                    Weighted: Resume 50% · Video 30% · Work Style 20%
                   </p>
                   {/* Mini bar */}
                   <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
@@ -740,34 +861,15 @@ export function NeedsReviewDetailPanel({
               </div>
             </div>
 
-            {/* Resume Sub-scores breakdown */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Resume Breakdown</p>
-              {resumeScores ? (
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                  {scoreCategories.map(({ label, score, icon: Icon }) => (
-                    <div key={label} className="flex items-center gap-2">
-                      <Icon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                      <span className="text-xs text-gray-600 w-20">{label}</span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                        <div className={`h-1.5 rounded-full ${getScoreBgColor(score)}`} style={{ width: `${score}%` }} />
-                      </div>
-                      <span className={`text-xs font-semibold w-8 text-right ${getScoreColor(score)}`}>{score}%</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-gray-400">Sub-scores not available for this applicant.</p>
-              )}
-            </div>
+            {/* Resume Sub-scores breakdown — removed (unreliable data) */}
 
-            {/* Applicant Summary — no duplicate score */}
+            {/* Applicant Summary */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Applicant Summary</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-gray-500">Name</p>
-                  <p className="text-sm font-medium text-gray-900">{applicant.name || 'Unknown'}</p>
+                  <p className="text-sm font-medium text-gray-900">{resolvedName || applicant.name || 'Unknown'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Email</p>
@@ -786,146 +888,53 @@ export function NeedsReviewDetailPanel({
               </div>
             </div>
 
-            {/* Skills Match — matched and missing skills explicitly listed */}
-            {((applicant.matched_skills && applicant.matched_skills.length > 0) || (applicant.missing_skills && applicant.missing_skills.length > 0)) && (
-              <div className="grid grid-cols-2 gap-4">
-                {applicant.matched_skills && applicant.matched_skills.length > 0 && (
-                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center">
-                        <CheckCircle className="w-3.5 h-3.5 text-green-600" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-gray-900">Matched Skills</h3>
-                      <span className="ml-auto text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                        {applicant.matched_skills.length}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {applicant.matched_skills.map((skill, i) => (
-                        <span key={i} className="px-2.5 py-1 bg-green-50 text-green-700 border border-green-100 rounded-lg text-xs font-medium">
-                          {skill}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {applicant.missing_skills && applicant.missing_skills.length > 0 && (
-                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center">
-                        <AlertCircle className="w-3.5 h-3.5 text-red-600" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-gray-900">Missing Skills</h3>
-                      <span className="ml-auto text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
-                        {applicant.missing_skills.length}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {applicant.missing_skills.map((skill, i) => (
-                        <span key={i} className="px-2.5 py-1 bg-red-50 text-red-700 border border-red-100 rounded-lg text-xs font-medium">
-                          {skill}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* AI Insights & Suggestions */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
-                    <TrendingUp className="w-4 h-4 text-indigo-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900">AI Insights</h3>
+            {/* AI Suggestion — full width */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4 text-emerald-600" />
                 </div>
-                {loadingInsights ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
-                  </div>
-                ) : aiInsights?.insights ? (
-                  <div className="space-y-3">
-                    {aiInsights.insights.map((insight, index: number) => (
-                      <div key={index} className="flex items-start gap-2">
-                        {insight.type === 'strength' && <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />}
-                        {insight.type === 'weakness' && <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />}
-                        {insight.type === 'opportunity' && <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />}
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{insight.title}</p>
-                          <p className="text-xs text-gray-600">{insight.description}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-gray-700">Matched {applicant.matched_skills?.length || 0} required skill{(applicant.matched_skills?.length || 0) !== 1 ? 's' : ''}</p>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-gray-700">Missing {applicant.missing_skills?.length || 0} key qualification{(applicant.missing_skills?.length || 0) !== 1 ? 's' : ''}</p>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <BarChart3 className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-gray-700">
-                        Resume score: {resumeScore}% —{' '}
-                        {resumeScore >= 80 ? 'strong fit' : resumeScore >= 60 ? 'borderline, needs review' : 'below threshold'}
-                      </p>
-                    </div>
-                  </div>
-                )}
+                <h3 className="text-lg font-semibold text-gray-900">AI Suggestion</h3>
               </div>
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-                    <MessageSquare className="w-4 h-4 text-emerald-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900">AI Suggestion</h3>
+              {loadingInsights ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-emerald-600 animate-spin" />
                 </div>
-                {loadingInsights ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 text-emerald-600 animate-spin" />
-                  </div>
-                ) : aiInsights?.suggestions ? (
-                  <div className="space-y-3">
-                    {aiInsights.suggestions.map((suggestion, index: number) => (
-                      <div key={index} className="p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-sm font-medium text-gray-900">{suggestion.action}</p>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            suggestion.priority === 'high' ? 'bg-red-100 text-red-700' :
-                            suggestion.priority === 'medium' ? 'bg-amber-100 text-amber-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
-                            {suggestion.priority}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-600">{suggestion.reason}</p>
+              ) : aiInsights?.suggestions ? (
+                <div className="space-y-3">
+                  {aiInsights.suggestions.map((suggestion, index: number) => (
+                    <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-medium text-gray-900">{suggestion.action}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          suggestion.priority === 'high' ? 'bg-red-100 text-red-700' :
+                          suggestion.priority === 'medium' ? 'bg-amber-100 text-amber-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {suggestion.priority}
+                        </span>
                       </div>
-                    ))}
-                    {aiInsights.summary && (
-                      <div className="pt-2 border-t border-gray-100">
-                        <p className="text-xs text-gray-500 font-medium">Summary</p>
-                        <p className="text-sm text-gray-700 mt-1">{aiInsights.summary}</p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-700 leading-relaxed">
-                      Based on the assessment scores, this candidate shows potential but requires further evaluation. Consider reviewing their video assessment and work profiling results before making a final decision.
-                    </p>
+                      <p className="text-xs text-gray-600">{suggestion.reason}</p>
+                    </div>
+                  ))}
+                  {aiInsights.summary && (
                     <div className="pt-2 border-t border-gray-100">
-                      <p className="text-xs text-gray-500 font-medium">Recommended Action</p>
-                      <p className="text-sm text-indigo-600 font-medium mt-1">Schedule interview to validate skills</p>
+                      <p className="text-xs text-gray-500 font-medium">Summary</p>
+                      <p className="text-sm text-gray-700 mt-1">{aiInsights.summary}</p>
                     </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    Based on the assessment scores, this candidate shows potential but requires further evaluation. Consider reviewing their video assessment and work profiling results before making a final decision.
+                  </p>
+                  <div className="pt-2 border-t border-gray-100">
+                    <p className="text-xs text-gray-500 font-medium">Recommended Action</p>
+                    <p className="text-sm text-indigo-600 font-medium mt-1">Schedule interview to validate skills</p>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1651,7 +1660,7 @@ export function NeedsReviewDetailPanel({
         <div className="flex items-center gap-2">
           <div className="flex-1 min-w-0">
             <p className="text-xs text-gray-500">Decision for</p>
-            <p className="text-sm font-semibold text-gray-900 truncate">{applicant.name || 'this applicant'}</p>
+            <p className="text-sm font-semibold text-gray-900 truncate">{resolvedName || applicant.name || 'this applicant'}</p>
             {(!applicant.video_completed || !applicant.profiling_completed) && (
               <p className="text-xs text-amber-600 mt-0.5">
                 {!applicant.video_completed && !applicant.profiling_completed
@@ -1711,8 +1720,8 @@ export function NeedsReviewDetailPanel({
             </h3>
             <p className="text-sm text-gray-500 text-center mb-1">
               {confirmDialog.type === 'verified'
-                ? <>Are you certain <span className="font-medium text-gray-700">{applicant.name || 'this applicant'}</span> has been properly verified and is ready to be shortlisted?</>
-                : <>Are you sure you want to reject <span className="font-medium text-gray-700">{applicant.name || 'this applicant'}</span>?</>}
+                ? <>Are you certain <span className="font-medium text-gray-700">{resolvedName || applicant.name || 'this applicant'}</span> has been properly verified and is ready to be shortlisted?</>
+                : <>Are you sure you want to reject <span className="font-medium text-gray-700">{resolvedName || applicant.name || 'this applicant'}</span>?</>}
             </p>
             <p className="text-xs text-gray-400 text-center mb-5">
               {confirmDialog.type === 'verified'

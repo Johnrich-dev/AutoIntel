@@ -584,7 +584,7 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
   const [sortField, setSortField] = useState<SortField>('overall');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   // Pipeline stage filter: 'all' | 'shortlisted' | 'final_interview'
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('shortlisted');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCandidate, setSelectedCandidate] = useState<ApplicantWithDetails | null>(null);
@@ -758,6 +758,11 @@ export function ShortlistedCandidates({ applicants: externalApplicants, onNaviga
       setApplicants(prev => prev.map(a => a.id === id ? { ...a, status: newStatus } : a));
       if (selectedCandidate?.id === id) {
         setSelectedCandidate(prev => prev ? { ...prev, status: newStatus } : null);
+      }
+
+      // Close the panel when advancing — the candidate will leave the shortlisted view
+      if (newStatus === 'final_interview' || newStatus === 'rejected') {
+        setIsProfilePanelOpen(false);
       }
 
       onApplicantStatusChanged?.();

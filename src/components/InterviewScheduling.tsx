@@ -133,6 +133,7 @@ function InterviewModal({
   jobs,
   hrManagers,
   isScheduling = false,
+  scheduleError,
   formData,
   setFormData
 }: {
@@ -144,6 +145,7 @@ function InterviewModal({
   jobs: JobPosting[];
   hrManagers?: HRManager[];
   isScheduling?: boolean;
+  scheduleError?: string | null;
   formData: InterviewFormData;
   setFormData: (data: InterviewFormData) => void;
 }) {
@@ -191,7 +193,7 @@ function InterviewModal({
       }
     }
     onSave(formData);
-    onClose();
+    // Do NOT call onClose() here — the parent closes the modal after the async operation completes
   };
 
   const needsMeetingLink = formData.interviewType === 'online';
@@ -203,7 +205,7 @@ function InterviewModal({
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-full items-start justify-center p-4 pt-8">
-        <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={onClose} />
+        <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={isScheduling ? undefined : onClose} />
         <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -212,10 +214,18 @@ function InterviewModal({
               </h2>
               <p className="text-sm text-gray-500 mt-0.5">A calendar invite will be sent to all participants.</p>
             </div>
-            <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+            <button onClick={isScheduling ? undefined : onClose} disabled={isScheduling} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed">
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Inline error banner */}
+          {scheduleError && (
+            <div className="flex items-center gap-2 px-4 py-3 mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+              <XCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{scheduleError}</span>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
 
@@ -480,7 +490,8 @@ function InterviewModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                disabled={isScheduling}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
@@ -860,6 +871,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
   const [loading, setLoading] = useState(true);
   const [isScheduling, setIsScheduling] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
     type: 'cancel' | 'hire' | 'reject';
     interviewId?: string;
@@ -1060,6 +1072,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
 
     setIsScheduling(true);
     setNotification(null);
+    setScheduleError(null);
 
     // Parse additional attendees from comma-separated string
     const additionalAttendeesArray = data.additionalAttendees
@@ -1097,8 +1110,9 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
 
       if (result.success || result.email_sent) {
         if (!data.interviewType) {
-          setNotification({ type: 'error', message: 'Please select an interview type' });
-          setIsScheduling(false);
+          const errMsg = 'Please select an interview type';
+          setScheduleError(errMsg);
+          setNotification({ type: 'error', message: errMsg });
           return;
         }
 
@@ -1172,12 +1186,37 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
           message = 'Interview scheduled! Calendar event created but email delivery failed.';
         }
         setNotification({ type: 'success', message });
+        // Close modal only after successful scheduling
+        setShowScheduleModal(false);
+        setEditingInterview(null);
+        setFormData({
+          applicantId: '',
+          jobId: '',
+          interviewDate: '',
+          interviewTime: '',
+          interviewType: '' as '' | 'online' | 'in-person',
+          durationMinutes: 60,
+          timeZone: 'Asia/Manila',
+          meetingLink: '',
+          meetingId: '',
+          meetingPasscode: '',
+          location: '',
+          interviewerId: '',
+          additionalAttendees: '',
+          applicantInstructions: '',
+          internalNotes: '',
+          notes: ''
+        });
       } else {
-        setNotification({ type: 'error', message: result.error || 'Failed to schedule interview' });
+        const errMsg = result.error || 'Failed to schedule interview';
+        setScheduleError(errMsg);
+        setNotification({ type: 'error', message: errMsg });
       }
     } catch (error) {
       console.error('Error scheduling interview:', error);
-      setNotification({ type: 'error', message: 'Failed to schedule interview. Please check if the API server is running.' });
+      const errMsg = 'Failed to schedule interview. Please check if the API server is running.';
+      setScheduleError(errMsg);
+      setNotification({ type: 'error', message: errMsg });
     } finally {
       setIsScheduling(false);
     }
@@ -1602,8 +1641,10 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
       <InterviewModal
         isOpen={showScheduleModal}
         onClose={() => {
+          if (isScheduling) return;
           setShowScheduleModal(false);
           setEditingInterview(null);
+          setScheduleError(null);
           setFormData({
             applicantId: '',
             jobId: '',
@@ -1629,6 +1670,7 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
         jobs={jobs}
         hrManagers={hrManagers}
         isScheduling={isScheduling}
+        scheduleError={scheduleError}
         formData={formData}
         setFormData={setFormData}
       />
