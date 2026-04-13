@@ -162,7 +162,8 @@ export function ScreeningResults() {
       if (applicantsError) throw applicantsError;
 
       const { data: resumesData } = await adminClient.from('resumes').select('*');
-      const { data: resumeScoresData } = await adminClient.from('resume_scores').select('applicant_id, skills_score, experience_score, education_score, project_score, traincert_score, achievements_score, requirement_match_score, count_score, match_explain');
+      const { data: resumeScoresData, error: resumeScoresError } = await adminClient.from('resume_scores').select('applicant_id, skills_score, experience_score, education_score, project_score, traincert_score, achievements_score, requirement_match_score, count_score, match_explain');
+      if (resumeScoresError) console.error('[resume_scores] fetch error:', resumeScoresError);
       const { data: jobPostingsData } = await adminClient.from('job_postings').select('job_id, title, skills');
       const { data: videoAssessmentsData } = await adminClient.from('video_assessments').select('*');
       const { data: workStyleAssessmentsData } = await adminClient.from('work_style_assessments').select('*');
