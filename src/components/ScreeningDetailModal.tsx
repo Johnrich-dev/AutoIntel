@@ -158,22 +158,6 @@ export function ScreeningDetailModal({
   const isNotScored = status === 'not_scored';
   const hasScore    = !isNotScored && overallScore > 0;
 
-  // Per-category requirement match — only show categories with real values
-  const reqCategories: { label: string; score: number; Icon: React.ElementType; iconColor: string }[] = [];
-  const pushReq = (label: string, val: number | null | undefined, Icon: React.ElementType, iconColor: string) => {
-    if (val != null && val > 0) reqCategories.push({ label, score: val, Icon, iconColor });
-  };
-  pushReq('Skills',       applicant.skills_score,      Star,          'text-purple-500');
-  pushReq('Experience',   applicant.experience_score,  Briefcase,     'text-blue-500');
-  pushReq('Education',    applicant.education_score,   GraduationCap, 'text-green-500');
-  pushReq('Projects',     applicant.projects_score,    Award,         'text-orange-500');
-  pushReq('Train/Certs',  applicant.traincert_score,   Wrench,        'text-teal-500');
-  pushReq('Achievements', applicant.achievements_score, TrendingUp,   'text-pink-500');
-
-  const scoreColor      = (s: number) => s >= 78 ? 'bg-green-500' : s >= 65 ? 'bg-yellow-400' : 'bg-red-400';
-  const scoreLabel      = (s: number) => s >= 78 ? 'Strong' : s >= 65 ? 'Moderate' : 'Weak';
-  const scoreLabelColor = (s: number) => s >= 78 ? 'text-green-600' : s >= 65 ? 'text-yellow-600' : 'text-red-500';
-
   const screenedDate = applicant.screened_at
     ? formatDate(applicant.screened_at)
     : formatDate(applicant.created_at);
@@ -318,8 +302,8 @@ export function ScreeningDetailModal({
             </div>
           )}
 
-          {/* Score breakdown — only when real data exists */}
-          {hasScore && reqCategories.length > 0 && (
+          {/* Score breakdown — KPI cards */}
+          {hasScore && (
             <div className="bg-white rounded-xl border border-gray-200 p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
@@ -328,24 +312,40 @@ export function ScreeningDetailModal({
                 </h3>
                 {requirementMatchScore != null && countScore != null && (
                   <span className="text-xs text-gray-400">
-                    {Math.round(requirementMatchScore)}% job match · {Math.round(countScore)}% profile completeness
+                    {Math.round(requirementMatchScore)}% match · {Math.round(countScore)}% completeness
                   </span>
                 )}
               </div>
-              <div className={`grid gap-2 ${reqCategories.length <= 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-3'}`}>
-                {reqCategories.map(({ label, score, Icon, iconColor }) => (
-                  <div key={label} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-                    <div className="flex items-center justify-between mb-1 gap-1">
-                      <div className="flex items-center gap-1">
-                        <Icon className={`w-3.5 h-3.5 ${iconColor} flex-shrink-0`} />
-                        <span className="text-xs font-medium text-gray-500 truncate">{label}</span>
+              <div className="grid grid-cols-5 gap-2">
+                {([
+                  { label: 'Skills',      val: applicant.skills_score,      Icon: Star,          ring: 'ring-purple-200', iconColor: 'text-purple-500', bg: 'bg-purple-50' },
+                  { label: 'Experience',  val: applicant.experience_score,  Icon: Briefcase,     ring: 'ring-blue-200',   iconColor: 'text-blue-500',   bg: 'bg-blue-50'   },
+                  { label: 'Education',   val: applicant.education_score,   Icon: GraduationCap, ring: 'ring-green-200',  iconColor: 'text-green-500',  bg: 'bg-green-50'  },
+                  { label: 'Projects',    val: applicant.projects_score,    Icon: Award,         ring: 'ring-orange-200', iconColor: 'text-orange-500', bg: 'bg-orange-50' },
+                  { label: 'Certs',       val: applicant.traincert_score,   Icon: Wrench,        ring: 'ring-teal-200',   iconColor: 'text-teal-500',   bg: 'bg-teal-50'   },
+                ] as const).map(({ label, val, Icon, ring, iconColor, bg }) => {
+                  const score = val ?? null;
+                  const hasVal = score != null;
+                  const barColor = hasVal ? (score >= 78 ? 'bg-green-500' : score >= 65 ? 'bg-yellow-400' : 'bg-red-400') : 'bg-gray-200';
+                  const scoreText = hasVal ? (score >= 78 ? 'Strong' : score >= 65 ? 'Moderate' : 'Weak') : null;
+                  const scoreTextColor = hasVal ? (score >= 78 ? 'text-green-600' : score >= 65 ? 'text-yellow-600' : 'text-red-500') : 'text-gray-400';
+                  return (
+                    <div key={label} className="flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 bg-gray-50">
+                      <div className={`w-9 h-9 rounded-full ring-2 ${ring} ${bg} flex items-center justify-center flex-shrink-0`}>
+                        <Icon className={`w-4 h-4 ${iconColor}`} />
                       </div>
-                      <span className={`text-xs font-semibold flex-shrink-0 ${scoreLabelColor(score)}`}>{scoreLabel(score)}</span>
+                      <p className="text-xs font-medium text-gray-500 text-center leading-tight">{label}</p>
+                      <p className={`text-2xl font-bold ${hasVal ? 'text-gray-900' : 'text-gray-300'}`}>
+                        {hasVal ? `${Math.round(score)}%` : '—'}
+                      </p>
+                      {scoreText && <span className={`text-xs font-semibold ${scoreTextColor}`}>{scoreText}</span>}
+                      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${barColor}`}
+                          style={{ width: hasVal ? `${Math.min(Math.max(score, 0), 100)}%` : '0%' }} />
+                      </div>
                     </div>
-                    <p className="text-xl font-bold text-gray-900">{Math.round(score)}%</p>
-                    <ScoreBar score={score} color={scoreColor(score)} />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
