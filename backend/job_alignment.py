@@ -48,8 +48,9 @@ DEFAULT_HYBRID_WEIGHTS = {
 }
 
 # Default baselines for hybrid scoring (UNIFIED - used for all applicants)
+# Note: baseline_experience is intentionally excluded — experience is evaluated
+# from the job posting's min_years_experience field directly.
 DEFAULT_HYBRID_BASELINES = {
-    'baseline_experience': 2,
     'baseline_skills': 10,
     'baseline_education': 2,
     'baseline_projects': 2,
@@ -1548,24 +1549,40 @@ def calculate_experience_keyword_match(
     - Parses date-range formats ("2021-2024", "Jan 2020 – Mar 2023", "2019 to present").
     - Job-title keywords are expanded with synonym groups so "Software Engineer"
       matches "Software Developer", "ML Engineer" matches "Machine Learning Engineer", etc.
+    - When min_years == 0 (fresh grad / no experience required), having no experience
+      is not penalised — years_score is 100 for everyone since the requirement is met.
 
     Returns:
         Match score from 0-100
     """
+    # When the job requires 0 years, no experience is needed — skip years penalty entirely.
+    # Keyword score still applies so relevant experience is still rewarded.
     if not resume_experience:
+        if min_years is not None and min_years == 0:
+            # Job explicitly requires no experience — fresh grad fully meets the bar.
+            years_score = 100.0
+            keyword_score = 0.0  # no experience text to match keywords against
+            combined = (years_score * 0.6) + (keyword_score * 0.4)
+            print(f"[DEBUG] Experience: no experience, min_years=0 → years_score=100.0, combined={combined:.1f}")
+            return round(combined, 2)
+        # Job requires experience but resume has none — penalise fully.
         return 0.0
 
     # ── Years score ──────────────────────────────────────────────────────────
     total_years = sum(_parse_years_from_experience(exp) for exp in resume_experience)
 
-    if min_years:
-        if total_years >= min_years:
+    if min_years is not None:
+        if min_years == 0:
+            # No experience required — everyone meets the bar regardless of how much they have.
+            years_score = 100.0
+        elif total_years >= min_years:
             years_score = 100.0
         elif total_years > 0:
             years_score = min((total_years / min_years) * 100, 100.0)
         else:
             years_score = 0.0
     else:
+        # min_years not set on job posting — reward having any experience.
         years_score = 100.0 if total_years > 0 else 50.0
 
     # ── Keyword score with synonym expansion ─────────────────────────────────
@@ -2014,134 +2031,6 @@ def calculate_weighted_score(
     )
     
     return round(weighted_score, 2)
-
-
-def calculate_count_based_score(
-    parsed_resume_json: Dict,
-    weights: Optional[Dict[str, float]] = None,
-    baseline_project_score: int = 2,
-    job_posting: Optional[Dict] = None
-) -> Dict[str, Any]:
-    """
-    Legacy 4-category count-based score (used by calculate_combined_score).
-    Uses unified baselines for all applicants.
-
-    Education fix: when job_posting is supplied, uses degree-match score
-    instead of raw entry count so the legacy path stays consistent.
-    """
-    if weights is None:
-        weights = DEFAULT_COUNT_WEIGHTS.copy()
-
-    # Unified baselines for all applicants
-    baseline_skills     = 20
-    baseline_experience = 5
-    baseline_projects   = baseline_project_score
-
-    # Skills
-    skills_dict  = parsed_resume_json.get('skills', {})
-    total_skills = len(skills_dict.get('hard_skills', [])) + len(skills_dict.get('soft_skills', []))
-    skills_score = min((total_skills / baseline_skills) * 100, 100)
-
-    # Experience
-    experience_list  = parsed_resume_json.get('experience', [])
-    experience_score = min((len(experience_list) / baseline_experience) * 100, 100)
-
-    # Education — use degree-match when job_posting available
-    education_list = parsed_resume_json.get('education', [])
-    if job_posting is not None:
-        job_edu_list   = parse_jsonb_field(job_posting.get('required_education', []))
-        education_score = calculate_education_keyword_match(education_list, job_edu_list)
-    else:
-        education_score = min((len(education_list) / 3) * 100, 100)
-
-    # Projects
-    project_list  = parsed_resume_json.get('projects', [])
-    project_count = len(project_list)
-    if project_count >= baseline_projects:
-        projects_score = min((project_count / baseline_projects) * 100, 100)
-    else:
-        projects_score = (project_count / baseline_projects) * 100
-
-    count_score = (
-        skills_score     * (weights.get('skills_weight',     30) / 100) +
-        experience_score * (weights.get('experience_weight', 40) / 100) +
-        education_score  * (weights.get('education_weight',  20) / 100) +
-        projects_score   * (weights.get('projects_weight',   10) / 100)
-    )
-
-    return {
-        'count_score': round(count_score, 2),
-        'baselines_used': {
-            'skills':     baseline_skills,
-            'experience': baseline_experience,
-            'projects':   baseline_projects
-        },
-        'breakdown': {
-            'skills':     round(skills_score,     2),
-            'experience': round(experience_score, 2),
-            'education':  round(education_score,  2),
-            'projects':   round(projects_score,   2),
-        }
-    }
-
-
-def calculate_combined_score(
-    parsed_resume_json: Dict,
-    job_posting: Dict,
-    weights: Optional[Dict[str, float]] = None,
-    semantic_weight: float = 0.6,
-    baseline_project_score: int = 2
-) -> Dict[str, Any]:
-    """
-    Calculate combined score using both semantic and count-based methods.
-    Now includes fresh grad auto-detection with adjusted baselines.
-    
-    Args:
-        parsed_resume_json: Parsed resume data
-        job_posting: Job posting data
-        weights: Optional weights for scoring
-        semantic_weight: Weight for semantic score (0-1), count weight = 1 - semantic_weight
-        baseline_project_score: Minimum projects for full count score
-    
-    Returns:
-        Dictionary with combined score and breakdown
-    """
-    if weights is None:
-        weights = DEFAULT_COUNT_WEIGHTS.copy()
-    
-    # Calculate semantic score (0-100)
-    semantic_result = calculate_hybrid_job_fit_score(
-        parsed_resume_json=parsed_resume_json,
-        job_posting=job_posting,
-        weights=weights,
-        include_breakdown=True
-    )
-    semantic_score = semantic_result.get('semantic_score', 0)
-    
-    # Calculate count-based score (0-100) with unified baselines
-    count_result = calculate_count_based_score(
-        parsed_resume_json=parsed_resume_json,
-        weights=weights,
-        baseline_project_score=baseline_project_score,
-        job_posting=job_posting
-    )
-    count_score = count_result.get('count_score', 0)
-    
-    # Combine scores (60% semantic + 40% count)
-    count_weight = 1 - semantic_weight
-    combined_score = (semantic_score * semantic_weight) + (count_score * count_weight)
-    
-    return {
-        'semantic_score': semantic_score,
-        'count_score': count_score,
-        'combined_score': round(combined_score, 2),
-        'semantic_weight': semantic_weight,
-        'count_weight': count_weight,
-        'baselines_used': count_result.get('baselines_used', {}),
-        'semantic_breakdown': semantic_result.get('component_scores', {}),
-        'count_breakdown': count_result.get('breakdown', {}),
-        'weights_used': weights
-    }
 
 
 def calculate_hybrid_job_fit_score(
@@ -2855,18 +2744,27 @@ def calculate_category_count_score(
     achievements_count = len(achievement_list)
 
     # Calculate category count scores (capped at 100)
-    baseline_exp    = baselines.get('baseline_experience', 2)
     baseline_skills = baselines.get('baseline_skills', 10)
     baseline_edu    = baselines.get('baseline_education', 2)
     baseline_proj   = baselines.get('baseline_projects', 2)
     baseline_tc     = baselines.get('baseline_traincert', 2)
     baseline_ach    = baselines.get('baseline_achievements', 1)
 
-    experience_count_score   = min((experience_count / baseline_exp)    * 100, 100) if baseline_exp    > 0 else 0
     skills_count_score       = min((skills_count    / baseline_skills)  * 100, 100) if baseline_skills > 0 else 0
     projects_count_score     = min((projects_count  / baseline_proj)    * 100, 100) if baseline_proj   > 0 else 0
     traincert_count_score    = min((traincert_count / baseline_tc)      * 100, 100) if baseline_tc     > 0 else 0
     achievements_count_score = min((achievements_count / baseline_ach)  * 100, 100) if baseline_ach    > 0 else 0
+
+    # Experience count score: driven by the job posting's min_years (same source of
+    # truth as the requirement-match side). baseline_experience is no longer used.
+    if job_posting is not None:
+        job_min_years      = job_posting.get('min_years_experience')
+        job_title_keywords = parse_jsonb_field(job_posting.get('keywords', []))
+        experience_count_score = calculate_experience_keyword_match(
+            experience_list, job_min_years, job_title_keywords
+        )
+    else:
+        experience_count_score = 0.0
 
     # Education count score: use degree-match when job_posting is available so
     # that a single perfectly-matching degree is not penalised for count < baseline.

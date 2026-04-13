@@ -11,7 +11,6 @@ const DEFAULT_SETTINGS = {
   achievements_weight: 4,
   qualified_threshold: 78,
   review_threshold: 65,
-  baseline_experience: 2,
   baseline_skills: 10,
   baseline_education: 2,
   baseline_projects: 2,
@@ -165,7 +164,6 @@ export function AdminScoringSettings() {
     }
 
     const baselines = [
-      formValues.baseline_experience,
       formValues.baseline_skills,
       formValues.baseline_education,
       formValues.baseline_projects,
@@ -219,7 +217,6 @@ export function AdminScoringSettings() {
           achievements_weight: data.achievements_weight ?? 4,
           qualified_threshold: data.qualified_threshold ?? 78,
           review_threshold: data.review_threshold ?? 65,
-          baseline_experience: data.baseline_experience ?? 2,
           baseline_skills: data.baseline_skills ?? 10,
           baseline_education: data.baseline_education ?? 2,
           baseline_projects: data.baseline_projects ?? 2,
@@ -267,7 +264,6 @@ export function AdminScoringSettings() {
         achievements_weight: formValues.achievements_weight,
         qualified_threshold: formValues.qualified_threshold,
         review_threshold: formValues.review_threshold,
-        baseline_experience: formValues.baseline_experience,
         baseline_skills: formValues.baseline_skills,
         baseline_education: formValues.baseline_education,
         baseline_projects: formValues.baseline_projects,
@@ -316,7 +312,6 @@ export function AdminScoringSettings() {
         achievements_weight: settings.achievements_weight || 4,
         qualified_threshold: settings.qualified_threshold || 78,
         review_threshold: settings.review_threshold || 65,
-        baseline_experience: settings.baseline_experience || 2,
         baseline_skills: settings.baseline_skills || 10,
         baseline_education: settings.baseline_education || 2,
         baseline_projects: settings.baseline_projects || 2,
@@ -579,7 +574,7 @@ export function AdminScoringSettings() {
                   <FolderGit2 className="w-6 h-6 text-blue-600" />
                   <div>
                     <h2 className="text-lg font-semibold text-gray-900">Count Baselines</h2>
-                    <p className="text-sm text-gray-500">Minimum counts for full score in each category</p>
+                    <p className="text-sm text-gray-500">Minimum counts for full score in each category. Experience is evaluated from the job posting's minimum years.</p>
                   </div>
                 </div>
               </div>
@@ -587,7 +582,6 @@ export function AdminScoringSettings() {
               <div className="p-6 space-y-4">
                 {(
                   [
-                    { key: 'baseline_experience', label: 'Experience Baseline', suffix: 'experiences needed for 100%', max: 20, ring: 'focus:ring-blue-500 focus:border-blue-500' },
                     { key: 'baseline_skills', label: 'Skills Baseline', suffix: 'skills needed for 100%', max: 50, ring: 'focus:ring-green-500 focus:border-green-500' },
                     { key: 'baseline_education', label: 'Education Baseline', suffix: 'educations needed for 100%', max: 10, ring: 'focus:ring-purple-500 focus:border-purple-500' },
                     { key: 'baseline_projects', label: 'Projects Baseline', suffix: 'projects needed for 100%', max: 20, ring: 'focus:ring-orange-500 focus:border-orange-500' },
