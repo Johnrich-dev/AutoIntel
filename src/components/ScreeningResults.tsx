@@ -243,14 +243,7 @@ export function ScreeningResults() {
           } catch { /* keep DB values */ }
         }
 
-        // If all DB sub-scores are 0 (known bug in screening_service), treat as unavailable
-        if (skillsScore === 0 && experienceScore === 0 && educationScore === 0) {
-          skillsScore = null;
-          experienceScore = null;
-          educationScore = null;
-        }
-
-let parsedData: ResumeParsedData | null = null;
+        let parsedData: ResumeParsedData | null = null;
         if (resume?.parsed_data) {
           parsedData = typeof resume.parsed_data === 'object'
             ? resume.parsed_data
@@ -292,15 +285,6 @@ let parsedData: ResumeParsedData | null = null;
             }
           }
           matchedSkills = cleanSkills;
-
-          // ── Step 3: fallback sub-scores if not from DB ────────────────────
-          if (skillsScore === null && experienceScore === null && educationScore === null) {
-            if (cleanSkills.length > 0 || parsedData.experience?.length > 0 || parsedData.education?.length > 0) {
-              skillsScore    = Math.min(Math.round((cleanSkills.length / 15) * 100), 100);
-              experienceScore = Math.min(Math.round(((parsedData.experience?.length || 0) / 5) * 100), 100);
-              educationScore  = Math.min(Math.round(((parsedData.education?.length  || 0) / 3) * 100), 100);
-            }
-          }
 
           // ── Step 4: compute skill gap (only used as fallback when DB has no missing_skills) ──
           if (applicant.position && !dbMissingSkills) {
