@@ -34,12 +34,11 @@ TOKEN_EXPIRY_HOURS = int(os.getenv("TOKEN_EXPIRY_HOURS", "24"))
 # These match the UNIFIED_SCORING_PROFILE in job_alignment.py exactly.
 # No job-level differentiation — all applicants are scored against the same criteria.
 DEFAULT_SCORING_SETTINGS = {
-    "experience_weight": 28,
+    "experience_weight": 30,
     "skills_weight": 30,
-    "education_weight": 18,
-    "projects_weight": 14,
-    "traincert_weight": 6,
-    "achievements_weight": 4,
+    "education_weight": 20,
+    "projects_weight": 10,
+    "traincert_weight": 10,
     "qualified_threshold": 65,
     "review_threshold": 55,
     "baseline_experience": 2,
@@ -47,7 +46,6 @@ DEFAULT_SCORING_SETTINGS = {
     "baseline_education": 2,
     "baseline_projects": 2,
     "baseline_traincert": 2,
-    "baseline_achievements": 1,
     "scoring_type": "hybrid",
     "requirement_weight": 0.6,
     "count_weight": 0.4,
@@ -80,12 +78,11 @@ def load_scoring_settings(supabase_client: Any) -> Dict[str, Any]:
             
             # Use base weights from settings
             return {
-                "experience_weight": settings.get("experience_weight", 28),
+                "experience_weight": settings.get("experience_weight", 30),
                 "skills_weight": settings.get("skills_weight", 30),
-                "education_weight": settings.get("education_weight", 18),
-                "projects_weight": settings.get("projects_weight", 14),
-                "traincert_weight": settings.get("traincert_weight", 6),
-                "achievements_weight": settings.get("achievements_weight", 4),
+                "education_weight": settings.get("education_weight", 20),
+                "projects_weight": settings.get("projects_weight", 10),
+                "traincert_weight": settings.get("traincert_weight", 10),
                 "qualified_threshold": qualified_threshold if qualified_threshold is not None else 78,
                 "review_threshold": review_threshold if review_threshold is not None else 65,
                 "baseline_experience": settings.get("baseline_experience", 2),
@@ -93,7 +90,6 @@ def load_scoring_settings(supabase_client: Any) -> Dict[str, Any]:
                 "baseline_education": settings.get("baseline_education", 2),
                 "baseline_projects": settings.get("baseline_projects", 2),
                 "baseline_traincert": settings.get("baseline_traincert", 2),
-                "baseline_achievements": settings.get("baseline_achievements", 1),
                 "scoring_type": settings.get("scoring_type", "hybrid"),
                 # Resume formula split (stored as 0-100 in DB, used as 0.0-1.0 in scoring)
                 "requirement_weight": (settings.get("requirement_weight") or 60) / 100,
@@ -221,12 +217,11 @@ def process_applicant_screening(
             return v if v is not None else fallback
 
         weights = {
-            'experience_weight': _get("experience_weight", unified_profile['weights'].get('experience_weight', 28)),
+            'experience_weight': _get("experience_weight", unified_profile['weights'].get('experience_weight', 30)),
             'skills_weight': _get("skills_weight", unified_profile['weights'].get('skills_weight', 30)),
-            'education_weight': _get("education_weight", unified_profile['weights'].get('education_weight', 18)),
-            'projects_weight': _get("projects_weight", unified_profile['weights'].get('projects_weight', 14)),
-            'traincert_weight': _get("traincert_weight", unified_profile['weights'].get('traincert_weight', 6)),
-            'achievements_weight': _get("achievements_weight", unified_profile['weights'].get('achievements_weight', 4)),
+            'education_weight': _get("education_weight", unified_profile['weights'].get('education_weight', 20)),
+            'projects_weight': _get("projects_weight", unified_profile['weights'].get('projects_weight', 10)),
+            'traincert_weight': _get("traincert_weight", unified_profile['weights'].get('traincert_weight', 10)),
         }
 
         # Get unified baselines
@@ -236,7 +231,6 @@ def process_applicant_screening(
             'baseline_education': _get("baseline_education", unified_profile['baselines'].get('baseline_education', 2)),
             'baseline_projects': _get("baseline_projects", unified_profile['baselines'].get('baseline_projects', 2)),
             'baseline_traincert': _get("baseline_traincert", unified_profile['baselines'].get('baseline_traincert', 2)),
-            'baseline_achievements': _get("baseline_achievements", unified_profile['baselines'].get('baseline_achievements', 1)),
         }
 
         # Get unified thresholds
@@ -291,7 +285,6 @@ def process_applicant_screening(
                 'education': req_breakdown.get('education', 0),
                 'projects': req_breakdown.get('projects', 0),
                 'traincert': req_breakdown.get('traincert', 0),
-                'achievements': req_breakdown.get('achievements', 0),
                 'matched_skills': hybrid_result.get('matched_skills', []),
                 'missing_skills': hybrid_result.get('missing_skills', []),
             }
@@ -372,7 +365,6 @@ def process_applicant_screening(
                     "education_score": component_scores.get("education", 0),
                     "project_score": component_scores.get("projects", 0),
                     "traincert_score": component_scores.get("traincert", 0),
-                    "achievements_score": component_scores.get("achievements", 0),
                     "requirement_match_score": requirement_match_score,
                     "count_score": count_score,
                     "final_score": score,

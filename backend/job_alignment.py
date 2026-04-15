@@ -39,12 +39,11 @@ DEFAULT_COUNT_WEIGHTS = {
 
 # Default 6-category weights for hybrid scoring (UNIFIED - used for all applicants)
 DEFAULT_HYBRID_WEIGHTS = {
-    'experience_weight': 28,
+    'experience_weight': 30,
     'skills_weight': 30,
-    'education_weight': 18,
-    'projects_weight': 14,
-    'traincert_weight': 6,
-    'achievements_weight': 4
+    'education_weight': 20,
+    'projects_weight': 10,
+    'traincert_weight': 10
 }
 
 # Default baselines for hybrid scoring (UNIFIED - used for all applicants)
@@ -55,7 +54,6 @@ DEFAULT_HYBRID_BASELINES = {
     'baseline_education': 2,
     'baseline_projects': 2,
     'baseline_traincert': 2,
-    'baseline_achievements': 1
 }
 
 # Unified scoring profile - used for ALL applicants (no special treatment)
@@ -2463,60 +2461,6 @@ def calculate_traincert_keyword_match(
     return round(match_percentage, 2)
 
 
-def calculate_achievement_keyword_match(
-    resume_achievements: List[Dict],
-    job_achievements: List[str]
-) -> float:
-    """
-    Calculate achievements match using keyword matching.
-
-    - When the job has preferred_achievements: match against them normally.
-    - When the job has NO preferred_achievements: give presence-based credit —
-      50 if the applicant listed any achievements, 0 if none. This rewards
-      effort without handing out free points to everyone.
-    """
-    if not job_achievements:
-        # Presence-based: reward applicants who listed achievements
-        return 50.0 if resume_achievements else 0.0
-    
-    if not resume_achievements:
-        return 0.0
-    
-    # Extract achievement names from resume
-    resume_achievement_names = []
-    for ach in resume_achievements:
-        if isinstance(ach, dict):
-            name = ach.get('name', '') or ach.get('title', '') or ach.get('award', '')
-            if name:
-                resume_achievement_names.append(name.lower())
-        elif isinstance(ach, str):
-            resume_achievement_names.append(ach.lower())
-    
-    if not resume_achievement_names:
-        return 0.0
-    
-    # Normalize job requirements
-    normalized_job_ach = {normalize_skill(s): s for s in job_achievements if s}
-    required_ach = set(normalized_job_ach.keys())
-    
-    # Count matches
-    matched_ach = set()
-    
-    for resume_ach in resume_achievement_names:
-        for req_ach in required_ach:
-            # Exact match
-            if resume_ach == req_ach:
-                matched_ach.add(req_ach)
-            # Partial match
-            elif resume_ach in req_ach or req_ach in resume_ach:
-                matched_ach.add(req_ach)
-    
-    # Calculate percentage
-    match_percentage = (len(matched_ach) / len(required_ach)) * 100 if required_ach else 0
-    
-    return round(match_percentage, 2)
-
-
 def get_job_level_preset(job_level: str = None) -> Dict[str, Any]:
     """
     Get the unified scoring profile for all applicants.
@@ -2556,7 +2500,7 @@ def calculate_requirement_match_score(
     """
     Calculate the Requirement Match Score (60% of final score).
     This measures how well resume content aligns with job requirements
-    across 6 categories: experience, skills, education, projects, traincert, achievements.
+    across 6 categories: experience, skills, education, projects, traincert.
     
     NOTE: This function now uses UNIFIED scoring for all applicants.
     The job_level parameter is deprecated and ignored.
@@ -2581,7 +2525,6 @@ def calculate_requirement_match_score(
     resume_education = parsed_resume_json.get('education', [])
     resume_projects = parsed_resume_json.get('projects', [])
     resume_traincerts = parsed_resume_json.get('trainings', []) + parsed_resume_json.get('certifications', [])
-    resume_achievements = parsed_resume_json.get('achievements', [])
 
     # Normalize resume_skills: resume_parser returns a flat list, GPT extractor returns a dict.
     # calculate_skills_keyword_match expects a dict with an 'all' key (or hard_skills/soft_skills).
@@ -2595,7 +2538,6 @@ def calculate_requirement_match_score(
     job_education = job_posting.get('required_education', [])
     job_projects = job_posting.get('expected_projects', [])
     job_traincerts = job_posting.get('preferred_certifications', [])
-    job_achievements = job_posting.get('preferred_achievements', [])
 
     def _ensure_list(val) -> list:
         """Normalize a DB field that may be a list, a JSON string, or a comma-separated string.
@@ -2623,8 +2565,7 @@ def calculate_requirement_match_score(
     job_education   = _ensure_list(job_education)
     job_projects    = _ensure_list(job_projects)
     job_traincerts  = _ensure_list(job_traincerts)
-    job_achievements = _ensure_list(job_achievements)
-    
+
     # Calculate individual category matches
     experience_match = calculate_experience_keyword_match(
         resume_experience, job_min_years, job_title_keywords
@@ -2656,27 +2597,24 @@ def calculate_requirement_match_score(
         resume_projects, job_projects, resume_experience, _raw_fallback
     )
     traincert_match = calculate_traincert_keyword_match(resume_traincerts, job_traincerts)
-    achievement_match = calculate_achievement_keyword_match(resume_achievements, job_achievements)
 
-    # Calculate weighted requirement match score
+    # Calculate weighted requirement match score (5 categories, no achievements)
     requirement_match_score = (
-        experience_match * (weights.get('experience_weight', 28) / 100) +
-        skills_match * (weights.get('skills_weight', 30) / 100) +
-        education_match * (weights.get('education_weight', 18) / 100) +
-        projects_match * (weights.get('projects_weight', 14) / 100) +
-        traincert_match * (weights.get('traincert_weight', 6) / 100) +
-        achievement_match * (weights.get('achievements_weight', 4) / 100)
+        experience_match * (weights.get('experience_weight', 30) / 100) +
+        skills_match     * (weights.get('skills_weight',     30) / 100) +
+        education_match  * (weights.get('education_weight',  20) / 100) +
+        projects_match   * (weights.get('projects_weight',   10) / 100) +
+        traincert_match  * (weights.get('traincert_weight',  10) / 100)
     )
 
     return {
         'requirement_match_score': round(requirement_match_score, 2),
         'breakdown': {
             'experience': round(experience_match, 2),
-            'skills': round(skills_match, 2),
-            'education': round(education_match, 2),
-            'projects': round(projects_match, 2),
-            'traincert': round(traincert_match, 2),
-            'achievements': round(achievement_match, 2)
+            'skills':     round(skills_match, 2),
+            'education':  round(education_match, 2),
+            'projects':   round(projects_match, 2),
+            'traincert':  round(traincert_match, 2),
         },
         'matched_skills': skills_result.get('matched', []),
         'missing_skills': skills_result.get('missing', []),
@@ -2734,26 +2672,22 @@ def calculate_category_count_score(
     education_list = parsed_resume_json.get('education', [])
     project_list = parsed_resume_json.get('projects', [])
     traincert_list = parsed_resume_json.get('trainings', []) + parsed_resume_json.get('certifications', [])
-    achievement_list = parsed_resume_json.get('achievements', [])
 
     # Count items in each category
     experience_count = len(experience_list)
     education_count = len(education_list)
     projects_count = len(project_list)
     traincert_count = len(traincert_list)
-    achievements_count = len(achievement_list)
 
     # Calculate category count scores (capped at 100)
     baseline_skills = baselines.get('baseline_skills', 10)
     baseline_edu    = baselines.get('baseline_education', 2)
     baseline_proj   = baselines.get('baseline_projects', 2)
     baseline_tc     = baselines.get('baseline_traincert', 2)
-    baseline_ach    = baselines.get('baseline_achievements', 1)
 
-    skills_count_score       = min((skills_count    / baseline_skills)  * 100, 100) if baseline_skills > 0 else 0
-    projects_count_score     = min((projects_count  / baseline_proj)    * 100, 100) if baseline_proj   > 0 else 0
-    traincert_count_score    = min((traincert_count / baseline_tc)      * 100, 100) if baseline_tc     > 0 else 0
-    achievements_count_score = min((achievements_count / baseline_ach)  * 100, 100) if baseline_ach    > 0 else 0
+    skills_count_score   = min((skills_count   / baseline_skills) * 100, 100) if baseline_skills > 0 else 0
+    projects_count_score = min((projects_count / baseline_proj)   * 100, 100) if baseline_proj   > 0 else 0
+    traincert_count_score= min((traincert_count/ baseline_tc)     * 100, 100) if baseline_tc     > 0 else 0
 
     # Experience count score: driven by the job posting's min_years (same source of
     # truth as the requirement-match side). baseline_experience is no longer used.
@@ -2779,25 +2713,23 @@ def calculate_category_count_score(
     preset  = get_job_level_preset(job_level)
     weights = preset['weights']
 
-    # Calculate weighted count score
+    # Calculate weighted count score (5 categories, no achievements)
     count_score = (
-        experience_count_score   * (weights.get('experience_weight',   28) / 100) +
-        skills_count_score       * (weights.get('skills_weight',       30) / 100) +
-        education_count_score    * (weights.get('education_weight',    18) / 100) +
-        projects_count_score     * (weights.get('projects_weight',     14) / 100) +
-        traincert_count_score    * (weights.get('traincert_weight',     6) / 100) +
-        achievements_count_score * (weights.get('achievements_weight',  4) / 100)
+        experience_count_score * (weights.get('experience_weight', 30) / 100) +
+        skills_count_score     * (weights.get('skills_weight',     30) / 100) +
+        education_count_score  * (weights.get('education_weight',  20) / 100) +
+        projects_count_score   * (weights.get('projects_weight',   10) / 100) +
+        traincert_count_score  * (weights.get('traincert_weight',  10) / 100)
     )
 
     return {
         'count_score': round(count_score, 2),
         'breakdown': {
-            'experience':   {'count': experience_count,   'score': round(experience_count_score,   2)},
-            'skills':       {'count': skills_count,       'score': round(skills_count_score,       2)},
-            'education':    {'count': education_count,    'score': round(education_count_score,    2)},
-            'projects':     {'count': projects_count,     'score': round(projects_count_score,     2)},
-            'traincert':    {'count': traincert_count,    'score': round(traincert_count_score,    2)},
-            'achievements': {'count': achievements_count, 'score': round(achievements_count_score, 2)},
+            'experience': {'count': experience_count, 'score': round(experience_count_score, 2)},
+            'skills':     {'count': skills_count,     'score': round(skills_count_score,     2)},
+            'education':  {'count': education_count,  'score': round(education_count_score,  2)},
+            'projects':   {'count': projects_count,   'score': round(projects_count_score,   2)},
+            'traincert':  {'count': traincert_count,  'score': round(traincert_count_score,  2)},
         },
         'baselines_used': baselines
     }

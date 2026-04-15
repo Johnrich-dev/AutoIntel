@@ -28,7 +28,6 @@ interface ScreenedApplicant extends Omit<Applicant, 'screening_status' | 'screen
   education_score?: number | null;
   projects_score?: number | null;
   traincert_score?: number | null;
-  achievements_score?: number | null;
   // count breakdown — actual item counts from resume
   count_breakdown?: Record<string, { count: number; score: number }> | null;
   screening_status?: 'passed' | 'in_review' | 'failed' | 'not_scored';
@@ -162,7 +161,7 @@ export function ScreeningResults() {
       if (applicantsError) throw applicantsError;
 
       const { data: resumesData } = await adminClient.from('resumes').select('*');
-      const { data: resumeScoresData, error: resumeScoresError } = await adminClient.from('resume_scores').select('applicant_id, skills_score, experience_score, education_score, project_score, traincert_score, achievements_score, requirement_match_score, count_score, match_explain');
+      const { data: resumeScoresData, error: resumeScoresError } = await adminClient.from('resume_scores').select('applicant_id, skills_score, experience_score, education_score, project_score, traincert_score, requirement_match_score, count_score, match_explain');
       if (resumeScoresError) console.error('[resume_scores] fetch error:', resumeScoresError);
       const { data: jobPostingsData } = await adminClient.from('job_postings').select('job_id, title, skills');
       const { data: videoAssessmentsData } = await adminClient.from('video_assessments').select('*');
@@ -209,7 +208,6 @@ export function ScreeningResults() {
         let educationScore: number | null    = resumeScore?.education_score ?? null;
         let projectsScore: number | null     = resumeScore?.project_score ?? null;
         let traincertScore: number | null    = resumeScore?.traincert_score ?? null;
-        let achievementsScore: number | null = resumeScore?.achievements_score ?? null;
         let requirementMatchScore: number | null = resumeScore?.requirement_match_score ?? null;
         let countScore: number | null        = resumeScore?.count_score ?? null;
         let countBreakdown: Record<string, { count: number; score: number }> | null = null;
@@ -232,7 +230,7 @@ export function ScreeningResults() {
             const rb = cb.requirement_match || {};
 
             // Always read flat DB columns for the 4 that exist in the schema
-            // For the rest (traincert, achievements, requirement_match_score, count_score),
+            // For the rest (traincert, requirement_match_score, count_score),
             // the DB schema has no flat columns — always pull from match_explain
             if (skillsScore == null && rb.skills != null)           skillsScore       = Math.round(rb.skills);
             if (experienceScore == null && rb.experience != null)   experienceScore   = Math.round(rb.experience);
@@ -241,7 +239,6 @@ export function ScreeningResults() {
 
             // These columns don't exist as flat DB columns — always read from match_explain
             if (rb.traincert    != null) traincertScore    = Math.round(rb.traincert);
-            if (rb.achievements != null) achievementsScore = Math.round(rb.achievements);
             if (matchExplain?.requirement_match_score != null) requirementMatchScore = Math.round(matchExplain.requirement_match_score);
             if (matchExplain?.count_score != null)             countScore            = Math.round(matchExplain.count_score);
           } catch { /* keep DB values */ }
@@ -384,7 +381,6 @@ export function ScreeningResults() {
           education_score:    educationScore    !== null ? Math.round(educationScore)    : null,
           projects_score:     projectsScore     !== null ? Math.round(projectsScore)     : null,
           traincert_score:    traincertScore    !== null ? Math.round(traincertScore)    : null,
-          achievements_score: achievementsScore !== null ? Math.round(achievementsScore) : null,
           screening_status: status,
           screened_at: applicant.screened_at ?? null,
           // Prefer backend-stored skill lists (accurate, matches scoring logic).

@@ -1,21 +1,19 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Settings, Save, RotateCcw, AlertCircle, CheckCircle, Sliders, Target, GraduationCap, Briefcase, FolderGit2, Award, BookOpen, AlertTriangle } from 'lucide-react';
+import { Settings, Save, RotateCcw, AlertCircle, CheckCircle, Sliders, Target, GraduationCap, Briefcase, FolderGit2, BookOpen, AlertTriangle } from 'lucide-react';
 import { getSupabaseAdminClient, ScoringSettings } from '../lib/supabase';
 
 const DEFAULT_SETTINGS = {
-  experience_weight: 28,
+  experience_weight: 30,
   skills_weight: 30,
-  education_weight: 18,
-  projects_weight: 14,
-  traincert_weight: 6,
-  achievements_weight: 4,
+  education_weight: 20,
+  projects_weight: 10,
+  traincert_weight: 10,
   qualified_threshold: 78,
   review_threshold: 65,
   baseline_skills: 10,
   baseline_education: 2,
   baseline_projects: 2,
   baseline_traincert: 2,
-  baseline_achievements: 1,
   // Overall score composition
   resume_weight: 50,
   video_weight: 40,
@@ -105,8 +103,7 @@ export function AdminScoringSettings() {
     (formValues.skills_weight || 0) +
     (formValues.education_weight || 0) +
     (formValues.projects_weight || 0) +
-    (formValues.traincert_weight || 0) +
-    (formValues.achievements_weight || 0);
+    (formValues.traincert_weight || 0);
 
   const validateForm = useCallback((): boolean => {
     const errors: ValidationErrors = {};
@@ -116,11 +113,10 @@ export function AdminScoringSettings() {
     const eduWeight = formValues.education_weight || 0;
     const projWeight = formValues.projects_weight || 0;
     const tcWeight = formValues.traincert_weight || 0;
-    const achWeight = formValues.achievements_weight || 0;
     const qualThresh = formValues.qualified_threshold || 0;
     const revThresh = formValues.review_threshold || 0;
 
-    const weightsSum = expWeight + skillWeight + eduWeight + projWeight + tcWeight + achWeight;
+    const weightsSum = expWeight + skillWeight + eduWeight + projWeight + tcWeight;
     if (weightsSum !== 100) {
       errors.weights = `Weights must sum to 100 (currently: ${weightsSum})`;
     }
@@ -143,7 +139,6 @@ export function AdminScoringSettings() {
       { name: 'Education', value: eduWeight },
       { name: 'Projects', value: projWeight },
       { name: 'Trainings & Certs', value: tcWeight },
-      { name: 'Achievements', value: achWeight },
     ];
     for (const weight of weights) {
       if (weight.value < 0 || weight.value > 100) {
@@ -168,7 +163,6 @@ export function AdminScoringSettings() {
       formValues.baseline_education,
       formValues.baseline_projects,
       formValues.baseline_traincert,
-      formValues.baseline_achievements,
     ];
     if (baselines.some(b => (b || 0) < 0 || (b || 0) > 100)) {
       errors.baseline = 'All baselines must be between 0 and 100';
@@ -209,19 +203,17 @@ export function AdminScoringSettings() {
       if (data) {
         setSettings(data);
         setFormValues({
-          experience_weight: data.experience_weight ?? 28,
+          experience_weight: data.experience_weight ?? 30,
           skills_weight: data.skills_weight ?? 30,
-          education_weight: data.education_weight ?? 18,
-          projects_weight: data.projects_weight ?? 14,
-          traincert_weight: data.traincert_weight ?? 6,
-          achievements_weight: data.achievements_weight ?? 4,
+          education_weight: data.education_weight ?? 20,
+          projects_weight: data.projects_weight ?? 10,
+          traincert_weight: data.traincert_weight ?? 10,
           qualified_threshold: data.qualified_threshold ?? 78,
           review_threshold: data.review_threshold ?? 65,
           baseline_skills: data.baseline_skills ?? 10,
           baseline_education: data.baseline_education ?? 2,
           baseline_projects: data.baseline_projects ?? 2,
           baseline_traincert: data.baseline_traincert ?? 2,
-          baseline_achievements: data.baseline_achievements ?? 1,
           resume_weight: data.resume_weight ?? 50,
           video_weight: data.video_weight ?? 40,
           profile_weight: data.profile_weight ?? 10,
@@ -261,14 +253,12 @@ export function AdminScoringSettings() {
         education_weight: formValues.education_weight,
         projects_weight: formValues.projects_weight,
         traincert_weight: formValues.traincert_weight,
-        achievements_weight: formValues.achievements_weight,
         qualified_threshold: formValues.qualified_threshold,
         review_threshold: formValues.review_threshold,
         baseline_skills: formValues.baseline_skills,
         baseline_education: formValues.baseline_education,
         baseline_projects: formValues.baseline_projects,
         baseline_traincert: formValues.baseline_traincert,
-        baseline_achievements: formValues.baseline_achievements,
         resume_weight: formValues.resume_weight,
         video_weight: formValues.video_weight,
         profile_weight: formValues.profile_weight,
@@ -304,19 +294,17 @@ export function AdminScoringSettings() {
   const handleCancel = () => {
     if (settings) {
       setFormValues({
-        experience_weight: settings.experience_weight || 28,
+        experience_weight: settings.experience_weight || 30,
         skills_weight: settings.skills_weight || 30,
-        education_weight: settings.education_weight || 18,
-        projects_weight: settings.projects_weight || 14,
-        traincert_weight: settings.traincert_weight || 6,
-        achievements_weight: settings.achievements_weight || 4,
+        education_weight: settings.education_weight || 20,
+        projects_weight: settings.projects_weight || 10,
+        traincert_weight: settings.traincert_weight || 10,
         qualified_threshold: settings.qualified_threshold || 78,
         review_threshold: settings.review_threshold || 65,
         baseline_skills: settings.baseline_skills || 10,
         baseline_education: settings.baseline_education || 2,
         baseline_projects: settings.baseline_projects || 2,
         baseline_traincert: settings.baseline_traincert || 2,
-        baseline_achievements: settings.baseline_achievements || 1,
         resume_weight: settings.resume_weight ?? 50,
         video_weight: settings.video_weight ?? 40,
         profile_weight: settings.profile_weight ?? 10,
@@ -504,7 +492,6 @@ export function AdminScoringSettings() {
               <WeightInput label="Education Weight" icon={GraduationCap} value={formValues.education_weight} onChange={(v) => setFormValues({ ...formValues, education_weight: v })} color="bg-purple-600" />
               <WeightInput label="Projects Weight" icon={FolderGit2} value={formValues.projects_weight} onChange={(v) => setFormValues({ ...formValues, projects_weight: v })} color="bg-orange-600" />
               <WeightInput label="Trainings & Certifications Weight" icon={BookOpen} value={formValues.traincert_weight} onChange={(v) => setFormValues({ ...formValues, traincert_weight: v })} color="bg-teal-600" />
-              <WeightInput label="Achievements Weight" icon={Award} value={formValues.achievements_weight} onChange={(v) => setFormValues({ ...formValues, achievements_weight: v })} color="bg-yellow-600" />
 
               <div className={`p-4 rounded-lg border-2 ${totalWeight === 100 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                 <div className="flex items-center justify-between">
@@ -586,7 +573,6 @@ export function AdminScoringSettings() {
                     { key: 'baseline_education', label: 'Education Baseline', suffix: 'educations needed for 100%', max: 10, ring: 'focus:ring-purple-500 focus:border-purple-500' },
                     { key: 'baseline_projects', label: 'Projects Baseline', suffix: 'projects needed for 100%', max: 20, ring: 'focus:ring-orange-500 focus:border-orange-500' },
                     { key: 'baseline_traincert', label: 'Trainings & Certifications Baseline', suffix: 'trainings/certs needed for 100%', max: 20, ring: 'focus:ring-teal-500 focus:border-teal-500' },
-                    { key: 'baseline_achievements', label: 'Achievements Baseline', suffix: 'achievements needed for 100%', max: 20, ring: 'focus:ring-yellow-500 focus:border-yellow-500' },
                   ] as const
                 ).map(({ key, label, suffix, max, ring }) => (
                   <div key={key}>

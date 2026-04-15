@@ -176,7 +176,7 @@ def send_pass_notification(
         True if sent successfully
     """
     subject = f"Congratulations! You've Passed Initial Screening - {job_title}"
-    
+
     # Determine fit category based on score
     if score >= 90:
         fit_category = "Excellent Fit"
@@ -184,70 +184,54 @@ def send_pass_notification(
         fit_category = "Very Good Fit"
     else:
         fit_category = "Good Fit"
-    
+
     expiry_time = datetime.now() + timedelta(hours=TOKEN_EXPIRY_HOURS)
     expiry_str = expiry_time.strftime("%B %d, %Y at %I:%M %p")
-    
+
     # Build score breakdown HTML if provided
     score_breakdown_html = ""
-    if requirement_breakdown or count_breakdown:
-        score_breakdown_html = """
-                <div class="score-breakdown">
-                    <h3>📊 Your Score Breakdown</h3>
-                    <table style="width:100%; border-collapse: collapse; margin: 15px 0;">
-                        <tr style="background: #f3f4f6;">
-                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Category</th>
-                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Relevance Score</th>
-                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Count</th>
-                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Count Score</th>
-                        </tr>
-        """
-        
+    if requirement_breakdown:
         categories = [
             ("Experience", "experience"),
             ("Skills", "skills"),
             ("Education", "education"),
             ("Projects", "projects"),
             ("Training & Certifications", "traincert"),
-            ("Achievements", "achievements")
         ]
-        
+
+        rows_html = ""
         for cat_name, cat_key in categories:
-            req_score = requirement_breakdown.get(cat_key, "-") if requirement_breakdown else "-"
+            req_score = requirement_breakdown.get(cat_key, "-")
             if isinstance(req_score, float):
-                req_score = f"{req_score:.1f}%"
-            
-            count_info = count_breakdown.get(cat_key, {}) if count_breakdown else {}
-            count = count_info.get("count", "-")
-            count_score_val = count_info.get("score", "-")
-            if isinstance(count_score_val, float):
-                count_score_val = f"{count_score_val:.1f}%"
-            
-            score_breakdown_html += f"""
+                req_score_str = f"{req_score:.1f}%"
+                # Color-code: green ≥70, yellow 40–69, red <40
+                if req_score >= 70:
+                    color = "#16a34a"
+                elif req_score >= 40:
+                    color = "#d97706"
+                else:
+                    color = "#dc2626"
+            else:
+                req_score_str = str(req_score)
+                color = "#6b7280"
+
+            rows_html += f"""
                         <tr>
                             <td style="padding: 10px; border: 1px solid #ddd;">{cat_name}</td>
-                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{req_score}</td>
-                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{count}</td>
-                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{count_score_val}</td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd; color: {color}; font-weight: bold;">{req_score_str}</td>
                         </tr>
             """
-        
-        score_breakdown_html += """
+
+        score_breakdown_html = f"""
+                <div class="score-breakdown">
+                    <h3>📊 Your Score Breakdown</h3>
+                    <table style="width:100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr style="background: #f3f4f6;">
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Category</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Relevance Score</th>
+                        </tr>
+                        {rows_html}
                     </table>
-        """
-        
-        # Add component scores if available
-        if requirement_match_score is not None and count_score is not None:
-            req_w = weights_used.get("requirement_weight", 0.6) if weights_used else 0.6
-            cnt_w = weights_used.get("count_weight", 0.4) if weights_used else 0.4
-            score_breakdown_html += f"""
-                    <div class="component-scores" style="background: #e0e7ff; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                        <p style="margin: 5px 0;"><strong>Requirement Match Score:</strong> {requirement_match_score:.2f}% (weight: {req_w*100:.0f}%)</p>
-                        <p style="margin: 5px 0;"><strong>Count Score:</strong> {count_score:.2f}% (weight: {cnt_w*100:.0f}%)</p>
-                    </div>
-            """
-        
-        score_breakdown_html += """
                 </div>
         """
     
@@ -361,67 +345,50 @@ def send_fail_notification(
         True if sent successfully
     """
     subject = f"Update on Your Application - {job_title}"
-    
+
     # Build score breakdown HTML if provided
     score_breakdown_html = ""
-    if requirement_breakdown or count_breakdown:
-        score_breakdown_html = """
-                <div class="score-breakdown">
-                    <h3>📊 Your Score Breakdown</h3>
-                    <table style="width:100%; border-collapse: collapse; margin: 15px 0;">
-                        <tr style="background: #f3f4f6;">
-                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Category</th>
-                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Relevance Score</th>
-                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Count</th>
-                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Count Score</th>
-                        </tr>
-        """
-        
+    if requirement_breakdown:
         categories = [
             ("Experience", "experience"),
             ("Skills", "skills"),
             ("Education", "education"),
             ("Projects", "projects"),
             ("Training & Certifications", "traincert"),
-            ("Achievements", "achievements")
         ]
-        
+
+        rows_html = ""
         for cat_name, cat_key in categories:
-            req_score = requirement_breakdown.get(cat_key, "-") if requirement_breakdown else "-"
+            req_score = requirement_breakdown.get(cat_key, "-")
             if isinstance(req_score, float):
-                req_score = f"{req_score:.1f}%"
-            
-            count_info = count_breakdown.get(cat_key, {}) if count_breakdown else {}
-            count = count_info.get("count", "-")
-            count_score_val = count_info.get("score", "-")
-            if isinstance(count_score_val, float):
-                count_score_val = f"{count_score_val:.1f}%"
-            
-            score_breakdown_html += f"""
+                req_score_str = f"{req_score:.1f}%"
+                if req_score >= 70:
+                    color = "#16a34a"
+                elif req_score >= 40:
+                    color = "#d97706"
+                else:
+                    color = "#dc2626"
+            else:
+                req_score_str = str(req_score)
+                color = "#6b7280"
+
+            rows_html += f"""
                         <tr>
                             <td style="padding: 10px; border: 1px solid #ddd;">{cat_name}</td>
-                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{req_score}</td>
-                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{count}</td>
-                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{count_score_val}</td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd; color: {color}; font-weight: bold;">{req_score_str}</td>
                         </tr>
             """
-        
-        score_breakdown_html += """
+
+        score_breakdown_html = f"""
+                <div class="score-breakdown">
+                    <h3>📊 Your Score Breakdown</h3>
+                    <table style="width:100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr style="background: #f3f4f6;">
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Category</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Relevance Score</th>
+                        </tr>
+                        {rows_html}
                     </table>
-        """
-        
-        # Add component scores if available
-        if requirement_match_score is not None and count_score is not None:
-            req_w = weights_used.get("requirement_weight", 0.6) if weights_used else 0.6
-            cnt_w = weights_used.get("count_weight", 0.4) if weights_used else 0.4
-            score_breakdown_html += f"""
-                    <div class="component-scores" style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                        <p style="margin: 5px 0;"><strong>Requirement Match Score:</strong> {requirement_match_score:.2f}% (weight: {req_w*100:.0f}%)</p>
-                        <p style="margin: 5px 0;"><strong>Count Score:</strong> {count_score:.2f}% (weight: {cnt_w*100:.0f}%)</p>
-                    </div>
-            """
-        
-        score_breakdown_html += """
                 </div>
         """
     
@@ -506,67 +473,50 @@ def send_review_notification(
         True if sent successfully
     """
     subject = f"Application Status Update - {job_title}"
-    
+
     # Build score breakdown HTML if provided
     score_breakdown_html = ""
-    if requirement_breakdown or count_breakdown:
-        score_breakdown_html = """
-                <div class="score-breakdown">
-                    <h3>📊 Your Score Breakdown</h3>
-                    <table style="width:100%; border-collapse: collapse; margin: 15px 0;">
-                        <tr style="background: #f3f4f6;">
-                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Category</th>
-                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Relevance Score</th>
-                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Count</th>
-                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Count Score</th>
-                        </tr>
-        """
-        
+    if requirement_breakdown:
         categories = [
             ("Experience", "experience"),
             ("Skills", "skills"),
             ("Education", "education"),
             ("Projects", "projects"),
             ("Training & Certifications", "traincert"),
-            ("Achievements", "achievements")
         ]
-        
+
+        rows_html = ""
         for cat_name, cat_key in categories:
-            req_score = requirement_breakdown.get(cat_key, "-") if requirement_breakdown else "-"
+            req_score = requirement_breakdown.get(cat_key, "-")
             if isinstance(req_score, float):
-                req_score = f"{req_score:.1f}%"
-            
-            count_info = count_breakdown.get(cat_key, {}) if count_breakdown else {}
-            count = count_info.get("count", "-")
-            count_score_val = count_info.get("score", "-")
-            if isinstance(count_score_val, float):
-                count_score_val = f"{count_score_val:.1f}%"
-            
-            score_breakdown_html += f"""
+                req_score_str = f"{req_score:.1f}%"
+                if req_score >= 70:
+                    color = "#16a34a"
+                elif req_score >= 40:
+                    color = "#d97706"
+                else:
+                    color = "#dc2626"
+            else:
+                req_score_str = str(req_score)
+                color = "#6b7280"
+
+            rows_html += f"""
                         <tr>
                             <td style="padding: 10px; border: 1px solid #ddd;">{cat_name}</td>
-                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{req_score}</td>
-                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{count}</td>
-                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">{count_score_val}</td>
+                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd; color: {color}; font-weight: bold;">{req_score_str}</td>
                         </tr>
             """
-        
-        score_breakdown_html += """
+
+        score_breakdown_html = f"""
+                <div class="score-breakdown">
+                    <h3>📊 Your Score Breakdown</h3>
+                    <table style="width:100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr style="background: #f3f4f6;">
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Category</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Relevance Score</th>
+                        </tr>
+                        {rows_html}
                     </table>
-        """
-        
-        # Add component scores if available
-        if requirement_match_score is not None and count_score is not None:
-            req_w = weights_used.get("requirement_weight", 0.6) if weights_used else 0.6
-            cnt_w = weights_used.get("count_weight", 0.4) if weights_used else 0.4
-            score_breakdown_html += f"""
-                    <div class="component-scores" style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                        <p style="margin: 5px 0;"><strong>Requirement Match Score:</strong> {requirement_match_score:.2f}% (weight: {req_w*100:.0f}%)</p>
-                        <p style="margin: 5px 0;"><strong>Count Score:</strong> {count_score:.2f}% (weight: {cnt_w*100:.0f}%)</p>
-                    </div>
-            """
-        
-        score_breakdown_html += """
                 </div>
         """
     

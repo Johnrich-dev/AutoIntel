@@ -338,8 +338,8 @@ def calculate_final_hybrid():
     
     FINAL SCORE = (Requirement Match Score × 0.6) + (Count Score × 0.4)
     
-    This is the main endpoint for 6-category hybrid scoring with job level support.
-    
+    This is the main endpoint for 5-category hybrid scoring.
+
     Request Body:
     {
         "parsed_resume_json": {              // Required: parsed resume data
@@ -348,8 +348,7 @@ def calculate_final_hybrid():
             "education": [...],
             "projects": [...],
             "trainings": [...],
-            "certifications": [...],
-            "achievements": [...]
+            "certifications": [...]
         },
         "job_posting": {                      // Required: job posting data
             "job_id": "string",
@@ -358,29 +357,26 @@ def calculate_final_hybrid():
             "required_education": ["Bachelor's CS"],
             "expected_projects": ["API Development"],
             "preferred_certifications": ["AWS"],
-            "preferred_achievements": ["Dean\'s List"],
             "min_years_experience": 5
         },
-        "weights": {                          // Optional: custom weights (overrides job_level)
-            "experience_weight": 28,
+        "weights": {                          // Optional: custom weights
+            "experience_weight": 30,
             "skills_weight": 30,
-            "education_weight": 18,
-            "projects_weight": 14,
-            "traincert_weight": 6,
-            "achievements_weight": 4
+            "education_weight": 20,
+            "projects_weight": 10,
+            "traincert_weight": 10
         },
         "baselines": {                        // Optional: custom baselines
             "baseline_experience": 2,
             "baseline_skills": 10,
             "baseline_education": 2,
             "baseline_projects": 2,
-            "baseline_traincert": 2,
-            "baseline_achievements": 1
+            "baseline_traincert": 2
         },
         "requirement_weight": 0.6,           // Optional: default 0.6
         "count_weight": 0.4                   // Optional: default 0.4
     }
-    
+
     Response:
     {
         "final_score": 72.0,
@@ -393,22 +389,19 @@ def calculate_final_hybrid():
             "qualified_threshold": 78,
             "review_threshold": 65
         },
-        "job_level": "entry_level",
         "requirement_breakdown": {
             "experience": 50.0,
             "skills": 66.7,
             "education": 66.7,
             "projects": 33.3,
-            "traincert": 50.0,
-            "achievements": 50.0
+            "traincert": 50.0
         },
         "count_breakdown": {
             "experience": {"count": 1, "score": 50.0},
             "skills": {"count": 12, "score": 100.0},
             "education": {"count": 2, "score": 100.0},
             "projects": {"count": 4, "score": 100.0},
-            "traincert": {"count": 1, "score": 50.0},
-            "achievements": {"count": 1, "score": 100.0}
+            "traincert": {"count": 1, "score": 50.0}
         },
         "status": "success"
     }

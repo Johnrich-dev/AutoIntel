@@ -19,7 +19,6 @@ interface ScreenedApplicant extends Omit<Applicant, 'screening_status' | 'screen
   education_score?: number | null;
   projects_score?: number | null;
   traincert_score?: number | null;
-  achievements_score?: number | null;
   count_breakdown?: Record<string, { count: number; score: number }> | null;
   screening_status?: 'passed' | 'in_review' | 'failed' | 'not_scored';
   screened_at?: string | null;

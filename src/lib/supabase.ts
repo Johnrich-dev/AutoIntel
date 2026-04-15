@@ -99,7 +99,6 @@ export interface Applicant {
   education_score?: number | null;
   projects_score?: number | null;
   traincert_score?: number | null;
-  achievements_score?: number | null;
 }
 
 export interface Resume {
@@ -211,13 +210,12 @@ export interface JobPosting {
 
 export interface ScoringSettings {
   settings_id: string;
-  // Weights for 6 resume categories
+  // Weights for 5 resume categories (achievements removed — no job posting basis)
   experience_weight: number;
   skills_weight: number;
   education_weight: number;
   projects_weight: number;
   traincert_weight: number;
-  achievements_weight: number;
   // Overall score weights (resume vs video vs profile fit)
   resume_weight: number;
   video_weight: number;
@@ -234,7 +232,6 @@ export interface ScoringSettings {
   baseline_education: number;
   baseline_projects: number;
   baseline_traincert: number;
-  baseline_achievements: number;
   // Scoring type (managed by backend, not user-editable)
   scoring_type: 'semantic' | 'hybrid';
   created_at: string;
