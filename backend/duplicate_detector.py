@@ -607,9 +607,21 @@ def handle_duplicate(
         print("Missing applicant data for duplicate handling")
         return False
     
-    # Send rejection email first (so we still have the email address)
+    print(f"Handling duplicate for: {applicant_name} ({applicant_email})")
+    
+    # Store email info before any database operations
+    email_info = {
+        'name': applicant_name,
+        'email': applicant_email,
+        'job_title': job_title
+    }
+    
+    # Send rejection email first (before any database deletions)
+    email_sent = False
     if send_duplicate_rejection_notification:
         try:
+            print(f"Attempting to send duplicate rejection email to {applicant_email}...")
+            
             # Find the best matching existing applicant for context
             matches = duplicate_result.get('matches', [])
             match_info = ""
@@ -618,47 +630,54 @@ def handle_duplicate(
                 match_info = f" match with existing applicant: {match.get('name')} ({match.get('email')})"
             
             reason = duplicate_result.get('reason', 'Duplicate application detected')
+            print(f"Duplicate reason: {reason}{match_info}")
             
-            success = send_duplicate_rejection_notification(
-                applicant_name=applicant_name,
-                applicant_email=applicant_email,
-                job_title=job_title,
+            email_sent = send_duplicate_rejection_notification(
+                applicant_name=email_info['name'],
+                applicant_email=email_info['email'],
+                job_title=email_info['job_title'],
                 score=0.0
             )
             
-            if success:
-                print(f"Sent duplicate rejection email to {applicant_email}")
+            if email_sent:
+                print(f"✓ Sent duplicate rejection email to {applicant_email}")
             else:
-                print(f"Failed to send rejection email to {applicant_email}")
+                print(f"✗ Failed to send rejection email to {applicant_email}")
         except Exception as e:
-            print(f"Error sending rejection email: {e}")
+            print(f"✗ Error sending rejection email: {e}")
+            import traceback
+            traceback.print_exc()
+            email_sent = False
+    else:
+        print("✗ Email service not available - send_duplicate_rejection_notification is None")
     
     # Now delete the duplicate applicant and their data from database
+    print(f"Deleting duplicate applicant {applicant_id} from database...")
+    
     try:
         # First delete from resumes table (to handle foreign key constraints)
-        sb.table('resumes').delete().eq('applicant_id', applicant_id).execute()
-        print(f"Deleted resume for applicant {applicant_id}")
+        delete_result = sb.table('resumes').delete().eq('applicant_id', applicant_id).execute()
+        print(f"Deleted resume for applicant {applicant_id}: {len(delete_result.data) if delete_result.data else 0} records")
     except Exception as e:
         print(f"Error deleting resume: {e}")
     
     # Delete from recruitment_applicants table if it exists
     try:
-        sb.table('recruitment_applicants').delete().eq('applicant_id', applicant_id).execute()
-        print(f"Deleted from recruitment_applicants for applicant {applicant_id}")
+        delete_result = sb.table('recruitment_applicants').delete().eq('applicant_id', applicant_id).execute()
+        print(f"Deleted from recruitment_applicants for applicant {applicant_id}: {len(delete_result.data) if delete_result.data else 0} records")
     except Exception as e:
         # Table might not exist or no records to delete - this is okay
         print(f"Note: Could not delete from recruitment_applicants (table may not exist): {e}")
     
     # Finally delete from applicants table
     try:
-        sb.table('applicants').delete().eq('id', applicant_id).execute()
-        print(f"Deleted duplicate applicant {applicant_id} ({applicant_email}) and their resume from database")
-        return True
+        delete_result = sb.table('applicants').delete().eq('id', applicant_id).execute()
+        print(f"Deleted duplicate applicant {applicant_id} ({applicant_email}) from database: {len(delete_result.data) if delete_result.data else 0} records")
     except Exception as e:
         print(f"Error deleting applicant: {e}")
-        return False
     
-    return False
+    # Return whether the email was sent successfully
+    return email_sent
 
 
 def process_new_applicant(
@@ -714,7 +733,12 @@ def process_new_applicant(
     
     # Handle if duplicate found
     if duplicate_result.get('is_duplicate'):
-        handle_duplicate(applicant_data, duplicate_result, job_title)
+        email_sent = handle_duplicate(applicant_data, duplicate_result, job_title)
+        duplicate_result['email_sent'] = email_sent
+        if email_sent:
+            print(f"✓ Duplicate rejection email sent successfully")
+        else:
+            print(f"✗ Duplicate rejection email failed to send")
     
     return duplicate_result
 
