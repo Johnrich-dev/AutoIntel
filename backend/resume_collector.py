@@ -832,11 +832,35 @@ def process_emails():
                                 except Exception as e:
                                     print(f"Warning: Could not get parsed resume: {e}")
 
-                                # Trigger screening if we have a job (even without description, we have structured fields)
-                                if job_posting or job_description:
+                                # DUPLICATE DETECTION - Check BEFORE screening
+                                # If duplicate found, skip screening entirely
+                                is_duplicate = False
+                                if process_new_applicant and uploaded_files:
+                                    try:
+                                        print(f"Running duplicate detection for {sender_name}...")
+                                        import time
+                                        time.sleep(1)
+
+                                        duplicate_result = process_new_applicant(
+                                            applicant_id=applicant_id,
+                                            job_title=job_title
+                                        )
+
+                                        print(f"Duplicate detection: {duplicate_result.get('recommendation')}")
+                                        if duplicate_result.get('is_duplicate'):
+                                            is_duplicate = True
+                                            print(f"  Reason: {duplicate_result.get('reason')}")
+                                            print(f"  Layer: {duplicate_result.get('layer')}")
+                                            if duplicate_result.get('matches'):
+                                                for match in duplicate_result.get('matches', [])[:3]:
+                                                    print(f"  Match: {match.get('name')} ({match.get('email')}) - {match.get('confidence')}%")
+                                    except Exception as dup_error:
+                                        print(f"Error during duplicate detection: {dup_error}")
+
+                                # Trigger screening only if NOT a duplicate
+                                if not is_duplicate and (job_posting or job_description):
                                     print(f"Triggering automatic screening for {sender_name}...")
-                                    
-                                    # Pass all data needed for hybrid scoring
+
                                     screening_result = process_applicant_screening(
                                         applicant_id=applicant_id,
                                         resume_text=resume_text,
@@ -866,34 +890,8 @@ def process_emails():
                                             )
                                         except Exception as notify_err:
                                             print(f"[Teams] Screening notification failed: {notify_err}")
-                                else:
+                                elif not is_duplicate:
                                     print(f"No matching job found for position: {position}, skipping screening")
-                                
-                                # DUPLICATE DETECTION - Check for duplicate applications
-                                # Runs regardless of job match
-                                if process_new_applicant and uploaded_files:
-                                    try:
-                                        print(f"Running duplicate detection for {sender_name}...")
-                                        
-                                        # Wait a bit for the resume to be fully processed
-                                        import time
-                                        time.sleep(1)
-                                        
-                                        # Run duplicate detection
-                                        duplicate_result = process_new_applicant(
-                                            applicant_id=applicant_id,
-                                            job_title=job_title
-                                        )
-                                        
-                                        print(f"Duplicate detection: {duplicate_result.get('recommendation')}")
-                                        if duplicate_result.get('is_duplicate'):
-                                            print(f"  Reason: {duplicate_result.get('reason')}")
-                                            print(f"  Layer: {duplicate_result.get('layer')}")
-                                            if duplicate_result.get('matches'):
-                                                for match in duplicate_result.get('matches', [])[:3]:
-                                                    print(f"  Match: {match.get('name')} ({match.get('email')}) - {match.get('confidence')}%")
-                                    except Exception as dup_error:
-                                        print(f"Error during duplicate detection: {dup_error}")
                     except Exception as screening_error:
                         print(f"Error during automatic screening: {screening_error}")
                 # ============================================================
