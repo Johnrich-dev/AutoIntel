@@ -1038,7 +1038,7 @@ def send_offer_email(
         job_title: Position offered
         department: Department name
         email_subject: Editable subject (e.g. "Job Offer – Data Engineer")
-        email_body: HTML or plain-text body (HR-authored)
+        email_body: Plain text body (will be formatted as HTML automatically)
         attachment_path: Local path to offer letter file (optional)
         attachment_filename: Display filename for attachment (optional)
         cc: CC email address (optional)
@@ -1060,6 +1060,20 @@ def send_offer_email(
         print("ERROR: Offer email subject must not start with 'Applicant -' (IMAP parser conflict).")
         return False
 
+    # Format the email body as professional HTML
+    formatted_body_html = format_offer_email_body(
+        applicant_name=applicant_name,
+        job_title=job_title,
+        department=department,
+        email_body=email_body,
+        attachment_filename=attachment_filename
+    )
+    
+    # Create plain text version by stripping HTML tags
+    import re
+    plain_text_body = re.sub(r'<[^>]+>', '', formatted_body_html)
+    plain_text_body = re.sub(r'\s+', ' ', plain_text_body).strip()
+
     try:
         msg = MIMEMultipart('mixed')
         msg['From'] = f"{FROM_NAME} <{FROM_EMAIL}>"
@@ -1069,10 +1083,10 @@ def send_offer_email(
         if cc:
             msg['Cc'] = cc
 
-        # Body
+        # Body - use formatted HTML and plain text versions
         alt = MIMEMultipart('alternative')
-        alt.attach(MIMEText(email_body, 'plain', 'utf-8'))
-        alt.attach(MIMEText(email_body, 'html', 'utf-8'))
+        alt.attach(MIMEText(plain_text_body, 'plain', 'utf-8'))
+        alt.attach(MIMEText(formatted_body_html, 'html', 'utf-8'))
         msg.attach(alt)
 
         # Attachment
@@ -1098,6 +1112,106 @@ def send_offer_email(
     except Exception as e:
         print(f"Failed to send offer email: {str(e)}")
         return False
+
+
+def format_offer_email_body(
+    applicant_name: str,
+    job_title: str,
+    department: str,
+    email_body: str,
+    attachment_filename: Optional[str] = None
+) -> str:
+    """
+    Format the job offer email body as professional HTML.
+    
+    Takes plain text content and formats it with proper HTML structure,
+    styling, and professional layout.
+    """
+    # Process the email body to handle line breaks and paragraphs
+    paragraphs = []
+    if email_body:
+        # Split by double line breaks (paragraph breaks)
+        raw_paragraphs = email_body.split('\n\n')
+        for para in raw_paragraphs:
+            # Clean up the paragraph and replace single line breaks with <br>
+            cleaned_para = para.strip()
+            if cleaned_para:
+                # Replace single line breaks with <br> tags
+                formatted_para = cleaned_para.replace('\n', '<br>')
+                paragraphs.append(formatted_para)
+    
+    # If no paragraphs were created, treat the whole body as one paragraph
+    if not paragraphs and email_body:
+        formatted_body = email_body.replace('\n', '<br>')
+        paragraphs = [formatted_body]
+    
+    # Build the paragraphs HTML
+    body_content = ""
+    for para in paragraphs:
+        body_content += f'<p style="margin: 0 0 16px 0; line-height: 1.6;">{para}</p>'
+    
+    # Attachment section
+    attachment_section = ""
+    if attachment_filename:
+        attachment_section = f"""
+        <div style="background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 8px; padding: 16px; margin: 20px 0;">
+            <h4 style="margin: 0 0 8px 0; color: #0369a1; font-size: 14px; font-weight: 600;">📎 Attachment Included</h4>
+            <p style="margin: 0; color: #0369a1; font-size: 14px;">Please find the detailed offer letter attached: <strong>{attachment_filename}</strong></p>
+        </div>
+        """
+    
+    # Build the complete HTML email
+    html_body = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #374151; margin: 0; padding: 0; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: white; padding: 30px 20px; text-align: center; border-radius: 12px 12px 0 0; }}
+            .content {{ padding: 30px 20px; background: #ffffff; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }}
+            .highlight {{ background: #ecfdf5; border: 1px solid #10b981; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+            .footer {{ text-align: center; padding: 20px; color: #6b7280; font-size: 12px; }}
+            .signature {{ margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1 style="margin: 0; font-size: 28px; font-weight: 600;">🎉 Congratulations!</h1>
+                <p style="margin: 8px 0 0 0; opacity: 0.9; font-size: 18px;">Job Offer - {job_title}</p>
+                {f'<p style="margin: 4px 0 0 0; opacity: 0.8; font-size: 14px;">{department}</p>' if department else ''}
+            </div>
+            <div class="content">
+                <div class="highlight">
+                    <p style="margin: 0; font-size: 16px; font-weight: 500; color: #065f46;">Dear <strong>{applicant_name}</strong>,</p>
+                    <p style="margin: 8px 0 0 0; color: #065f46;">We are delighted to extend this job offer to you!</p>
+                </div>
+                
+                {body_content}
+                
+                {attachment_section}
+                
+                <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+                    <h4 style="margin: 0 0 8px 0; color: #92400e; font-size: 14px; font-weight: 600;">Next Steps</h4>
+                    <p style="margin: 0; color: #92400e; font-size: 14px;">Please review this offer carefully and let us know your decision. We're excited about the possibility of you joining our team!</p>
+                </div>
+                
+                <div class="signature">
+                    <p style="margin: 0; font-weight: 500;">Best regards,</p>
+                    <p style="margin: 4px 0 0 0;"><strong>AutoIntel Recruitment Team</strong></p>
+                </div>
+            </div>
+            <div class="footer">
+                <p>This offer is confidential and intended solely for the named recipient.</p>
+                <p>© {datetime.now().year} AutoIntel. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return html_body
 
 
 def send_rejection_email(
