@@ -154,6 +154,12 @@ except ImportError:
     check_duplicates = None
     handle_duplicate = None
 
+# Import email service for duplicate rejection notifications
+try:
+    from email_service import send_duplicate_rejection_notification
+except ImportError:
+    send_duplicate_rejection_notification = None
+
 # Load environment variables from .env if present
 try:
     from dotenv import load_dotenv  # type: ignore
@@ -688,7 +694,28 @@ def process_emails():
 
                 existing = supabase.table('applicants').select('id').eq('email', sender_email).execute()
                 if existing.data:
-                    print(f"Applicant {sender_email} already exists, skipping")
+                    print(f"Applicant {sender_email} already exists - sending duplicate rejection email")
+                    
+                    # Send duplicate rejection email for existing applicant
+                    if send_duplicate_rejection_notification:
+                        try:
+                            email_sent = send_duplicate_rejection_notification(
+                                applicant_name=sender_name,
+                                applicant_email=sender_email,
+                                job_title=position,
+                                score=0.0
+                            )
+                            
+                            if email_sent:
+                                print(f"✓ Sent duplicate rejection email to {sender_email}")
+                            else:
+                                print(f"✗ Failed to send duplicate rejection email to {sender_email}")
+                                
+                        except Exception as e:
+                            print(f"✗ Error sending duplicate rejection email: {e}")
+                    else:
+                        print(f"✗ Email service not available - cannot send duplicate rejection email")
+                    
                     mark_as_read(mail, email_id)
                     move_to_processed(mail, email_id)
                     continue
