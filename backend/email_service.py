@@ -159,21 +159,6 @@ def send_pass_notification(
 ) -> bool:
     """
     Send notification to applicants who passed initial screening.
-    
-    Args:
-        applicant_name: Full name of the applicant
-        applicant_email: Email address
-        job_title: Position applied for
-        score: Screening score
-        access_token: Unique access token
-        requirement_match_score: Requirement match component score (optional)
-        count_score: Count-based component score (optional)
-        requirement_breakdown: Dict with breakdown scores by category (optional)
-        count_breakdown: Dict with count details by category (optional)
-        weights_used: Dict with weights used for scoring (optional)
-    
-    Returns:
-        True if sent successfully
     """
     subject = f"Congratulations! You've Passed Initial Screening - {job_title}"
 
@@ -188,7 +173,7 @@ def send_pass_notification(
     expiry_time = datetime.now() + timedelta(hours=TOKEN_EXPIRY_HOURS)
     expiry_str = expiry_time.strftime("%B %d, %Y at %I:%M %p")
 
-    # Build score breakdown HTML if provided
+    # Build score breakdown HTML — relevance scores only, no count data
     score_breakdown_html = ""
     if requirement_breakdown:
         categories = [
@@ -198,13 +183,11 @@ def send_pass_notification(
             ("Projects", "projects"),
             ("Training & Certifications", "traincert"),
         ]
-
         rows_html = ""
         for cat_name, cat_key in categories:
             req_score = requirement_breakdown.get(cat_key, "-")
             if isinstance(req_score, float):
                 req_score_str = f"{req_score:.1f}%"
-                # Color-code: green ≥70, yellow 40–69, red <40
                 if req_score >= 70:
                     color = "#16a34a"
                 elif req_score >= 40:
@@ -214,14 +197,12 @@ def send_pass_notification(
             else:
                 req_score_str = str(req_score)
                 color = "#6b7280"
-
             rows_html += f"""
                         <tr>
                             <td style="padding: 10px; border: 1px solid #ddd;">{cat_name}</td>
                             <td style="padding: 10px; text-align: center; border: 1px solid #ddd; color: {color}; font-weight: bold;">{req_score_str}</td>
                         </tr>
             """
-
         score_breakdown_html = f"""
                 <div class="score-breakdown">
                     <h3>📊 Your Score Breakdown</h3>
@@ -329,24 +310,10 @@ def send_fail_notification(
 ) -> bool:
     """
     Send notification to applicants who did not pass initial screening.
-    
-    Args:
-        applicant_name: Full name of the applicant
-        applicant_email: Email address
-        job_title: Position applied for
-        score: Screening score
-        requirement_match_score: Requirement match component score (optional)
-        count_score: Count-based component score (optional)
-        requirement_breakdown: Dict with breakdown scores by category (optional)
-        count_breakdown: Dict with count details by category (optional)
-        weights_used: Dict with weights used for scoring (optional)
-    
-    Returns:
-        True if sent successfully
     """
     subject = f"Update on Your Application - {job_title}"
 
-    # Build score breakdown HTML if provided
+    # Build score breakdown HTML — relevance scores only, no count data
     score_breakdown_html = ""
     if requirement_breakdown:
         categories = [
@@ -356,7 +323,6 @@ def send_fail_notification(
             ("Projects", "projects"),
             ("Training & Certifications", "traincert"),
         ]
-
         rows_html = ""
         for cat_name, cat_key in categories:
             req_score = requirement_breakdown.get(cat_key, "-")
@@ -371,14 +337,12 @@ def send_fail_notification(
             else:
                 req_score_str = str(req_score)
                 color = "#6b7280"
-
             rows_html += f"""
                         <tr>
                             <td style="padding: 10px; border: 1px solid #ddd;">{cat_name}</td>
                             <td style="padding: 10px; text-align: center; border: 1px solid #ddd; color: {color}; font-weight: bold;">{req_score_str}</td>
                         </tr>
             """
-
         score_breakdown_html = f"""
                 <div class="score-breakdown">
                     <h3>📊 Your Score Breakdown</h3>
@@ -456,25 +420,11 @@ def send_review_notification(
     weights_used: Optional[Dict[str, float]] = None
 ) -> bool:
     """
-    Send notification to applicants whose score is in review range (60-79).
-    
-    Args:
-        applicant_name: Full name of the applicant
-        applicant_email: Email address
-        job_title: Position applied for
-        score: Screening score
-        requirement_match_score: Requirement match component score (optional)
-        count_score: Count-based component score (optional)
-        requirement_breakdown: Dict with breakdown scores by category (optional)
-        count_breakdown: Dict with count details by category (optional)
-        weights_used: Dict with weights used for scoring (optional)
-    
-    Returns:
-        True if sent successfully
+    Send notification to applicants whose score is in review range.
     """
     subject = f"Application Status Update - {job_title}"
 
-    # Build score breakdown HTML if provided
+    # Build score breakdown HTML — relevance scores only, no count data
     score_breakdown_html = ""
     if requirement_breakdown:
         categories = [
@@ -484,7 +434,6 @@ def send_review_notification(
             ("Projects", "projects"),
             ("Training & Certifications", "traincert"),
         ]
-
         rows_html = ""
         for cat_name, cat_key in categories:
             req_score = requirement_breakdown.get(cat_key, "-")
@@ -499,14 +448,12 @@ def send_review_notification(
             else:
                 req_score_str = str(req_score)
                 color = "#6b7280"
-
             rows_html += f"""
                         <tr>
                             <td style="padding: 10px; border: 1px solid #ddd;">{cat_name}</td>
                             <td style="padding: 10px; text-align: center; border: 1px solid #ddd; color: {color}; font-weight: bold;">{req_score_str}</td>
                         </tr>
             """
-
         score_breakdown_html = f"""
                 <div class="score-breakdown">
                     <h3>📊 Your Score Breakdown</h3>
@@ -585,30 +532,13 @@ def process_screening_decision(
 ) -> str:
     """
     Process the screening decision based on score and send appropriate notification.
-    
-    Args:
-        applicant_data: Dictionary with applicant info (name, email, job_title)
-        score: The screening score (0-100)
-        threshold_pass: Score above which applicant passes (default: 80)
-        threshold_review: Score above which needs review (default: 60)
-        requirement_match_score: Requirement match component score (optional)
-        count_score: Count-based component score (optional)
-        requirement_breakdown: Dict with breakdown scores by category (optional)
-        count_breakdown: Dict with count details by category (optional)
-        weights_used: Dict with weights used for scoring (optional)
-    
-    Returns:
-        Decision status: "passed", "needs_review", or "failed"
     """
     applicant_name = applicant_data.get("full_name", "Applicant")
     applicant_email = applicant_data.get("email", "")
     job_title = applicant_data.get("job_title", "the position")
-    
+
     if score >= threshold_pass:
-        # Generate access token
         access_token = generate_access_token()
-        
-        # Send pass notification with token
         send_pass_notification(
             applicant_name=applicant_name,
             applicant_email=applicant_email,
@@ -621,11 +551,9 @@ def process_screening_decision(
             count_breakdown=count_breakdown,
             weights_used=weights_used
         )
-        
         return "passed"
-    
+
     elif score >= threshold_review:
-        # Send review notification
         send_review_notification(
             applicant_name=applicant_name,
             applicant_email=applicant_email,
@@ -637,11 +565,9 @@ def process_screening_decision(
             count_breakdown=count_breakdown,
             weights_used=weights_used
         )
-        
         return "needs_review"
-    
+
     else:
-        # Send fail notification
         send_fail_notification(
             applicant_name=applicant_name,
             applicant_email=applicant_email,
@@ -653,7 +579,6 @@ def process_screening_decision(
             count_breakdown=count_breakdown,
             weights_used=weights_used
         )
-        
         return "failed"
 
 

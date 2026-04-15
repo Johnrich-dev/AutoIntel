@@ -815,21 +815,13 @@ def grant_access():
         
         try:
             result = supabase.table("applicants").update(update_data).eq("id", applicant_id).execute()
-            print(f"Database update result: {result}")
-            print(f"Result data: {result.data}")
-            print(f"Result count: {result.count}")
-            
+            print(f"Database update result: {result.data}")
             if not result.data:
-                print(f"WARNING: No rows were updated for applicant {applicant_id}")
-                return jsonify({"error": "Database update failed - no rows affected"}), 500
-                
+                print(f"WARNING: No rows updated for applicant {applicant_id} — proceeding with email anyway")
         except Exception as db_error:
-            print(f"Database update error: {db_error}")
-            import traceback
-            traceback.print_exc()
-            return jsonify({"error": f"Database update failed: {str(db_error)}"}), 500
-        
-        # Send email notification
+            print(f"Database update error (non-fatal): {db_error}")
+
+        # Send email notification regardless of DB update result
         email_sent = email_service.send_pass_notification(
             applicant_name=applicant_name,
             applicant_email=applicant_email,
@@ -962,21 +954,13 @@ def reject_applicant():
         
         try:
             result = supabase.table("applicants").update(update_data).eq("id", applicant_id).execute()
-            print(f"Database update result: {result}")
-            print(f"Result data: {result.data}")
-            print(f"Result count: {result.count}")
-            
+            print(f"Database update result: {result.data}")
             if not result.data:
-                print(f"WARNING: No rows were updated for applicant {applicant_id}")
-                return jsonify({"error": "Database update failed - no rows affected"}), 500
-                
+                print(f"WARNING: No rows updated for applicant {applicant_id} — proceeding with email anyway")
         except Exception as db_error:
-            print(f"Database update error: {db_error}")
-            import traceback
-            traceback.print_exc()
-            return jsonify({"error": f"Database update failed: {str(db_error)}"}), 500
-        
-        # Send email notification
+            print(f"Database update error (non-fatal): {db_error}")
+
+        # Send email notification regardless of DB update result
         email_sent = email_service.send_fail_notification(
             applicant_name=applicant_name,
             applicant_email=applicant_email,
