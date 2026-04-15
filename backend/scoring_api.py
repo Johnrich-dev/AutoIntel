@@ -1974,6 +1974,56 @@ def send_rejection_email_endpoint():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route('/api/send-interview-rejection', methods=['POST'])
+def send_interview_rejection_endpoint():
+    """
+    Send a compassionate rejection email after final interview.
+
+    Request body (JSON):
+      - applicant_name: Full name of the applicant
+      - applicant_email: Email address
+      - job_title: Position they interviewed for
+      - interview_date: Date of the interview (optional, YYYY-MM-DD format)
+      - personalized_feedback: Optional personalized feedback (optional)
+    """
+    import email_service
+
+    try:
+        data = request.get_json(force=True) or {}
+        applicant_name = data.get('applicant_name', '')
+        applicant_email = data.get('applicant_email', '')
+        job_title = data.get('job_title', '')
+        interview_date = data.get('interview_date')  # Optional
+        personalized_feedback = data.get('personalized_feedback')  # Optional
+
+        if not applicant_name or not applicant_email or not job_title:
+            return jsonify({
+                "success": False, 
+                "error": "applicant_name, applicant_email, and job_title are required"
+            }), 400
+
+        sent = email_service.send_interview_rejection_notification(
+            applicant_name=applicant_name,
+            applicant_email=applicant_email,
+            job_title=job_title,
+            interview_date=interview_date,
+            personalized_feedback=personalized_feedback
+        )
+
+        if sent:
+            return jsonify({
+                "success": True, 
+                "message": f"Interview rejection email sent to {applicant_email}"
+            }), 200
+        return jsonify({
+            "success": False, 
+            "error": "Failed to send interview rejection email"
+        }), 500
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route('/api/notify-assessment', methods=['POST'])
 def notify_assessment():
     """

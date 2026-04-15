@@ -1273,10 +1273,56 @@ export function InterviewScheduling({ preSelectedApplicantId, onPreSelectedConsu
     setNotification(null);
     try {
       const adminClient = getSupabaseAdminClient();
+      
+      // Get the interview and applicant details for the rejection email
+      const interview = interviews.find(i => i.applicantId === applicantId);
+      
+      // Update database status first
       const now = new Date().toISOString();
       await adminClient.from('applicants').update({ status: 'rejected', decision_date: now }).eq('id', applicantId);
       await adminClient.from('scheduled_interviews').update({ status: 'completed' }).eq('applicant_id', applicantId);
-      setNotification({ type: 'success', message: 'Applicant marked as Rejected.' });
+      
+      // Send compassionate rejection email
+      if (interview) {
+        try {
+          const apiUrl = API_BASE;
+          const response = await fetch(`${apiUrl}/api/send-interview-rejection`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              applicant_name: interview.applicantName,
+              applicant_email: interview.applicantEmail,
+              job_title: interview.jobTitle,
+              interview_date: interview.interviewDate,
+              // You can add personalized_feedback here if you want to collect it from the UI
+              // personalized_feedback: "Your technical skills were impressive, and we encourage you to apply for future opportunities."
+            })
+          });
+
+          const result = await response.json();
+          
+          if (result.success) {
+            setNotification({ 
+              type: 'success', 
+              message: 'Applicant marked as Rejected and compassionate rejection email sent.' 
+            });
+          } else {
+            setNotification({ 
+              type: 'success', 
+              message: 'Applicant marked as Rejected. Note: Rejection email failed to send.' 
+            });
+          }
+        } catch (emailError) {
+          console.error('Error sending rejection email:', emailError);
+          setNotification({ 
+            type: 'success', 
+            message: 'Applicant marked as Rejected. Note: Rejection email failed to send.' 
+          });
+        }
+      } else {
+        setNotification({ type: 'success', message: 'Applicant marked as Rejected.' });
+      }
+      
       loadData();
     } catch (error) {
       console.error('Error marking applicant as rejected:', error);

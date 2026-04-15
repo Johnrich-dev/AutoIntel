@@ -309,95 +309,63 @@ def send_fail_notification(
     weights_used: Optional[Dict[str, float]] = None
 ) -> bool:
     """
-    Send notification to applicants who did not pass initial screening.
+    Send compassionate notification to applicants who did not pass initial screening.
+    
+    Note: Score parameters are kept for backward compatibility but are not displayed
+    to maintain a professional and empathetic tone.
     """
-    subject = f"Update on Your Application - {job_title}"
-
-    # Build score breakdown HTML — relevance scores only, no count data
-    score_breakdown_html = ""
-    if requirement_breakdown:
-        categories = [
-            ("Experience", "experience"),
-            ("Skills", "skills"),
-            ("Education", "education"),
-            ("Projects", "projects"),
-            ("Training & Certifications", "traincert"),
-        ]
-        rows_html = ""
-        for cat_name, cat_key in categories:
-            req_score = requirement_breakdown.get(cat_key, "-")
-            if isinstance(req_score, float):
-                req_score_str = f"{req_score:.1f}%"
-                if req_score >= 70:
-                    color = "#16a34a"
-                elif req_score >= 40:
-                    color = "#d97706"
-                else:
-                    color = "#dc2626"
-            else:
-                req_score_str = str(req_score)
-                color = "#6b7280"
-            rows_html += f"""
-                        <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{cat_name}</td>
-                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd; color: {color}; font-weight: bold;">{req_score_str}</td>
-                        </tr>
-            """
-        score_breakdown_html = f"""
-                <div class="score-breakdown">
-                    <h3>📊 Your Score Breakdown</h3>
-                    <table style="width:100%; border-collapse: collapse; margin: 15px 0;">
-                        <tr style="background: #f3f4f6;">
-                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Category</th>
-                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Relevance Score</th>
-                        </tr>
-                        {rows_html}
-                    </table>
-                </div>
-        """
+    subject = f"Application Update – {job_title} Position"
     
     body_html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #374151; margin: 0; padding: 0; }}
             .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: #6B7280; color: white; padding: 20px; text-align: center; }}
-            .content {{ padding: 20px; background: #f9f9f9; }}
-            .score {{ font-size: 20px; color: #6B7280; }}
-            .footer {{ text-align: center; padding: 20px; color: #666; font-size: 12px; }}
+            .header {{ background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%); color: white; padding: 30px 20px; text-align: center; border-radius: 12px 12px 0 0; }}
+            .content {{ padding: 30px 20px; background: #ffffff; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }}
+            .highlight {{ background: #f0f9ff; border: 1px solid #e0f2fe; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+            .footer {{ text-align: center; padding: 20px; color: #6b7280; font-size: 12px; }}
+            .signature {{ margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; }}
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <h1>Thank You for Your Interest</h1>
+                <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Thank You for Your Application</h1>
+                <p style="margin: 8px 0 0 0; opacity: 0.9; font-size: 16px;">{job_title} Position</p>
             </div>
             <div class="content">
-                <p>Dear {applicant_name},</p>
+                <p style="font-size: 16px; margin-bottom: 20px;">Dear <strong>{applicant_name}</strong>,</p>
                 
-                <p>Thank you for your interest in the <strong>{job_title}</strong> position 
-                at our company.</p>
+                <p>Thank you for your interest in the <strong>{job_title}</strong> position at our company. We appreciate the time and effort you invested in your application.</p>
                 
-                <p>After careful review of your application, we have decided to move forward 
-                with other candidates whose qualifications more closely match our current requirements.</p>
+                <p>After careful review of your qualifications and experience, we have decided to move forward with candidates whose backgrounds more closely align with our current specific requirements for this role.</p>
                 
-                <div class="score">
-                    Your Match Score: {score:.0f}/100
+                <div class="highlight">
+                    <p style="margin: 0; font-weight: 500; color: #1f2937;">We want you to know that this decision reflects our current needs rather than your capabilities.</p>
+                    <p style="margin: 8px 0 0 0;">Your background and experience are valuable, and we encourage you to continue pursuing opportunities that match your skills.</p>
                 </div>
                 
-                {score_breakdown_html}
+                <p>We encourage you to:</p>
+                <ul style="padding-left: 20px; margin: 16px 0;">
+                    <li style="margin-bottom: 8px;">Continue building on your professional strengths</li>
+                    <li style="margin-bottom: 8px;">Explore other opportunities that may be a better fit for your background</li>
+                    <li style="margin-bottom: 8px;">Consider applying for future positions with us that match your expertise</li>
+                </ul>
                 
-                <p>We encourage you to apply for future positions that better match your 
-                skills and experience. We appreciate the time you took to apply and 
-                wish you the best in your career pursuits.</p>
+                <p>We will keep your information on file and may reach out if a suitable position becomes available that aligns with your qualifications.</p>
                 
-                <p>Best regards,<br>
-                <strong>AutoIntel Recruitment Team</strong></p>
+                <p>Thank you again for considering us as a potential employer. We wish you success in your job search and future career endeavors.</p>
+                
+                <div class="signature">
+                    <p style="margin: 0; font-weight: 500;">Best regards,</p>
+                    <p style="margin: 4px 0 0 0;"><strong>AutoIntel Recruitment Team</strong></p>
+                </div>
             </div>
             <div class="footer">
-                <p>This is an automated message. Please do not reply to this email.</p>
+                <p>This is an automated message. If you have any questions, please feel free to reach out to our HR team.</p>
                 <p>© {datetime.now().year} AutoIntel. All rights reserved.</p>
             </div>
         </div>
@@ -420,95 +388,66 @@ def send_review_notification(
     weights_used: Optional[Dict[str, float]] = None
 ) -> bool:
     """
-    Send notification to applicants whose score is in review range.
+    Send professional notification to applicants whose application is under review.
+    
+    Note: Score parameters are kept for backward compatibility but are not displayed
+    to maintain a professional and encouraging tone.
     """
-    subject = f"Application Status Update - {job_title}"
-
-    # Build score breakdown HTML — relevance scores only, no count data
-    score_breakdown_html = ""
-    if requirement_breakdown:
-        categories = [
-            ("Experience", "experience"),
-            ("Skills", "skills"),
-            ("Education", "education"),
-            ("Projects", "projects"),
-            ("Training & Certifications", "traincert"),
-        ]
-        rows_html = ""
-        for cat_name, cat_key in categories:
-            req_score = requirement_breakdown.get(cat_key, "-")
-            if isinstance(req_score, float):
-                req_score_str = f"{req_score:.1f}%"
-                if req_score >= 70:
-                    color = "#16a34a"
-                elif req_score >= 40:
-                    color = "#d97706"
-                else:
-                    color = "#dc2626"
-            else:
-                req_score_str = str(req_score)
-                color = "#6b7280"
-            rows_html += f"""
-                        <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{cat_name}</td>
-                            <td style="padding: 10px; text-align: center; border: 1px solid #ddd; color: {color}; font-weight: bold;">{req_score_str}</td>
-                        </tr>
-            """
-        score_breakdown_html = f"""
-                <div class="score-breakdown">
-                    <h3>📊 Your Score Breakdown</h3>
-                    <table style="width:100%; border-collapse: collapse; margin: 15px 0;">
-                        <tr style="background: #f3f4f6;">
-                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Category</th>
-                            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Relevance Score</th>
-                        </tr>
-                        {rows_html}
-                    </table>
-                </div>
-        """
+    subject = f"Application Status Update – {job_title} Position"
     
     body_html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #374151; margin: 0; padding: 0; }}
             .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: #F59E0B; color: white; padding: 20px; text-align: center; }}
-            .content {{ padding: 20px; background: #f9f9f9; }}
-            .score {{ font-size: 20px; color: #F59E0B; }}
-            .footer {{ text-align: center; padding: 20px; color: #666; font-size: 12px; }}
+            .header {{ background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%); color: white; padding: 30px 20px; text-align: center; border-radius: 12px 12px 0 0; }}
+            .content {{ padding: 30px 20px; background: #ffffff; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }}
+            .highlight {{ background: #fef3c7; border: 1px solid #fbbf24; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+            .timeline {{ background: #f8fafc; border-left: 4px solid #f59e0b; padding: 16px; margin: 20px 0; border-radius: 0 8px 8px 0; }}
+            .footer {{ text-align: center; padding: 20px; color: #6b7280; font-size: 12px; }}
+            .signature {{ margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; }}
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <h1>Application Under Review</h1>
+                <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Application Under Review</h1>
+                <p style="margin: 8px 0 0 0; opacity: 0.9; font-size: 16px;">{job_title} Position</p>
             </div>
             <div class="content">
-                <p>Dear {applicant_name},</p>
+                <p style="font-size: 16px; margin-bottom: 20px;">Dear <strong>{applicant_name}</strong>,</p>
                 
-                <p>Thank you for your interest in the <strong>{job_title}</strong> position 
-                at our company.</p>
+                <p>Thank you for your interest in the <strong>{job_title}</strong> position at our company. We appreciate the time you invested in your application.</p>
                 
-                <p>Your application is currently under review by our recruitment team.</p>
-                
-                <div class="score">
-                    Your Match Score: {score:.0f}/100
+                <div class="highlight">
+                    <p style="margin: 0; font-weight: 500; color: #92400e;">Good news! Your application has progressed to the review stage.</p>
+                    <p style="margin: 8px 0 0 0;">Our recruitment team is currently conducting a detailed evaluation of your qualifications and experience.</p>
                 </div>
                 
-                {score_breakdown_html}
+                <div class="timeline">
+                    <h4 style="margin: 0 0 12px 0; color: #92400e; font-size: 14px; font-weight: 600;">What happens next?</h4>
+                    <ul style="margin: 0; padding-left: 16px; color: #475569;">
+                        <li style="margin-bottom: 8px;">Our team will carefully review your background and qualifications</li>
+                        <li style="margin-bottom: 8px;">We may reach out for additional information if needed</li>
+                        <li style="margin-bottom: 8px;">You'll receive an update on the final decision within the next few business days</li>
+                    </ul>
+                </div>
                 
-                <p>We will notify you of the outcome once the review process is complete. 
-                This may take a few days.</p>
+                <p>We recognize that waiting can be challenging, and we truly appreciate your patience during this process. Your application is receiving the attention it deserves.</p>
                 
-                <p>Thank you for your patience.</p>
+                <p>If you have any questions or need to update any information in your application, please don't hesitate to reach out to our recruitment team.</p>
                 
-                <p>Best regards,<br>
-                <strong>AutoIntel Recruitment Team</strong></p>
+                <p>Thank you again for your interest in joining our team. We look forward to completing our review process.</p>
+                
+                <div class="signature">
+                    <p style="margin: 0; font-weight: 500;">Best regards,</p>
+                    <p style="margin: 4px 0 0 0;"><strong>AutoIntel Recruitment Team</strong></p>
+                </div>
             </div>
             <div class="footer">
-                <p>This is an automated message. Please do not reply to this email.</p>
+                <p>This is an automated message. If you have any questions, please feel free to reach out to our HR team.</p>
                 <p>© {datetime.now().year} AutoIntel. All rights reserved.</p>
             </div>
         </div>
@@ -1221,6 +1160,117 @@ def send_rejection_email(
     except Exception as e:
         print(f"Failed to send rejection email: {str(e)}")
         return False
+
+
+def send_interview_rejection_notification(
+    applicant_name: str,
+    applicant_email: str,
+    job_title: str,
+    interview_date: Optional[str] = None,
+    personalized_feedback: Optional[str] = None
+) -> bool:
+    """
+    Send a compassionate rejection email after final interview.
+    
+    This is specifically for candidates who made it to the final interview stage
+    but were not selected. The tone is empathetic and encouraging.
+    
+    Args:
+        applicant_name: Full name of the applicant
+        applicant_email: Email address
+        job_title: Position they interviewed for
+        interview_date: Date of the interview (optional)
+        personalized_feedback: Optional personalized feedback (optional)
+    
+    Returns:
+        True if sent successfully
+    """
+    subject = f"Application Update – {job_title} Position"
+    
+    # Format interview date if provided
+    interview_date_text = ""
+    if interview_date:
+        try:
+            from datetime import datetime
+            date_obj = datetime.strptime(interview_date, "%Y-%m-%d")
+            interview_date_text = f" on {date_obj.strftime('%B %d, %Y')}"
+        except:
+            interview_date_text = f" on {interview_date}"
+    
+    # Personalized feedback section
+    feedback_section = ""
+    if personalized_feedback and personalized_feedback.strip():
+        feedback_section = f"""
+                <div style="background: #f8fafc; border-left: 4px solid #3b82f6; padding: 16px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+                    <h4 style="margin: 0 0 8px 0; color: #1e40af; font-size: 14px; font-weight: 600;">Feedback from Our Team</h4>
+                    <p style="margin: 0; color: #475569; font-size: 14px; line-height: 1.6;">{personalized_feedback}</p>
+                </div>
+        """
+    
+    body_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #374151; margin: 0; padding: 0; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; text-align: center; border-radius: 12px 12px 0 0; }}
+            .content {{ padding: 30px 20px; background: #ffffff; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }}
+            .highlight {{ background: #f0f9ff; border: 1px solid #e0f2fe; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+            .footer {{ text-align: center; padding: 20px; color: #6b7280; font-size: 12px; }}
+            .signature {{ margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Thank You for Your Interest</h1>
+                <p style="margin: 8px 0 0 0; opacity: 0.9; font-size: 16px;">{job_title} Position</p>
+            </div>
+            <div class="content">
+                <p style="font-size: 16px; margin-bottom: 20px;">Dear <strong>{applicant_name}</strong>,</p>
+                
+                <p>Thank you for taking the time to interview with us{interview_date_text} for the <strong>{job_title}</strong> position. We genuinely appreciate your interest in joining our team and the effort you put into the interview process.</p>
+                
+                <p>After careful consideration and discussion among our hiring team, we have decided to move forward with another candidate whose background and experience more closely align with our current specific requirements for this role.</p>
+                
+                {feedback_section}
+                
+                <div class="highlight">
+                    <p style="margin: 0; font-weight: 500; color: #1f2937;">We want you to know that this decision was not easy to make.</p>
+                    <p style="margin: 8px 0 0 0;">You demonstrated strong qualifications and made a positive impression during the interview process. We were impressed by your skills, experience, and enthusiasm.</p>
+                </div>
+                
+                <p>While this particular opportunity didn't work out, we encourage you to:</p>
+                <ul style="padding-left: 20px; margin: 16px 0;">
+                    <li style="margin-bottom: 8px;">Keep an eye on our careers page for future openings that might be a better fit</li>
+                    <li style="margin-bottom: 8px;">Continue building on the strengths you showcased during our conversation</li>
+                    <li style="margin-bottom: 8px;">Consider applying for other positions with us in the future</li>
+                </ul>
+                
+                <p>We will keep your information on file and may reach out if a suitable position becomes available that matches your background and interests.</p>
+                
+                <p>Thank you again for your time and interest in our company. We wish you all the best in your career journey and future endeavors.</p>
+                
+                <div class="signature">
+                    <p style="margin: 0; font-weight: 500;">Warm regards,</p>
+                    <p style="margin: 4px 0 0 0;"><strong>AutoIntel Recruitment Team</strong></p>
+                </div>
+            </div>
+            <div class="footer">
+                <p>This is an automated message. If you have any questions, please feel free to reach out to our HR team.</p>
+                <p>© {datetime.now().year} AutoIntel. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return send_email(
+        to_email=applicant_email,
+        subject=subject,
+        body=body_html
+    )
 
 
 if __name__ == "__main__":
