@@ -645,8 +645,11 @@ export function NeedsReview({ onDecisionMade }: { onDecisionMade?: () => void } 
                           onClick={() => openDetailPanel(applicant)}
                           className="flex items-center gap-3 group"
                         >
-                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm">
-                            {applicant.name?.charAt(0).toUpperCase() || '?'}
+                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm overflow-hidden flex-shrink-0">
+                            {applicant.photo_url
+                              ? <img src={applicant.photo_url} alt={applicant.name} className="w-full h-full object-cover" />
+                              : applicant.name?.charAt(0).toUpperCase() || '?'
+                            }
                           </div>
                           <div className="text-left">
                             <p className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">

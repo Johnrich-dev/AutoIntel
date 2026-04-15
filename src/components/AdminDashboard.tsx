@@ -65,7 +65,7 @@ const menuItems = [
   
   // ANALYTICS Section
   { id: 'analytics-reports', label: 'Analytics & Reports', icon: TrendingUp, category: 'ANALYTICS' },
-  { id: 'scoring-config', label: 'Scoring Configuration', icon: Sliders, category: 'ANALYTICS' },
+  { id: 'scoring-config', label: 'Scoring Configuration', icon: Sliders, category: 'ANALYTICS', adminOnly: true },
   
   // SYSTEM Section
   { id: 'hr-management', label: 'Manage HR Users', icon: UserPlus, category: 'SYSTEM', adminOnly: true },

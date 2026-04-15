@@ -138,6 +138,7 @@ export interface NeedsReviewApplicant {
   name?: string;
   email?: string;
   position?: string;
+  photo_url?: string | null;
   resume?: ResumeRecord;
   overall_score?: number;
   skills_score?: number;
