@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Settings, Save, RotateCcw, AlertCircle, CheckCircle, Sliders, Target, GraduationCap, Briefcase, FolderGit2, BookOpen, AlertTriangle } from 'lucide-react';
+import { Settings, Save, RotateCcw, AlertCircle, CheckCircle, Sliders, Target, GraduationCap, Briefcase, FolderGit2, BookOpen, AlertTriangle, Award } from 'lucide-react';
 import { getSupabaseAdminClient, ScoringSettings } from '../lib/supabase';
 
 const DEFAULT_SETTINGS = {
