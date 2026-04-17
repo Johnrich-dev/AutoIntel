@@ -29,3 +29,6 @@ __pycache__/
 .pytest_cache/
 
 *.tsbuildinfo
+
+# Fine-tuned ML model weights (too large for git, kept locally)
+backend/fine_tuned_ner/

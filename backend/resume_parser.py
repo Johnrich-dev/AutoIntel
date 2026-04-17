@@ -162,10 +162,30 @@ def get_supabase() -> Client:
 def get_bert_ner():
     global bert_model, bert_tokenizer
     if bert_model is None:
-        print("Loading BERT NER model...")
         from transformers import AutoModelForTokenClassification, AutoTokenizer
-        bert_tokenizer = AutoTokenizer.from_pretrained("yashpwr/resume-ner-bert-v2")
-        bert_model = AutoModelForTokenClassification.from_pretrained("yashpwr/resume-ner-bert-v2")
+
+        # Prefer the fine-tuned model if it exists in backend/fine_tuned_ner/
+        # Also handles the case where the zip was extracted with an extra nested folder
+        _script_dir = os.path.dirname(os.path.abspath(__file__))
+        _candidates = [
+            os.path.join(_script_dir, "fine_tuned_ner"),                        # backend/fine_tuned_ner/
+            os.path.join(_script_dir, "fine_tuned_ner", "fine_tuned_ner"),      # backend/fine_tuned_ner/fine_tuned_ner/
+        ]
+        model_source = None
+        for _candidate in _candidates:
+            if os.path.isdir(_candidate) and os.path.isfile(os.path.join(_candidate, "config.json")):
+                model_source = _candidate
+                break
+
+        if model_source:
+            print(f"Loading fine-tuned BERT NER model from {model_source}...")
+        else:
+            model_source = "yashpwr/resume-ner-bert-v2"
+            print(f"Loading base BERT NER model from HuggingFace ({model_source})...")
+            print("Tip: Place fine_tuned_ner/ in backend/ to use the fine-tuned model.")
+
+        bert_tokenizer = AutoTokenizer.from_pretrained(model_source)
+        bert_model = AutoModelForTokenClassification.from_pretrained(model_source)
         print("BERT NER model loaded!")
     return bert_model, bert_tokenizer
 
