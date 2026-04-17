@@ -224,7 +224,7 @@ def calculate_embedding_confidence(embedding1: Any, embedding2: Any) -> float:
     
     confidence = confidence * 0.8 + norm_factor * 0.2
     
-    return round(confidence, 4)
+    return round(float(confidence), 4)
 
 
 def calculate_semantic_similarity(text1: str, text2: str) -> Dict[str, Any]:
